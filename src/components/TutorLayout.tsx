@@ -1,33 +1,38 @@
 import React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, CheckCircle, Briefcase, ClipboardList, UserCircle, Menu, LogOut } from 'lucide-react';
+import { LayoutDashboard, CheckCircle, Briefcase, ClipboardList, UserCircle, Menu, LogOut, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
 import { Sheet, SheetContent, SheetTrigger, SheetClose } from '@/components/ui/sheet';
 import { Notifications } from '@/components/Notifications';
+import { useAppContext } from '@/context/AppContext';
+import { ThemeToggle } from './theme-toggle';
 
 const sidebarNavItems = [
   { title: "Dashboard", href: "/tutor-dashboard", icon: LayoutDashboard },
   { title: "Leave Approve", href: "/tutor-leave-approve", icon: CheckCircle },
   { title: "OD Approve", href: "/tutor-od-approve", icon: Briefcase },
   { title: "Report", href: "/tutor-report", icon: ClipboardList },
+  { title: "My Students", href: "/tutor-students", icon: Users },
+  { title: "Profile", href: "/tutor-profile", icon: UserCircle },
 ];
 
 const SidebarContent = ({ isMobile = false }: { isMobile?: boolean }) => {
   const location = useLocation();
+  const { currentTutor } = useAppContext();
   const LinkComponent = isMobile ? SheetClose : React.Fragment;
 
   return (
     <>
-      <div className="flex items-center space-x-3 p-4 mb-6">
+      <Link to="/tutor-profile" className="flex items-center space-x-3 p-4 mb-6 hover:bg-sidebar-accent rounded-lg transition-colors">
         <Avatar className="h-10 w-10">
-          <AvatarImage src="https://github.com/shadcn.png" alt="@shadcn" />
+          <AvatarImage src={currentTutor?.profile_photo || ''} alt={currentTutor?.name} />
           <AvatarFallback><UserCircle className="h-10 w-10 text-sidebar-primary-foreground" /></AvatarFallback>
         </Avatar>
-        <span className="font-semibold text-lg text-gray-900">Tutor Name</span>
-      </div>
+        <span className="font-semibold text-lg text-gray-900">{currentTutor?.name || 'Tutor'}</span>
+      </Link>
       <Separator className="bg-sidebar-border mb-6" />
       <nav className="flex flex-col space-y-2">
         {sidebarNavItems.map((item) => (
@@ -35,7 +40,7 @@ const SidebarContent = ({ isMobile = false }: { isMobile?: boolean }) => {
             <Button
               variant="ghost"
               className={cn(
-                "justify-start text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                "justify-start text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors duration-200",
                 location.pathname === item.href && "bg-sidebar-accent text-sidebar-accent-foreground"
               )}
               asChild
@@ -60,7 +65,7 @@ const TutorLayout = ({ children }: { children: React.ReactNode }) => {
       <aside className="w-64 bg-sidebar text-sidebar-foreground border-r border-sidebar-border p-4 flex-col shadow-lg hidden md:flex">
         <SidebarContent />
       </aside>
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col min-w-0">
         <header className="flex items-center justify-between bg-white border-b p-4 sticky top-0 z-10 h-16">
           {/* Mobile menu */}
           <div className="md:hidden">
@@ -78,7 +83,8 @@ const TutorLayout = ({ children }: { children: React.ReactNode }) => {
           <div className="hidden md:block" />
 
           {/* Right-aligned icons */}
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
             <Notifications role="tutor" />
             <Button variant="ghost" size="icon" aria-label="Logout" onClick={() => navigate('/login')}>
               <LogOut className="h-5 w-5" />

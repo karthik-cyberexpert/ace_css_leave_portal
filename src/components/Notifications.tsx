@@ -16,51 +16,117 @@ import {
 } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
+import { useNavigate } from 'react-router-dom';
+import { useAppContext } from '@/context/AppContext';
+import { differenceInDays, parseISO } from 'date-fns';
 
 export interface Notification {
   id: string;
   title: string;
   description: string;
   read: boolean;
+  href?: string;
 }
 
-interface NotificationsProps {
-  role: 'student' | 'tutor' | 'admin';
-}
-
-// Dummy data for demonstration
-const studentNotifications: Notification[] = [
-  { id: 'stud-notif-1', title: 'OD Request Approved', description: 'Your OD request for the Tech Conference has been approved.', read: false },
-  { id: 'stud-notif-2', title: 'Leave Request Rejected', description: 'Your leave request for a vacation has been rejected.', read: false },
-  { id: 'stud-notif-3', title: 'System Maintenance', description: 'The portal will be down for maintenance on Sunday at 2 AM.', read: true },
-];
-
-const tutorNotifications: Notification[] = [
-  { id: 'tutor-notif-1', title: 'New Leave Request', description: 'Alice Johnson has requested 3 days of leave.', read: false },
-  { id: 'tutor-notif-2', title: 'Request Forwarded', description: 'Bob Williams\'s leave request was forwarded to the admin.', read: false },
-  { id: 'tutor-notif-3', title: 'Student Added', description: 'A new student, Eve, has been assigned to you.', read: true },
-];
-
-const adminNotifications: Notification[] = [
-  { id: 'admin-notif-1', title: 'Leave Request Forwarded', description: 'A leave request from Bob Williams has been forwarded by Prof. Jones.', read: false },
-  { id: 'admin-notif-2', title: 'New Staff Added', description: 'A new tutor, Prof. White, has been added to the system.', read: false },
-  { id: 'admin-notif-3', title: 'Bulk Import Complete', description: 'Successfully imported 50 new students.', read: true },
-];
-
-const notificationsByRole = {
-  student: studentNotifications,
-  tutor: tutorNotifications,
-  admin: adminNotifications,
-};
-
-export const Notifications = ({ role }: NotificationsProps) => {
+export const Notifications = ({ role }: { role: 'student' | 'tutor' | 'admin' }) => {
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const navigate = useNavigate();
+  const { leaveRequests, odRequests, currentUser, currentTutor, students } = useAppContext();
 
   useEffect(() => {
-    setNotifications(notificationsByRole[role]);
-  }, [role]);
+    if (!leaveRequests || !odRequests) return;
+
+    const generatedNotifications: Notification[] = [];
+    const now = new Date();
+
+    if (role === 'student' && currentUser) {
+      const myLeaveRequests = leaveRequests.filter(r => r.student_id === currentUser.id);
+      const myODRequests = odRequests.filter(r => r.student_id === currentUser.id);
+
+      myLeaveRequests.forEach(req => {
+        if (differenceInDays(now, parseISO(req.created_at)) <= 7 && (req.status === 'Approved' || req.status === 'Rejected')) {
+          generatedNotifications.push({
+            id: req.id,
+            title: `Leave Request ${req.status}`,
+            description: `Your request for "${req.subject}" was ${req.status.toLowerCase()}.`,
+            read: false,
+            href: '/request-status',
+          });
+        }
+      });
+      myODRequests.forEach(req => {
+        if (differenceInDays(now, parseISO(req.created_at)) <= 7 && (req.status === 'Approved' || req.status === 'Rejected')) {
+          generatedNotifications.push({
+            id: req.id,
+            title: `OD Request ${req.status}`,
+            description: `Your request for "${req.purpose}" was ${req.status.toLowerCase()}.`,
+            read: false,
+            href: '/request-status',
+          });
+        }
+      });
+    } else if (role === 'tutor' && currentTutor) {
+      const myStudentIds = new Set(students.filter(s => s.tutor_id === currentTutor.id).map(s => s.id));
+      
+      leaveRequests.filter(r => myStudentIds.has(r.student_id)).forEach(req => {
+        if (differenceInDays(now, parseISO(req.created_at)) <= 7 && req.status === 'Pending') {
+          generatedNotifications.push({
+            id: req.id,
+            title: `New Leave Request`,
+            description: `${req.student_name} has requested ${req.total_days} day(s) for "${req.subject}".`,
+            read: false,
+            href: '/tutor-leave-approve',
+          });
+        }
+      });
+      odRequests.filter(r => myStudentIds.has(r.student_id)).forEach(req => {
+        if (differenceInDays(now, parseISO(req.created_at)) <= 7 && req.status === 'Pending') {
+          generatedNotifications.push({
+            id: req.id,
+            title: `New OD Request`,
+            description: `${req.student_name} has requested ${req.total_days} day(s) for "${req.purpose}".`,
+            read: false,
+            href: '/tutor-od-approve',
+          });
+        }
+      });
+    } else if (role === 'admin') {
+      leaveRequests.filter(r => r.status === 'Forwarded').forEach(req => {
+        if (differenceInDays(now, parseISO(req.created_at)) <= 7) {
+          generatedNotifications.push({
+            id: req.id,
+            title: `Forwarded Leave Request`,
+            description: `Request from ${req.student_name} forwarded by ${req.tutor_name}.`,
+            read: false,
+            href: '/admin-leave-requests',
+          });
+        }
+      });
+      odRequests.filter(r => r.status === 'Forwarded').forEach(req => {
+        if (differenceInDays(now, parseISO(req.created_at)) <= 7) {
+          generatedNotifications.push({
+            id: req.id,
+            title: `Forwarded OD Request`,
+            description: `Request from ${req.student_name} forwarded by ${req.tutor_name}.`,
+            read: false,
+            href: '/admin-od-requests',
+          });
+        }
+      });
+    }
+    
+    setNotifications(generatedNotifications.sort((a, b) => b.id.localeCompare(a.id)));
+
+  }, [leaveRequests, odRequests, role, currentUser, currentTutor, students]);
 
   const unreadCount = notifications.filter(n => !n.read).length;
+
+  const handleNotificationClick = (notification: Notification) => {
+    setNotifications(prev => prev.map(n => n.id === notification.id ? { ...n, read: true } : n));
+    if (notification.href) {
+      navigate(notification.href);
+    }
+  };
 
   const handleMarkAllAsRead = () => {
     setNotifications(notifications.map(n => ({ ...n, read: true })));
@@ -90,7 +156,10 @@ export const Notifications = ({ role }: NotificationsProps) => {
               {notifications.length > 0 ? (
                 notifications.map((notification, index) => (
                   <div key={notification.id}>
-                    <div className="p-4 hover:bg-accent">
+                    <div
+                      className="p-4 hover:bg-accent transition-colors duration-150 cursor-pointer"
+                      onClick={() => handleNotificationClick(notification)}
+                    >
                       <div className="flex items-start gap-4">
                         <div className={cn("h-2 w-2 rounded-full mt-2 flex-shrink-0", !notification.read && "bg-sky-500")} />
                         <div className="grid gap-1 flex-1">

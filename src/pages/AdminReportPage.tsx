@@ -5,133 +5,122 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format, getMonth, getYear } from 'date-fns';
 import TutorLeaveSummaryChart from '@/components/TutorLeaveSummaryChart';
-
-// --- Dummy Data ---
-const tutors = [
-  { id: 'tutor-1', name: 'Dr. Smith' },
-  { id: 'tutor-2', name: 'Prof. Jones' },
-  { id: 'tutor-3', name: 'Dr. Davis' },
-  { id: 'tutor-4', name: 'Prof. White' },
-];
-
-const allLeaveRequests = [
-  // Dr. Smith's students
-  { id: 'req-1', studentName: 'Alice Johnson', tutorName: 'Dr. Smith', startDate: '2023-11-01', totalDays: 2, status: 'Approved' },
-  { id: 'req-4', studentName: 'Diana Miller', tutorName: 'Dr. Smith', startDate: '2023-10-15', totalDays: 3, status: 'Rejected' },
-  { id: 'req-9', studentName: 'Ivy Scott', tutorName: 'Dr. Smith', startDate: '2023-08-05', totalDays: 10, status: 'Approved' },
-  { id: 'req-13', studentName: 'Student A', tutorName: 'Dr. Smith', startDate: '2023-11-10', totalDays: 5, status: 'Approved' },
-
-  // Prof. Jones' students
-  { id: 'req-2', studentName: 'Bob Williams', tutorName: 'Prof. Jones', startDate: '2023-11-05', totalDays: 4, status: 'Approved' },
-  { id: 'req-6', studentName: 'Frank Green', tutorName: 'Prof. Jones', startDate: '2023-09-01', totalDays: 1, status: 'Approved' },
-  { id: 'req-10', studentName: 'Jack Turner', tutorName: 'Prof. Jones', startDate: '2023-07-22', totalDays: 2, status: 'Approved' },
-
-  // Dr. Davis' students
-  { id: 'req-3', studentName: 'Charlie Brown', tutorName: 'Dr. Davis', startDate: '2023-10-10', totalDays: 1, status: 'Approved' },
-  { id: 'req-7', studentName: 'Grace Hall', tutorName: 'Dr. Davis', startDate: '2023-11-12', totalDays: 1, status: 'Pending' },
-  { id: 'req-11', studentName: 'Kevin White', tutorName: 'Dr. Davis', startDate: '2023-07-15', totalDays: 3, status: 'Approved' },
-
-  // Prof. White's students
-  { id: 'req-5', studentName: 'Ethan Hunt', tutorName: 'Prof. White', startDate: '2023-09-20', totalDays: 5, status: 'Approved' },
-  { id: 'req-8', studentName: 'Henry King', tutorName: 'Prof. White', startDate: '2023-11-18', totalDays: 3, status: 'Forwarded' },
-  { id: 'req-12', studentName: 'Laura Black', tutorName: 'Prof. White', startDate: '2023-06-10', totalDays: 7, status: 'Approved' },
-];
-
-// In a real app, this would come from a database. Here we derive it.
-const studentTutorMap = new Map<string, Set<string>>();
-allLeaveRequests.forEach(req => {
-  if (!studentTutorMap.has(req.tutorName)) {
-    studentTutorMap.set(req.tutorName, new Set());
-  }
-  studentTutorMap.get(req.tutorName)!.add(req.studentName);
-});
-
-const tutorStudentCounts = tutors.map(tutor => ({
-  ...tutor,
-  studentCount: studentTutorMap.get(tutor.name)?.size || 0,
-}));
-
+import { useAppContext } from '@/context/AppContext';
+import { Button } from '@/components/ui/button';
+import { Trash2 } from 'lucide-react';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { showSuccess } from '@/utils/toast';
 
 const AdminReportPage = () => {
+  const { students, leaveRequests, getTutors, clearAllRequests } = useAppContext();
   const [selectedMonth, setSelectedMonth] = useState<string>(String(new Date().getMonth()));
-  const currentYear = 2023; // Hardcoding year for dummy data
+  const [selectedYear, setSelectedYear] = useState<string>(String(new Date().getFullYear()));
+  const [isConfirmDialogOpen, setIsConfirmDialogOpen] = useState(false);
+  const currentYear = new Date().getFullYear();
 
-  const monthName = format(new Date(currentYear, parseInt(selectedMonth)), 'MMMM');
+  const tutors = getTutors();
+  const selectedYearInt = parseInt(selectedYear);
+  const monthName = format(new Date(selectedYearInt, parseInt(selectedMonth)), 'MMMM');
 
-  // Data for the monthly chart
   const chartData = useMemo(() => {
-    const monthlyRequests = allLeaveRequests.filter(req => {
-      const reqDate = new Date(req.startDate);
-      return getMonth(reqDate) === parseInt(selectedMonth) && getYear(reqDate) === currentYear && req.status === 'Approved';
+    const monthlyRequests = leaveRequests.filter(req => {
+      const reqDate = new Date(req.start_date);
+      return getMonth(reqDate) === parseInt(selectedMonth) && getYear(reqDate) === selectedYearInt && req.status === 'Approved';
     });
 
     const leavesByTutor = new Map<string, number>();
     monthlyRequests.forEach(req => {
-      leavesByTutor.set(req.tutorName, (leavesByTutor.get(req.tutorName) || 0) + req.totalDays);
+      leavesByTutor.set(req.tutor_name, (leavesByTutor.get(req.tutor_name) || 0) + req.total_days);
     });
 
     return tutors.map(tutor => ({
       name: tutor.name,
       totalLeaves: leavesByTutor.get(tutor.name) || 0,
     }));
-  }, [selectedMonth, currentYear]);
+  }, [selectedMonth, selectedYearInt, leaveRequests, tutors]);
 
-  // Data for the summary table (monthly)
   const reportTableData = useMemo(() => {
-    return tutorStudentCounts.map(tutor => {
-      const monthlyApprovedRequests = allLeaveRequests
+    return tutors.map(tutor => {
+      const tutorStudents = students.filter(s => s.tutor_id === tutor.id);
+      const monthlyApprovedRequests = leaveRequests
         .filter(req => 
-            req.tutorName === tutor.name && 
+            req.tutor_id === tutor.id && 
             req.status === 'Approved' && 
-            getYear(new Date(req.startDate)) === currentYear &&
-            getMonth(new Date(req.startDate)) === parseInt(selectedMonth)
+            getYear(new Date(req.start_date)) === selectedYearInt &&
+            getMonth(new Date(req.start_date)) === parseInt(selectedMonth)
         );
       
-      const totalLeaveDays = monthlyApprovedRequests.reduce((acc, req) => acc + req.totalDays, 0);
+      const totalLeaveDays = monthlyApprovedRequests.reduce((acc, req) => acc + req.total_days, 0);
       
-      const studentsWhoTookLeave = new Set(monthlyApprovedRequests.map(req => req.studentName));
+      const studentsWhoTookLeave = new Set(monthlyApprovedRequests.map(req => req.student_name));
       const numberOfStudentsWithLeave = studentsWhoTookLeave.size;
 
-      const averageLeavePercentage = tutor.studentCount > 0
-        ? ((numberOfStudentsWithLeave / tutor.studentCount) * 100).toFixed(1)
+      const averageLeavePercentage = tutorStudents.length > 0
+        ? ((numberOfStudentsWithLeave / tutorStudents.length) * 100).toFixed(1)
         : '0.0';
 
       return {
         tutorName: tutor.name,
-        totalStudents: tutor.studentCount,
+        totalStudents: tutorStudents.length,
         totalLeaveApproved: totalLeaveDays,
         averageLeavePercentage: `${averageLeavePercentage}%`,
       };
     });
-  }, [selectedMonth, currentYear]);
+  }, [selectedMonth, selectedYearInt, students, leaveRequests, tutors]);
 
   const monthOptions = Array.from({ length: 12 }, (_, i) => ({
     value: String(i),
     label: format(new Date(currentYear, i), 'MMMM'),
   }));
 
+  const yearOptions = Array.from({ length: 10 }, (_, i) => ({
+    value: String(currentYear - i),
+    label: String(currentYear - i),
+  }));
+
+  const handleClearAllRequests = async () => {
+    await clearAllRequests();
+    showSuccess('All leave and OD requests have been cleared!');
+    setIsConfirmDialogOpen(false);
+  };
+
   return (
     <AdminLayout>
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
           <h1 className="text-2xl md:text-3xl font-bold">Tutor Performance Report</h1>
-          <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-            <SelectTrigger className="w-full sm:w-[180px]">
-              <SelectValue placeholder="Select Month" />
-            </SelectTrigger>
-            <SelectContent>
-              {monthOptions.map(option => (
-                <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+            <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+              <SelectTrigger className="w-full sm:w-[180px]">
+                <SelectValue placeholder="Select Month" />
+              </SelectTrigger>
+              <SelectContent>
+                {monthOptions.map(option => (
+                  <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={selectedYear} onValueChange={setSelectedYear}>
+              <SelectTrigger className="w-full sm:w-[120px]">
+                <SelectValue placeholder="Select Year" />
+              </SelectTrigger>
+              <SelectContent>
+                {yearOptions.map(option => (
+                  <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button variant="destructive" onClick={() => setIsConfirmDialogOpen(true)} className="w-full sm:w-auto">
+              <Trash2 className="mr-2 h-4 w-4" /> Clear All Requests
+            </Button>
+          </div>
         </div>
         
-        <TutorLeaveSummaryChart data={chartData} month={monthName} />
+        <TutorLeaveSummaryChart data={chartData} month={`${monthName} ${selectedYear}`} />
 
-        <Card>
+        <Card className="transition-all duration-300 hover:shadow-lg">
           <CardHeader>
-            <CardTitle>Monthly Summary Report for {monthName}</CardTitle>
+            <CardTitle>Monthly Summary Report for {monthName} {selectedYear}</CardTitle>
             <CardDescription>An overview of each tutor's student leave management for the selected month.</CardDescription>
           </CardHeader>
           <CardContent>
@@ -147,7 +136,7 @@ const AdminReportPage = () => {
                 </TableHeader>
                 <TableBody>
                   {reportTableData.map((row) => (
-                    <TableRow key={row.tutorName}>
+                    <TableRow key={row.tutorName} className="transition-colors hover:bg-muted/50">
                       <TableCell className="font-medium">{row.tutorName}</TableCell>
                       <TableCell className="text-center">{row.totalStudents}</TableCell>
                       <TableCell className="text-center">{row.totalLeaveApproved}</TableCell>
@@ -160,6 +149,23 @@ const AdminReportPage = () => {
           </CardContent>
         </Card>
       </div>
+
+      <AlertDialog open={isConfirmDialogOpen} onOpenChange={setIsConfirmDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete ALL leave and OD request records from the database.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleClearAllRequests} className="bg-destructive hover:bg-destructive/90">
+              Delete All Records
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AdminLayout>
   );
 };

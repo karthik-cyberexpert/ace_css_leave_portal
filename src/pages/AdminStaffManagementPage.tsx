@@ -10,63 +10,68 @@ import { Pencil, Trash2, UserPlus, Eye, EyeOff } from 'lucide-react';
 import { showSuccess } from '@/utils/toast';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose, DialogDescription } from '@/components/ui/dialog';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription as HookFormDescription } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-
-// Dummy Data
-const initialStaff = [
-  { id: 'staff-1', name: 'Admin User', email: 'admin@college.com', role: 'Admin', username: 'admin', password: 'password123' },
-  { id: 'staff-2', name: 'Dr. Smith', email: 'smith@college.com', role: 'Tutor', username: 'drsmith', password: 'password123' },
-  { id: 'staff-3', name: 'Prof. Jones', email: 'jones@college.com', role: 'Tutor', username: 'profjones', password: 'password123' },
-  { id: 'staff-4', name: 'Dr. Davis', email: 'davis@college.com', role: 'Tutor', username: 'drdavis', password: 'password123' },
-];
+import { Switch } from '@/components/ui/switch';
+import { useAppContext, Staff } from '@/context/AppContext';
 
 const staffSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters."),
   email: z.string().email("Invalid email address."),
-  role: z.enum(["Admin", "Tutor"], { required_error: "Please select a role." }),
   username: z.string().min(3, "Username must be at least 3 characters."),
   password: z.string().min(6, "Password must be at least 6 characters.").optional().or(z.literal('')),
+  is_admin: z.boolean().default(false),
+  is_tutor: z.boolean().default(false),
+}).refine(data => data.is_admin || data.is_tutor, {
+  message: "A staff member must have at least one role (Admin or Tutor).",
+  path: ["is_admin"],
 });
 
 type StaffFormValues = z.infer<typeof staffSchema>;
-type StaffMember = typeof initialStaff[0];
 
 const AdminStaffManagementPage = () => {
-  const [staff, setStaff] = useState(initialStaff);
+  const { staff, addStaff, updateStaff, deleteStaff } = useAppContext();
   const [staffToDelete, setStaffToDelete] = useState<string | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [editingStaff, setEditingStaff] = useState<StaffMember | null>(null);
+  const [editingStaff, setEditingStaff] = useState<Staff | null>(null);
   const [showPassword, setShowPassword] = useState(false);
 
   const form = useForm<StaffFormValues>({
     resolver: zodResolver(staffSchema),
-    defaultValues: { name: '', email: '', role: undefined, username: '', password: '' },
+    defaultValues: { name: '', email: '', username: '', password: '', is_admin: false, is_tutor: false },
   });
 
   useEffect(() => {
-    if (editingStaff) {
-      form.reset({ ...editingStaff, password: '' });
-    } else {
-      form.reset({ name: '', email: '', role: undefined, username: '', password: '' });
+    if (isDialogOpen) {
+      if (editingStaff) {
+        form.reset({
+          name: editingStaff.name,
+          email: editingStaff.email,
+          username: editingStaff.username,
+          password: '',
+          is_admin: editingStaff.is_admin,
+          is_tutor: editingStaff.is_tutor,
+        });
+      } else {
+        form.reset({ name: '', email: '', username: '', password: '', is_admin: false, is_tutor: false });
+      }
     }
-  }, [editingStaff, form]);
+  }, [editingStaff, isDialogOpen, form]);
 
   const handleAddNew = () => {
     setEditingStaff(null);
     setIsDialogOpen(true);
   };
 
-  const handleEdit = (member: StaffMember) => {
+  const handleEdit = (member: Staff) => {
     setEditingStaff(member);
     setIsDialogOpen(true);
   };
 
-  const handleDelete = () => {
+  const handleDeleteConfirm = () => {
     if (staffToDelete) {
-      setStaff(staff.filter(s => s.id !== staffToDelete));
+      deleteStaff(staffToDelete);
       showSuccess('Staff member removed successfully!');
       setStaffToDelete(null);
     }
@@ -75,23 +80,17 @@ const AdminStaffManagementPage = () => {
   const onSubmit = (data: StaffFormValues) => {
     if (editingStaff) {
       const { password, ...restOfData } = data;
-      const updatedStaff = {
-        ...staff.find(s => s.id === editingStaff.id)!,
-        ...restOfData,
-      };
+      const staffData: Partial<Staff> = { ...restOfData };
       if (password) {
-        updatedStaff.password = password;
+        // Password update logic would go here, if implemented
       }
-      setStaff(staff.map(s => s.id === editingStaff.id ? updatedStaff : s));
-      showSuccess('Staff member updated successfully!');
+      updateStaff(editingStaff.id, staffData);
     } else {
       if (!data.password) {
         form.setError("password", { type: "manual", message: "Password is required for new staff." });
         return;
       }
-      const newStaffMember = { ...data, id: `staff-${Date.now()}`, password: data.password };
-      setStaff([...staff, newStaffMember]);
-      showSuccess('Staff member added successfully!');
+      addStaff(data as Omit<Staff, 'id'>);
     }
     setIsDialogOpen(false);
   };
@@ -115,7 +114,7 @@ const AdminStaffManagementPage = () => {
                 <TableRow>
                   <TableHead>Name</TableHead>
                   <TableHead>Email</TableHead>
-                  <TableHead className="text-center">Role</TableHead>
+                  <TableHead className="text-center">Roles</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -124,16 +123,15 @@ const AdminStaffManagementPage = () => {
                   <TableRow key={member.id}>
                     <TableCell className="font-medium">{member.name}</TableCell>
                     <TableCell>{member.email}</TableCell>
-                    <TableCell className="text-center">
-                      <Badge variant={member.role === 'Admin' ? 'default' : 'secondary'}>
-                        {member.role}
-                      </Badge>
+                    <TableCell className="text-center space-x-2">
+                      {member.is_admin && <Badge variant="default">Admin</Badge>}
+                      {member.is_tutor && <Badge variant="secondary">Tutor</Badge>}
                     </TableCell>
                     <TableCell className="text-right space-x-2">
-                      <Button variant="outline" size="icon" onClick={() => handleEdit(member)}>
+                      <Button variant="outline" size="icon" onClick={() => handleEdit(member)} className="transition-transform hover:scale-110 hover:bg-accent">
                         <Pencil className="h-4 w-4" />
                       </Button>
-                      <Button variant="destructive" size="icon" onClick={() => setStaffToDelete(member.id)}>
+                      <Button variant="destructive" size="icon" onClick={() => setStaffToDelete(member.id)} className="transition-transform hover:scale-110">
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </TableCell>
@@ -149,67 +147,32 @@ const AdminStaffManagementPage = () => {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{editingStaff ? 'Edit Staff Member' : 'Add New Staff Member'}</DialogTitle>
+            <DialogDescription>
+              {editingStaff ? 'Update the details and roles for this staff member.' : 'Create a new staff account and assign their roles.'}
+            </DialogDescription>
           </DialogHeader>
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pt-4">
               <FormField control={form.control} name="name" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Full Name</FormLabel>
-                  <FormControl><Input placeholder="Jane Smith" {...field} /></FormControl>
-                  <FormMessage />
-                </FormItem>
+                <FormItem><FormLabel>Full Name</FormLabel><FormControl><Input placeholder="Jane Smith" {...field} /></FormControl><FormMessage /></FormItem>
               )} />
               <FormField control={form.control} name="email" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Email Address</FormLabel>
-                  <FormControl><Input placeholder="jane.s@college.com" {...field} /></FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="role" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Role</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
-                    <FormControl><SelectTrigger><SelectValue placeholder="Select a role" /></SelectTrigger></FormControl>
-                    <SelectContent>
-                      <SelectItem value="Admin">Admin</SelectItem>
-                      <SelectItem value="Tutor">Tutor</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
+                <FormItem><FormLabel>Email Address</FormLabel><FormControl><Input placeholder="jane.s@college.com" {...field} /></FormControl><FormMessage /></FormItem>
               )} />
               <FormField control={form.control} name="username" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Username</FormLabel>
-                  <FormControl><Input placeholder="jane.smith" {...field} /></FormControl>
-                  <FormMessage />
-                </FormItem>
+                <FormItem><FormLabel>Username</FormLabel><FormControl><Input placeholder="jane.smith" {...field} /></FormControl><FormMessage /></FormItem>
               )} />
               <FormField control={form.control} name="password" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Password</FormLabel>
-                  <div className="relative">
-                    <FormControl>
-                      <Input 
-                        type={showPassword ? 'text' : 'password'} 
-                        placeholder={editingStaff ? 'Leave blank to keep current password' : '••••••••'} 
-                        {...field} 
-                      />
-                    </FormControl>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="absolute right-1 top-1/2 h-7 w-7 -translate-y-1/2 text-gray-500 hover:bg-transparent"
-                      onClick={() => setShowPassword(!showPassword)}
-                    >
-                      {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                    </Button>
-                  </div>
-                  <FormMessage />
-                </FormItem>
+                <FormItem><FormLabel>Password</FormLabel><div className="relative"><FormControl><Input type={showPassword ? 'text' : 'password'} placeholder={editingStaff ? 'Leave blank to keep current password' : '••••••••'} {...field} /></FormControl><Button type="button" variant="ghost" size="icon" className="absolute right-1 top-1/2 h-7 w-7 -translate-y-1/2 text-gray-500 hover:bg-transparent" onClick={() => setShowPassword(!showPassword)}>{showPassword ? <EyeOff size={18} /> : <Eye size={18} />}</Button></div><FormMessage /></FormItem>
               )} />
+              
+              <FormField control={form.control} name="is_admin" render={({ field }) => (
+                <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm"><div className="space-y-0.5"><FormLabel>Administrator</FormLabel><HookFormDescription>Grants full access to all portal features.</HookFormDescription></div><FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl><FormMessage /></FormItem>
+              )} />
+              <FormField control={form.control} name="is_tutor" render={({ field }) => (
+                <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm"><div className="space-y-0.5"><FormLabel>Tutor</FormLabel><HookFormDescription>Can manage assigned students and their requests.</HookFormDescription></div><FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl></FormItem>
+              )} />
+
               <DialogFooter>
                 <DialogClose asChild><Button type="button" variant="outline">Cancel</Button></DialogClose>
                 <Button type="submit">{editingStaff ? 'Save Changes' : 'Add Staff'}</Button>
@@ -221,16 +184,8 @@ const AdminStaffManagementPage = () => {
 
       <AlertDialog open={!!staffToDelete} onOpenChange={() => setStaffToDelete(null)}>
         <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete the staff member's account.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-destructive hover:bg-destructive/90">Delete</AlertDialogAction>
-          </AlertDialogFooter>
+          <AlertDialogHeader><AlertDialogTitle>Are you sure?</AlertDialogTitle><AlertDialogDescription>This action cannot be undone. This will permanently delete the staff member's account.</AlertDialogDescription></AlertDialogHeader>
+          <AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={handleDeleteConfirm} className="bg-destructive hover:bg-destructive/90">Delete</AlertDialogAction></AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
     </AdminLayout>

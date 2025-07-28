@@ -1,153 +1,96 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import TutorLayout from '@/components/TutorLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { showSuccess } from '@/utils/toast';
 import { cn } from '@/lib/utils';
-
-// Dummy data for OD requests
-const initialODRequests = [
-  {
-    id: 'od-1',
-    studentName: 'Frank Green',
-    startDate: '2023-11-03',
-    endDate: '2023-11-03',
-    totalDays: 1,
-    purpose: 'Attend Tech Symposium',
-    destination: 'Main Auditorium',
-    description: 'Presenting a paper at the annual tech symposium held on campus.',
-    status: 'Pending',
-  },
-  {
-    id: 'od-2',
-    studentName: 'Grace Hall',
-    startDate: '2023-11-06',
-    endDate: '2023-11-09',
-    totalDays: 4,
-    purpose: 'Inter-college Sports Meet',
-    destination: 'City Sports Complex',
-    description: 'Representing the college in the regional basketball tournament.',
-    status: 'Pending',
-  },
-  {
-    id: 'od-3',
-    studentName: 'Henry King',
-    startDate: '2023-11-11',
-    endDate: '2023-11-11',
-    totalDays: 1,
-    purpose: 'Workshop on AI',
-    destination: 'Computer Science Dept.',
-    description: 'Participating in a full-day workshop on Artificial Intelligence.',
-    status: 'Pending',
-  },
-  {
-    id: 'od-4',
-    studentName: 'Ivy Scott',
-    startDate: '2023-11-14',
-    endDate: '2023-11-16',
-    totalDays: 3,
-    purpose: 'National Science Fair',
-    destination: 'Capital City Convention Center',
-    description: 'Selected to present my project at the National Science Fair.',
-    status: 'Approved',
-  },
-  {
-    id: 'od-5',
-    studentName: 'Jack Turner',
-    startDate: '2023-11-22',
-    endDate: '2023-11-22',
-    totalDays: 1,
-    purpose: 'Industrial Visit',
-    destination: 'Local Tech Park',
-    description: 'Department-organized industrial visit.',
-    status: 'Rejected',
-  },
-];
-
-type ODRequest = typeof initialODRequests[0];
-type RequestStatus = 'Pending' | 'Approved' | 'Rejected' | 'Forwarded' | 'Cancelled';
+import { useAppContext, ODRequest, RequestStatus, CertificateStatus } from '@/context/AppContext';
+import { Badge } from '@/components/ui/badge';
+import { format, parseISO } from 'date-fns';
 
 const TutorODApprovePage = () => {
-  const [odRequests, setODRequests] = useState(initialODRequests);
+  const { odRequests, updateODRequestStatus, currentTutor, verifyODCertificate, approveRejectODCancellation } = useAppContext();
   const [selectedRequest, setSelectedRequest] = useState<ODRequest | null>(null);
+  const [verifyRequest, setVerifyRequest] = useState<ODRequest | null>(null);
 
-  const handleRequestAction = (id: string, newStatus: RequestStatus) => {
-    setODRequests(prevRequests =>
-      prevRequests.map(request =>
-        request.id === id ? { ...request, status: newStatus } : request
-      )
-    );
+  const tutorODRequests = useMemo(() => {
+    return odRequests.filter(req => req.tutor_id === currentTutor.id);
+  }, [odRequests, currentTutor.id]);
+
+  const handleRequestAction = async (id: string, newStatus: RequestStatus) => {
+    await updateODRequestStatus(id, newStatus);
     showSuccess(`Request has been ${newStatus.toLowerCase()}!`);
     setSelectedRequest(null);
   };
 
-  const handleReviewClick = (request: ODRequest) => {
-    setSelectedRequest(request);
+  const handleCancellationAction = async (id: string, approve: boolean) => {
+    await approveRejectODCancellation(id, approve);
+    setSelectedRequest(null);
+  };
+
+  const handleVerification = async (isApproved: boolean) => {
+    if (!verifyRequest) return;
+    await verifyODCertificate(verifyRequest.id, isApproved);
+    showSuccess(`Certificate has been ${isApproved ? 'approved' : 'rejected'}.`);
+    setVerifyRequest(null);
+  };
+
+  const getStatusBadge = (status: RequestStatus, certStatus?: CertificateStatus) => {
+    const statusText = certStatus ? `${status} (${certStatus})` : status;
+    const colorClasses = {
+      'Approved': 'bg-green-100 text-green-800',
+      'Pending': 'bg-yellow-100 text-yellow-800',
+      'Rejected': 'bg-red-100 text-red-800',
+      'Cancelled': 'bg-gray-100 text-gray-800',
+      'Forwarded': 'bg-blue-100 text-blue-800',
+      'Cancellation Pending': 'bg-purple-100 text-purple-800',
+      'Pending Upload': 'bg-orange-100 text-orange-800',
+      'Pending Verification': 'bg-purple-100 text-purple-800',
+      'Overdue': 'bg-red-200 text-red-900',
+    };
+    return <span className={cn("px-3 py-1 rounded-full text-xs font-semibold", colorClasses[status as keyof typeof colorClasses] || 'bg-gray-100 text-gray-800')}>{statusText}</span>;
   };
 
   return (
     <TutorLayout>
-      <Card className="w-full mx-auto">
-        <CardHeader>
-          <CardTitle className="text-2xl md:text-3xl font-bold">On Duty (OD) Approval</CardTitle>
-          <CardDescription>Review and manage student OD requests.</CardDescription>
-        </CardHeader>
+      <Card>
+        <CardHeader><CardTitle>On Duty (OD) Approval</CardTitle><CardDescription>Review, manage, and verify student OD requests.</CardDescription></CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Student Name</TableHead>
-                  <TableHead>Start Date</TableHead>
-                  <TableHead>End Date</TableHead>
-                  <TableHead className="text-right">Total Days</TableHead>
-                  <TableHead className="text-center">Status</TableHead>
+                  <TableHead>Student</TableHead>
+                  <TableHead>Purpose</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Certificate</TableHead>
                   <TableHead className="text-center">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {odRequests.map((request) => (
+                {tutorODRequests.map((request) => (
                   <TableRow key={request.id}>
-                    <TableCell className="font-medium">{request.studentName}</TableCell>
-                    <TableCell>{request.startDate}</TableCell>
-                    <TableCell>{request.endDate}</TableCell>
-                    <TableCell className="text-right">{request.totalDays}</TableCell>
-                    <TableCell className="text-center">
-                      <span className={cn(
-                        "px-3 py-1 rounded-full text-xs font-semibold",
-                        request.status === 'Approved' && 'bg-green-100 text-green-800',
-                        request.status === 'Pending' && 'bg-yellow-100 text-yellow-800',
-                        request.status === 'Rejected' && 'bg-red-100 text-red-800',
-                        request.status === 'Forwarded' && 'bg-blue-100 text-blue-800',
-                        request.status === 'Cancelled' && 'bg-gray-100 text-gray-800'
-                      )}>
-                        {request.status}
-                      </span>
+                    <TableCell className="font-medium">
+                      <div>{request.student_name}</div>
+                      <div className="text-xs text-muted-foreground">[{request.student_register_number}]</div>
                     </TableCell>
-                    <TableCell className="text-center">
-                      {request.status === 'Pending' ? (
-                        <Button variant="outline" size="sm" onClick={() => handleReviewClick(request)}>
-                          Review
+                    <TableCell>{request.purpose}</TableCell>
+                    <TableCell>{getStatusBadge(request.status, request.certificate_status)}</TableCell>
+                    <TableCell><Badge variant={request.certificate_status === 'Approved' ? 'default' : 'outline'}>{request.certificate_status || 'N/A'}</Badge></TableCell>
+                    <TableCell className="text-center space-x-2">
+                      {request.status === 'Approved' && (
+                        <Button 
+                          variant="destructive" 
+                          size="sm" 
+                          onClick={() => handleRequestAction(request.id, 'Rejected')}
+                        >
+                          Reject
                         </Button>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">No actions</span>
                       )}
+                      {(request.status === 'Pending' || request.status === 'Cancellation Pending') && <Button variant="outline" size="sm" onClick={() => setSelectedRequest(request)}>Review</Button>}
+                      {request.certificate_status === 'Pending Verification' && <Button variant="default" size="sm" onClick={() => setVerifyRequest(request)}>Verify Cert</Button>}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -157,75 +100,71 @@ const TutorODApprovePage = () => {
         </CardContent>
       </Card>
 
+      {/* Review Dialog */}
       <Dialog open={!!selectedRequest} onOpenChange={(isOpen) => !isOpen && setSelectedRequest(null)}>
-        <DialogContent className="sm:max-w-[425px]">
+        <DialogContent>
           {selectedRequest && (
             <>
               <DialogHeader>
                 <DialogTitle>OD Request Details</DialogTitle>
-                <DialogDescription>
-                  From: <strong>{selectedRequest.studentName}</strong>
-                </DialogDescription>
+                <DialogDescription>From: <strong>{selectedRequest.student_name}</strong> [{selectedRequest.student_register_number}]</DialogDescription>
               </DialogHeader>
               <div className="grid gap-4 py-4">
                 <div className="flex flex-col space-y-1">
                   <span className="text-sm font-medium text-muted-foreground">Dates</span>
-                  <p>{selectedRequest.startDate} to {selectedRequest.endDate} ({selectedRequest.totalDays} days)</p>
+{format(parseISO(selectedRequest.start_date), 'MMMM d yyyy')} to {format(parseISO(selectedRequest.end_date), 'MMMM d yyyy')} ({selectedRequest.total_days} days)
                 </div>
-                 <div className="flex flex-col space-y-1">
+                <div className="flex flex-col space-y-1">
                   <span className="text-sm font-medium text-muted-foreground">Purpose</span>
                   <p>{selectedRequest.purpose}</p>
                 </div>
-                 <div className="flex flex-col space-y-1">
-                  <span className="text-sm font-medium text-muted-foreground">Place to Visit</span>
+                <div className="flex flex-col space-y-1">
+                  <span className="text-sm font-medium text-muted-foreground">Destination</span>
                   <p>{selectedRequest.destination}</p>
                 </div>
                 <div className="flex flex-col space-y-1">
                   <span className="text-sm font-medium text-muted-foreground">Description</span>
                   <p>{selectedRequest.description}</p>
                 </div>
-              </div>
-              <DialogFooter className="flex-col-reverse sm:flex-row sm:justify-between sm:space-x-2">
-                <Button variant="outline" onClick={() => setSelectedRequest(null)}>
-                  Cancel
-                </Button>
-                <div className="flex justify-end space-x-2 pt-2 sm:pt-0">
-                  {selectedRequest.totalDays > 2 ? (
-                    <>
-                      <Button
-                        variant="destructive"
-                        onClick={() => handleRequestAction(selectedRequest.id, 'Rejected')}
-                      >
-                        Reject
-                      </Button>
-                      <Button
-                        className="bg-blue-500 hover:bg-blue-600 text-white"
-                        onClick={() => handleRequestAction(selectedRequest.id, 'Forwarded')}
-                      >
-                        Forward
-                      </Button>
-                    </>
-                  ) : (
-                    <>
-                      <Button
-                        variant="destructive"
-                        onClick={() => handleRequestAction(selectedRequest.id, 'Rejected')}
-                      >
-                        Reject
-                      </Button>
-                      <Button
-                        className="bg-green-500 hover:bg-green-600 text-white"
-                        onClick={() => handleRequestAction(selectedRequest.id, 'Approved')}
-                      >
-                        Approve
-                      </Button>
-                    </>
-                  )}
+                <div className="flex flex-col space-y-1">
+                  <span className="text-sm font-medium text-muted-foreground">Current Status</span>
+                  {getStatusBadge(selectedRequest.status, selectedRequest.certificate_status)}
                 </div>
+                {selectedRequest.original_status && (
+                  <div className="flex flex-col space-y-1">
+                    <span className="text-sm font-medium text-muted-foreground">Original Status</span>
+                    {getStatusBadge(selectedRequest.original_status)}
+                  </div>
+                )}
+                {selectedRequest.cancel_reason && (
+                  <div className="flex flex-col space-y-1">
+                    <span className="text-sm font-medium text-muted-foreground">Cancellation Reason</span>
+                    <p>{selectedRequest.cancel_reason}</p>
+                  </div>
+                )}
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setSelectedRequest(null)}>Cancel</Button>
+                {selectedRequest.status === 'Cancellation Pending' ? (
+                  <>
+                    <Button variant="destructive" onClick={() => handleCancellationAction(selectedRequest.id, false)}>Reject Cancellation</Button>
+                    <Button className="bg-green-500 hover:bg-green-600 text-white" onClick={() => handleCancellationAction(selectedRequest.id, true)}>Approve Cancellation</Button>
+                  </>
+                ) : (
+                  <>
+                    <Button variant="destructive" onClick={() => handleRequestAction(selectedRequest.id, 'Rejected')}>Reject</Button>
+                    <Button className="bg-green-500 hover:bg-green-600 text-white" onClick={() => handleRequestAction(selectedRequest.id, 'Approved')}>Approve</Button>
+                  </>
+                )}
               </DialogFooter>
             </>
           )}
         </DialogContent>
+      </Dialog>
+
+      {/* Verification Dialog */}
+      <Dialog open={!!verifyRequest} onOpenChange={(isOpen) => !isOpen && setVerifyRequest(null)}>
+        <DialogContent>{verifyRequest && (<><DialogHeader><DialogTitle>Verify Certificate</DialogTitle><DialogDescription>For: <strong>{verifyRequest.purpose}</strong> by {verifyRequest.student_name} [{verifyRequest.student_register_number}]</DialogDescription></DialogHeader><div className="py-4"><a href={verifyRequest.certificate_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">View Uploaded Certificate</a></div><DialogFooter><Button variant="destructive" onClick={() => handleVerification(false)}>Reject</Button><Button onClick={() => handleVerification(true)}>Approve</Button></DialogFooter></>)}</DialogContent>
       </Dialog>
     </TutorLayout>
   );

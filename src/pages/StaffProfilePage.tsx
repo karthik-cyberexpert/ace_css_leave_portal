@@ -1,0 +1,87 @@
+import React from 'react';
+import { useAppContext } from '@/context/AppContext';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { UserCog, Shield, Users } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import AdminLayout from '@/components/AdminLayout';
+import TutorLayout from '@/components/TutorLayout';
+
+const StaffProfilePage = () => {
+  const { profile, user, role, currentTutor, students } = useAppContext();
+
+  const Layout = role === 'Admin' ? AdminLayout : TutorLayout;
+  
+  if (!profile || !user) {
+    return (
+      <Layout>
+        <div className="flex items-center justify-center h-full">
+          <p>Loading profile...</p>
+        </div>
+      </Layout>
+    );
+  }
+
+  const displayName = (profile.first_name && profile.last_name) 
+    ? `${profile.first_name} ${profile.last_name}` 
+    : (currentTutor?.name || 'Staff Member');
+  
+  const displayUsername = currentTutor?.username || 'N/A';
+  const displayEmail = user.email || 'N/A';
+  const avatarSrc = profile.profile_photo || currentTutor?.profile_photo;
+
+  const studentCount = role === 'Tutor' 
+    ? students.filter(s => s.tutor_id === profile.id).length 
+    : 0;
+
+  return (
+    <Layout>
+      <Card className="w-full max-w-4xl mx-auto">
+        <CardHeader>
+          <div className="flex items-center gap-4">
+            <Avatar className="h-20 w-20 border-2 border-primary">
+              <AvatarImage src={avatarSrc} alt={displayName} />
+              <AvatarFallback className="text-3xl">
+                {role === 'Admin' ? <Shield className="h-12 w-12" /> : <UserCog className="h-12 w-12" />}
+              </AvatarFallback>
+            </Avatar>
+            <div>
+              <CardTitle className="text-3xl font-bold">{displayName}</CardTitle>
+              <CardDescription className="text-md">{role} Profile Details</CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="mt-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6 text-sm">
+            <div className="flex flex-col space-y-1">
+              <span className="font-semibold text-muted-foreground">Email</span>
+              <p className="font-medium text-base">{displayEmail}</p>
+            </div>
+            <div className="flex flex-col space-y-1">
+              <span className="font-semibold text-muted-foreground">Username</span>
+              <p className="font-medium text-base">{displayUsername}</p>
+            </div>
+            <div className="flex flex-col space-y-1">
+              <span className="font-semibold text-muted-foreground">Roles</span>
+              <div className="flex gap-2 pt-1">
+                {profile.is_admin && <Badge variant="default">Admin</Badge>}
+                {profile.is_tutor && <Badge variant="secondary">Tutor</Badge>}
+              </div>
+            </div>
+            {role === 'Tutor' && (
+              <div className="flex flex-col space-y-1">
+                <span className="font-semibold text-muted-foreground">Students Under Guidance</span>
+                <p className="font-medium text-base flex items-center">
+                  <Users className="h-4 w-4 mr-2" />
+                  {studentCount}
+                </p>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    </Layout>
+  );
+};
+
+export default StaffProfilePage;

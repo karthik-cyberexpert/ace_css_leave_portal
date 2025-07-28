@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import TutorLayout from '@/components/TutorLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import {
@@ -11,52 +11,41 @@ import {
 } from '@/components/ui/table';
 import { Users, CalendarOff, BarChart2 } from 'lucide-react';
 import MonthlyLeaveChart from '@/components/MonthlyLeaveChart';
-
-// Dummy data for the tutor's students (for the table and summary cards)
-const tutorStudentData = [
-  { id: '1', studentName: 'Alice Johnson', registerNumber: 'S001', year: 3, totalLeaveTaken: 8 },
-  { id: '2', studentName: 'Bob Williams', registerNumber: 'S002', year: 2, totalLeaveTaken: 12 },
-  { id: '3', studentName: 'Charlie Brown', registerNumber: 'S003', year: 4, totalLeaveTaken: 5 },
-  { id: '4', studentName: 'Diana Miller', registerNumber: 'S004', year: 3, totalLeaveTaken: 10 },
-  { id: '5', studentName: 'Ethan Hunt', registerNumber: 'S005', year: 1, totalLeaveTaken: 2 },
-];
-
-// Dummy data for all individual leave requests from this tutor's students (for the monthly chart)
-const tutorStudentLeaveRequests = [
-  // Alice Johnson (8 days)
-  { startDate: '2023-01-10', totalDays: 2, status: 'Approved' },
-  { startDate: '2023-03-15', totalDays: 1, status: 'Approved' },
-  { startDate: '2023-05-20', totalDays: 5, status: 'Approved' },
-  // Bob Williams (12 days)
-  { startDate: '2023-02-05', totalDays: 3, status: 'Approved' },
-  { startDate: '2023-04-10', totalDays: 2, status: 'Approved' },
-  { startDate: '2023-06-12', totalDays: 7, status: 'Approved' },
-  // Charlie Brown (5 days)
-  { startDate: '2023-01-25', totalDays: 1, status: 'Approved' },
-  { startDate: '2023-07-01', totalDays: 4, status: 'Approved' },
-  // Diana Miller (10 days)
-  { startDate: '2023-02-18', totalDays: 4, status: 'Approved' },
-  { startDate: '2023-08-22', totalDays: 6, status: 'Approved' },
-  // Ethan Hunt (2 days)
-  { startDate: '2023-03-05', totalDays: 2, status: 'Approved' },
-  // Some rejected/pending requests to ensure chart only counts approved leaves
-  { startDate: '2023-03-10', totalDays: 1, status: 'Rejected' },
-  { startDate: '2023-04-01', totalDays: 3, status: 'Pending' },
-];
+import { useAppContext } from '@/context/AppContext';
 
 const TutorReportPage = () => {
+  const { students, leaveRequests, currentTutor, loading } = useAppContext();
+
+  // If currentTutor is not yet loaded, show a loading indicator or return null
+  if (loading || !currentTutor) {
+    return (
+      <TutorLayout>
+        <div className="flex items-center justify-center h-full">
+          <p>Loading tutor report data...</p>
+        </div>
+      </TutorLayout>
+    );
+  }
+
+  const tutorStudentData = useMemo(() => {
+    return students.filter(s => s.tutor_id === currentTutor.id);
+  }, [students, currentTutor.id]);
+
+  const tutorStudentLeaveRequests = useMemo(() => {
+    return leaveRequests.filter(req => req.tutor_id === currentTutor.id);
+  }, [leaveRequests, currentTutor.id]);
+
   const totalStudents = tutorStudentData.length;
-  const totalLeaves = tutorStudentData.reduce((acc, student) => acc + student.totalLeaveTaken, 0);
+  const totalLeaves = tutorStudentData.reduce((acc, student) => acc + student.leave_taken, 0);
   const averageLeaves = totalStudents > 0 ? (totalLeaves / totalStudents).toFixed(1) : 0;
 
   return (
     <TutorLayout>
       <div className="space-y-6">
-        <h1 className="text-2xl md:text-3xl font-bold">Student Report</h1>
+        <h1 className="text-2xl md:text-3xl font-bold">Student Report for {currentTutor.name}</h1>
         
-        {/* Summary Cards */}
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          <Card>
+          <Card className="transition-all duration-300 hover:shadow-lg hover:-translate-y-1">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Your Students</CardTitle>
               <Users className="h-4 w-4 text-muted-foreground" />
@@ -66,7 +55,7 @@ const TutorReportPage = () => {
               <p className="text-xs text-muted-foreground">students assigned to you</p>
             </CardContent>
           </Card>
-          <Card>
+          <Card className="transition-all duration-300 hover:shadow-lg hover:-translate-y-1">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Total Leaves Taken</CardTitle>
               <CalendarOff className="h-4 w-4 text-muted-foreground" />
@@ -76,7 +65,7 @@ const TutorReportPage = () => {
               <p className="text-xs text-muted-foreground">by your students</p>
             </CardContent>
           </Card>
-          <Card>
+          <Card className="transition-all duration-300 hover:shadow-lg hover:-translate-y-1">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Average Leave</CardTitle>
               <BarChart2 className="h-4 w-4 text-muted-foreground" />
@@ -88,11 +77,9 @@ const TutorReportPage = () => {
           </Card>
         </div>
 
-        {/* Monthly Leave Chart */}
         <MonthlyLeaveChart data={tutorStudentLeaveRequests} />
 
-        {/* Detailed Report Table */}
-        <Card>
+        <Card className="transition-all duration-300 hover:shadow-lg">
           <CardHeader>
             <CardTitle>Detailed Student Report</CardTitle>
             <CardDescription>A summary of total leaves taken by each of your students.</CardDescription>
@@ -110,11 +97,11 @@ const TutorReportPage = () => {
                 </TableHeader>
                 <TableBody>
                   {tutorStudentData.map((student) => (
-                    <TableRow key={student.id}>
-                      <TableCell className="font-medium">{student.studentName}</TableCell>
-                      <TableCell>{student.registerNumber}</TableCell>
+                    <TableRow key={student.id} className="transition-colors hover:bg-muted/50">
+                      <TableCell className="font-medium">{student.name}</TableCell>
+                      <TableCell>{student.register_number}</TableCell>
                       <TableCell className="text-center">{student.year}</TableCell>
-                      <TableCell className="text-right font-semibold">{student.totalLeaveTaken}</TableCell>
+                      <TableCell className="text-right font-semibold">{student.leave_taken}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

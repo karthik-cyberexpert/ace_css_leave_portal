@@ -7,6 +7,8 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
 import { Sheet, SheetContent, SheetTrigger, SheetClose } from '@/components/ui/sheet';
 import { Notifications } from '@/components/Notifications';
+import { useAppContext } from '@/context/AppContext';
+import { ThemeToggle } from './theme-toggle';
 
 const sidebarNavItems = [
   {
@@ -29,21 +31,27 @@ const sidebarNavItems = [
     href: "/request-status",
     icon: ClipboardList,
   },
+  {
+    title: "Profile",
+    href: "/profile",
+    icon: UserCircle,
+  },
 ];
 
 const SidebarContent = ({ isMobile = false }: { isMobile?: boolean }) => {
   const location = useLocation();
+  const { currentUser } = useAppContext();
   const LinkComponent = isMobile ? SheetClose : React.Fragment;
 
   return (
     <>
-      <div className="flex items-center space-x-3 p-4 mb-6">
+      <Link to="/profile" className="flex items-center space-x-3 p-4 mb-6 hover:bg-sidebar-accent rounded-lg transition-colors">
         <Avatar className="h-10 w-10">
-          <AvatarImage src="https://github.com/shadcn.png" alt="@shadcn" />
+          <AvatarImage src={currentUser.profile_photo} alt={currentUser.name} />
           <AvatarFallback><UserCircle className="h-10 w-10 text-sidebar-primary-foreground" /></AvatarFallback>
         </Avatar>
-        <span className="font-semibold text-lg text-gray-900">John Doe</span>
-      </div>
+        <span className="font-semibold text-lg text-gray-900">{currentUser.name}</span>
+      </Link>
       <Separator className="bg-sidebar-border mb-6" />
       <nav className="flex flex-col space-y-2">
         {sidebarNavItems.map((item) => (
@@ -51,7 +59,7 @@ const SidebarContent = ({ isMobile = false }: { isMobile?: boolean }) => {
             <Button
               variant="ghost"
               className={cn(
-                "justify-start text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                "justify-start text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors duration-200",
                 location.pathname === item.href && "bg-sidebar-accent text-sidebar-accent-foreground"
               )}
               asChild
@@ -76,7 +84,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
       <aside className="w-64 bg-sidebar text-sidebar-foreground border-r border-sidebar-border p-4 flex-col shadow-lg hidden md:flex">
         <SidebarContent />
       </aside>
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col min-w-0">
         <header className="flex items-center justify-between bg-white border-b p-4 sticky top-0 z-10 h-16">
           {/* Mobile menu */}
           <div className="md:hidden">
@@ -94,7 +102,8 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
           <div className="hidden md:block" />
 
           {/* Right-aligned icons */}
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
             <Notifications role="student" />
             <Button variant="ghost" size="icon" aria-label="Logout" onClick={() => navigate('/login')}>
               <LogOut className="h-5 w-5" />

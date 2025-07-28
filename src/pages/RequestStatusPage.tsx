@@ -1,107 +1,102 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import Layout from '@/components/Layout';
 import { cn } from '@/lib/utils';
 import { showSuccess } from '@/utils/toast';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { useAppContext, LeaveRequest, ODRequest, RequestStatus, CertificateStatus } from '@/context/AppContext';
+import { format, parseISO } from 'date-fns'; // Import format and parseISO for displaying dates
 
-// Dummy data for requests
-const initialRequests = [
-  {
-    id: 'req-1',
-    type: 'Leave',
-    appliedDate: '2023-10-26',
-    subject: 'Family Vacation',
-    totalDays: 5,
-    status: 'Approved',
-    details: 'Vacation to the mountains with family.',
-  },
-  {
-    id: 'req-2',
-    type: 'OD',
-    appliedDate: '2023-10-20',
-    subject: 'Conference Attendance',
-    totalDays: 3,
-    status: 'Pending',
-    details: 'Attending the annual tech conference in New York.',
-  },
-  {
-    id: 'req-3',
-    type: 'Leave',
-    appliedDate: '2023-09-15',
-    subject: 'Sick Leave',
-    totalDays: 1,
-    status: 'Rejected',
-    details: 'Fever and flu symptoms.',
-  },
-  {
-    id: 'req-4',
-    type: 'OD',
-    appliedDate: '2023-09-01',
-    subject: 'Client Meeting',
-    totalDays: 2,
-    status: 'Approved',
-    details: 'Meeting with client in Boston for project discussion.',
-  },
-  {
-    id: 'req-5',
-    type: 'Leave',
-    appliedDate: '2023-08-28',
-    subject: 'Personal Day',
-    totalDays: 1,
-    status: 'Approved',
-    details: 'Personal errands and appointments.',
-  },
-];
+type CombinedRequest = (LeaveRequest & { type: 'Leave' }) | (ODRequest & { type: 'OD' });
 
 const RequestStatusPage = () => {
-  const [requests, setRequests] = useState(initialRequests);
-  const [requestToCancel, setRequestToCancel] = useState<string | null>(null);
+  const { leaveRequests, odRequests, requestLeaveCancellation, requestODCancellation, currentUser, uploadODCertificate, updateLeaveRequestStatus, updateODRequestStatus } = useAppContext();
+  const [selectedRequestForReview, setSelectedRequestForReview] = useState<CombinedRequest | null>(null);
   const [cancelReason, setCancelReason] = useState('');
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
 
-  const handleConfirmCancel = () => {
-    if (!requestToCancel || !cancelReason.trim()) return;
+  const allRequests = useMemo(() => {
+    const studentLeaveRequests = leaveRequests.filter(r => r.student_id === currentUser.id);
+    const studentODRequests = odRequests.filter(r => r.student_id === currentUser.id);
 
-    setRequests(prevRequests =>
-      prevRequests.map(request =>
-        request.id === requestToCancel ? { ...request, status: 'Cancelled' } : request
-      )
-    );
-    console.log(`Request ${requestToCancel} cancelled. Reason: ${cancelReason}`);
-    showSuccess('Request cancelled successfully!');
-    setRequestToCancel(null);
+    const combined: CombinedRequest[] = [
+      ...studentLeaveRequests.map(r => ({ ...r, type: 'Leave' as const, subject: r.subject })),
+      ...studentODRequests.map(r => ({ ...r, type: 'OD' as const, subject: r.purpose })),
+    ];
+    return combined.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()); // Sort by created_at for latest first
+  }, [leaveRequests, odRequests, currentUser.id]);
+
+  const handleRequestCancellation = async () => {
+    if (!selectedRequestForReview || !cancelReason.trim()) return;
+    if (selectedRequestForReview.type === 'Leave') {
+      await requestLeaveCancellation(selectedRequestForReview.id, cancelReason);
+    } else {
+      await requestODCancellation(selectedRequestForReview.id, cancelReason);
+    }
+    setSelectedRequestForReview(null);
     setCancelReason('');
   };
 
-  const handleRetryRequest = (id: string) => {
-    setRequests(prevRequests =>
-      prevRequests.map(request =>
-        request.id === id ? { ...request, status: 'Pending' } : request
-      )
-    );
-    showSuccess('Request retried successfully! Status changed to Pending.');
+  const handleRetryRequest = async () => {
+    if (!selectedRequestForReview) return;
+    
+    try {
+      if (selectedRequestForReview.type === 'Leave') {
+        await updateLeaveRequestStatus(selectedRequestForReview.id, 'Retried');
+      } else {
+        await updateODRequestStatus(selectedRequestForReview.id, 'Retried');
+      }
+      showSuccess('Request retried successfully! Status changed to Retried.');
+      setSelectedRequestForReview(null);
+    } catch (error) {
+      console.error('Failed to retry request:', error);
+    }
   };
+
+  const handleUploadSubmit = () => {
+    if (!selectedRequestForReview || selectedRequestForReview.type !== 'OD' || !uploadFile) return;
+    const simulatedUrl = URL.createObjectURL(uploadFile);
+    uploadODCertificate(selectedRequestForReview.id, simulatedUrl);
+    showSuccess('Certificate uploaded for verification!');
+    setSelectedRequestForReview(null);
+    setUploadFile(null);
+  };
+
+  const getStatusBadge = (status: RequestStatus, certStatus?: CertificateStatus) => {
+    const statusText = certStatus ? `${status} (${certStatus})` : status;
+    const colorClasses = {
+      'Approved': 'bg-green-100 text-green-800',
+      'Pending': 'bg-yellow-100 text-yellow-800',
+      'Rejected': 'bg-red-100 text-red-800',
+      'Cancelled': 'bg-gray-100 text-gray-800',
+      'Forwarded': 'bg-blue-100 text-blue-800',
+      'Cancellation Pending': 'bg-purple-100 text-purple-800', // New color for cancellation pending
+      'Pending Upload': 'bg-orange-100 text-orange-800',
+      'Pending Verification': 'bg-purple-100 text-purple-800',
+      'Overdue': 'bg-red-200 text-red-900',
+    };
+    return <span className={cn("px-3 py-1 rounded-full text-xs font-semibold", colorClasses[status as keyof typeof colorClasses] || 'bg-gray-100 text-gray-800')}>{statusText}</span>;
+  };
+
+  const canRequestCancellation = selectedRequestForReview && 
+    (selectedRequestForReview.status === 'Pending' || 
+     selectedRequestForReview.status === 'Approved' || 
+     selectedRequestForReview.status === 'Forwarded');
+
+  const canUploadCertificate = selectedRequestForReview?.type === 'OD' && 
+    selectedRequestForReview.status === 'Approved' && 
+    selectedRequestForReview.certificate_status === 'Pending Upload';
+
+  const canRetryRequest = selectedRequestForReview?.status === 'Rejected';
 
   return (
     <Layout>
-      <Card className="w-full max-w-6xl mx-auto">
+      <Card className="w-full max-w-6xl mx-auto transition-all duration-300 hover:shadow-xl">
         <CardHeader>
           <CardTitle className="text-2xl md:text-3xl font-bold">Request Status</CardTitle>
           <CardDescription>View the status of all your submitted leave and OD requests.</CardDescription>
@@ -111,51 +106,20 @@ const RequestStatusPage = () => {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[100px]">Type</TableHead>
-                  <TableHead>Applied Date</TableHead>
+                  <TableHead>Type</TableHead>
                   <TableHead>Subject/Purpose</TableHead>
-                  <TableHead className="text-right">Total Days</TableHead>
                   <TableHead className="text-center">Status</TableHead>
                   <TableHead className="text-center">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {requests.map((request) => (
+                {allRequests.map((request) => (
                   <TableRow key={request.id}>
                     <TableCell className="font-medium">{request.type}</TableCell>
-                    <TableCell>{request.appliedDate}</TableCell>
                     <TableCell>{request.subject}</TableCell>
-                    <TableCell className="text-right">{request.totalDays}</TableCell>
-                    <TableCell className="text-center">
-                      <span className={cn(
-                        "px-3 py-1 rounded-full text-xs font-semibold",
-                        request.status === 'Approved' && 'bg-green-100 text-green-800',
-                        request.status === 'Pending' && 'bg-yellow-100 text-yellow-800',
-                        request.status === 'Rejected' && 'bg-red-100 text-red-800',
-                        request.status === 'Cancelled' && 'bg-gray-100 text-gray-800'
-                      )}>
-                        {request.status}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-center">
-                      {(request.status === 'Pending' || request.status === 'Approved') && (
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          onClick={() => setRequestToCancel(request.id)}
-                        >
-                          Cancel
-                        </Button>
-                      )}
-                      {request.status === 'Rejected' && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleRetryRequest(request.id)}
-                        >
-                          Retry
-                        </Button>
-                      )}
+                    <TableCell className="text-center">{getStatusBadge(request.status, request.type === 'OD' ? request.certificate_status : undefined)}</TableCell>
+                    <TableCell className="text-center space-x-2">
+                      <Button variant="outline" size="sm" onClick={() => setSelectedRequestForReview(request)}>Review</Button>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -165,34 +129,85 @@ const RequestStatusPage = () => {
         </CardContent>
       </Card>
 
-      <Dialog open={!!requestToCancel} onOpenChange={(isOpen) => !isOpen && setRequestToCancel(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Cancel Request</DialogTitle>
-            <DialogDescription>
-              Please provide a reason for cancelling this request. This action cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4">
-            <Textarea
-              placeholder="Type your reason here..."
-              value={cancelReason}
-              onChange={(e) => setCancelReason(e.target.value)}
-              rows={4}
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setRequestToCancel(null)}>
-              Go Back
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={handleConfirmCancel}
-              disabled={!cancelReason.trim()}
-            >
-              Confirm Cancellation
-            </Button>
-          </DialogFooter>
+      {/* Review/Action Dialog */}
+      <Dialog open={!!selectedRequestForReview} onOpenChange={(isOpen) => {
+        if (!isOpen) {
+          setSelectedRequestForReview(null);
+          setCancelReason('');
+          setUploadFile(null);
+        }
+      }}>
+        <DialogContent className="sm:max-w-[500px]">
+          {selectedRequestForReview && (
+            <>
+              <DialogHeader>
+                <DialogTitle>{selectedRequestForReview.type} Request Details</DialogTitle>
+                <DialogDescription>From: <strong>{selectedRequestForReview.student_name}</strong></DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
+                <div className="flex flex-col space-y-1">
+                  <span className="text-sm font-medium text-muted-foreground">Dates</span>
+                  <p>{format(parseISO(selectedRequestForReview.start_date), 'MMMM d yyyy')} to {format(parseISO(selectedRequestForReview.end_date), 'MMMM d yyyy')} ({selectedRequestForReview.total_days} days)</p>
+                </div>
+                <div className="flex flex-col space-y-1">
+                  <span className="text-sm font-medium text-muted-foreground">Subject/Purpose</span>
+                  <p>{selectedRequestForReview.subject}</p>
+                </div>
+                {selectedRequestForReview.type === 'OD' && (
+                  <div className="flex flex-col space-y-1">
+                    <span className="text-sm font-medium text-muted-foreground">Destination</span>
+                    <p>{selectedRequestForReview.destination}</p>
+                  </div>
+                )}
+                <div className="flex flex-col space-y-1">
+                  <span className="text-sm font-medium text-muted-foreground">Description</span>
+                  <p>{selectedRequestForReview.description}</p>
+                </div>
+                <div className="flex flex-col space-y-1">
+                  <span className="text-sm font-medium text-muted-foreground">Current Status</span>
+                  {getStatusBadge(selectedRequestForReview.status, selectedRequestForReview.type === 'OD' ? selectedRequestForReview.certificate_status : undefined)}
+                </div>
+                {selectedRequestForReview.original_status && (
+                  <div className="flex flex-col space-y-1">
+                    <span className="text-sm font-medium text-muted-foreground">Original Status</span>
+                    {getStatusBadge(selectedRequestForReview.original_status)}
+                  </div>
+                )}
+                {selectedRequestForReview.cancel_reason && (
+                  <div className="flex flex-col space-y-1">
+                    <span className="text-sm font-medium text-muted-foreground">Cancellation Reason</span>
+                    <p>{selectedRequestForReview.cancel_reason}</p>
+                  </div>
+                )}
+
+                {/* Conditional input for cancellation reason or certificate upload */}
+                {canRequestCancellation && selectedRequestForReview.status !== 'Cancellation Pending' && (
+                  <div className="space-y-2">
+                    <Label htmlFor="cancel-reason">Reason for Cancellation</Label>
+                    <Textarea id="cancel-reason" placeholder="Type your reason here..." value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} rows={3} />
+                  </div>
+                )}
+                {canUploadCertificate && (
+                  <div className="grid w-full items-center gap-1.5">
+                    <Label htmlFor="certificate-file">Upload Certificate</Label>
+                    <Input id="certificate-file" type="file" onChange={(e) => setUploadFile(e.target.files?.[0] || null)} />
+                  </div>
+                )}
+              </div>
+              <DialogFooter className="flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2">
+                <DialogClose asChild>
+                  <Button variant="outline">Close</Button>
+                </DialogClose>
+                {canUploadCertificate ? (
+                  <Button onClick={handleUploadSubmit} disabled={!uploadFile}>Upload Certificate</Button>
+                ) : canRequestCancellation && selectedRequestForReview.status !== 'Cancellation Pending' ? (
+                  <Button variant="destructive" onClick={handleRequestCancellation} disabled={!cancelReason.trim()}>Request Cancellation</Button>
+                ) : canRetryRequest && (
+                  <Button onClick={handleRetryRequest}>Retry Request</Button>
+                )}
+              </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
     </Layout>

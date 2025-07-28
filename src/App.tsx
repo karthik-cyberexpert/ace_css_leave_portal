@@ -20,44 +20,55 @@ import AdminODApprovePage from "./pages/AdminODApprovePage";
 import AdminReportPage from "./pages/AdminReportPage";
 import AdminStudentManagementPage from "./pages/AdminStudentManagementPage";
 import AdminStaffManagementPage from "./pages/AdminStaffManagementPage";
+import { AppProvider } from "./context/AppContext";
+import TutorStudentManagementPage from "./pages/TutorStudentManagementPage";
+import ProtectedRoute from "./components/ProtectedRoute";
+import ProfilePage from "./pages/ProfilePage";
+import StaffProfilePage from "./pages/StaffProfilePage";
 
 const queryClient = new QueryClient();
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Index />} />
-          <Route path="/login" element={<LoginPage />} />
-          
-          {/* Student Routes */}
-          <Route path="/dashboard" element={<DashboardPage />} />
-          <Route path="/leave-request" element={<LeaveRequestPage />} />
-          <Route path="/od-request" element={<ODRequestPage />} />
-          <Route path="/request-status" element={<RequestStatusPage />} />
-          
-          {/* Tutor Routes */}
-          <Route path="/tutor-dashboard" element={<TutorDashboardPage />} />
-          <Route path="/tutor-leave-approve" element={<TutorLeaveApprovePage />} />
-          <Route path="/tutor-od-approve" element={<TutorODApprovePage />} />
-          <Route path="/tutor-report" element={<TutorReportPage />} />
+  <AppProvider>
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={<Index />} />
+            <Route path="/login" element={<LoginPage />} />
+            
+            {/* Student Routes */}
+            <Route path="/dashboard" element={<ProtectedRoute allowedRoles={['Student']}><DashboardPage /></ProtectedRoute>} />
+            <Route path="/leave-request" element={<ProtectedRoute allowedRoles={['Student']}><LeaveRequestPage /></ProtectedRoute>} />
+            <Route path="/od-request" element={<ProtectedRoute allowedRoles={['Student']}><ODRequestPage /></ProtectedRoute>} />
+            <Route path="/request-status" element={<ProtectedRoute allowedRoles={['Student']}><RequestStatusPage /></ProtectedRoute>} />
+            <Route path="/profile" element={<ProtectedRoute allowedRoles={['Student']}><ProfilePage /></ProtectedRoute>} />
+            
+            {/* Tutor Routes */}
+            <Route path="/tutor-dashboard" element={<ProtectedRoute allowedRoles={['Tutor']}><TutorDashboardPage /></ProtectedRoute>} />
+            <Route path="/tutor-leave-approve" element={<ProtectedRoute allowedRoles={['Tutor']}><TutorLeaveApprovePage /></ProtectedRoute>} />
+            <Route path="/tutor-od-approve" element={<ProtectedRoute allowedRoles={['Tutor']}><TutorODApprovePage /></ProtectedRoute>} />
+            <Route path="/tutor-report" element={<ProtectedRoute allowedRoles={['Tutor']}><TutorReportPage /></ProtectedRoute>} />
+            <Route path="/tutor-students" element={<ProtectedRoute allowedRoles={['Tutor']}><TutorStudentManagementPage /></ProtectedRoute>} />
+            <Route path="/tutor-profile" element={<ProtectedRoute allowedRoles={['Tutor']}><StaffProfilePage /></ProtectedRoute>} />
 
-          {/* Admin Routes */}
-          <Route path="/admin-dashboard" element={<AdminDashboardPage />} />
-          <Route path="/admin-leave-requests" element={<AdminLeaveApprovePage />} />
-          <Route path="/admin-od-requests" element={<AdminODApprovePage />} />
-          <Route path="/admin-reports" element={<AdminReportPage />} />
-          <Route path="/admin-students" element={<AdminStudentManagementPage />} />
-          <Route path="/admin-staff" element={<AdminStaffManagementPage />} />
+            {/* Admin Routes */}
+            <Route path="/admin-dashboard" element={<ProtectedRoute allowedRoles={['Admin']}><AdminDashboardPage /></ProtectedRoute>} />
+            <Route path="/admin-leave-requests" element={<ProtectedRoute allowedRoles={['Admin']}><AdminLeaveApprovePage /></ProtectedRoute>} />
+            <Route path="/admin-od-requests" element={<ProtectedRoute allowedRoles={['Admin']}><AdminODApprovePage /></ProtectedRoute>} />
+            <Route path="/admin-reports" element={<ProtectedRoute allowedRoles={['Admin']}><AdminReportPage /></ProtectedRoute>} />
+            <Route path="/admin-students" element={<ProtectedRoute allowedRoles={['Admin']}><AdminStudentManagementPage /></ProtectedRoute>} />
+            <Route path="/admin-staff" element={<ProtectedRoute allowedRoles={['Admin']}><AdminStaffManagementPage /></ProtectedRoute>} />
+            <Route path="/admin-profile" element={<ProtectedRoute allowedRoles={['Admin']}><StaffProfilePage /></ProtectedRoute>} />
 
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
-    </TooltipProvider>
-  </QueryClientProvider>
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </BrowserRouter>
+      </TooltipProvider>
+    </QueryClientProvider>
+  </AppProvider>
 );
 
 export default App;

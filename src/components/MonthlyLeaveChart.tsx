@@ -3,14 +3,14 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/com
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { format, getMonth } from 'date-fns';
 
-interface LeaveRequest {
-  startDate: string;
-  totalDays: number;
+interface LeaveRequestChartData {
+  start_date: string;
+  total_days: number;
   status: string;
 }
 
 interface MonthlyLeaveChartProps {
-  data: LeaveRequest[];
+  data: LeaveRequestChartData[];
 }
 
 const MonthlyLeaveChart = ({ data }: MonthlyLeaveChartProps) => {
@@ -21,15 +21,15 @@ const MonthlyLeaveChart = ({ data }: MonthlyLeaveChartProps) => {
 
   data.forEach(request => {
     if (request.status === 'Approved') {
-      const monthIndex = getMonth(new Date(request.startDate));
+      const monthIndex = getMonth(new Date(request.start_date));
       if (monthlyData[monthIndex]) {
-        monthlyData[monthIndex].leaves += request.totalDays;
+        monthlyData[monthIndex].leaves += request.total_days;
       }
     }
   });
 
   return (
-    <Card className="col-span-1 lg:col-span-3">
+    <Card className="col-span-1 lg:col-span-3 transition-all duration-300 hover:shadow-xl hover:-translate-y-1">
       <CardHeader>
         <CardTitle>Monthly Leave Report</CardTitle>
         <CardDescription>Total approved leave days per month for the current year.</CardDescription>

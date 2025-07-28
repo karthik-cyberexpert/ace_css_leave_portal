@@ -6,25 +6,34 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { showSuccess } from '@/utils/toast';
 import { cn } from '@/lib/utils';
-
-const initialLeaveRequests = [
-  { id: 'leave-1', studentName: 'Bob Williams', startDate: '2023-11-05', endDate: '2023-11-08', totalDays: 4, description: 'Requesting leave to attend my cousin\'s wedding out of town.', status: 'Forwarded' },
-  { id: 'leave-2', studentName: 'Eve Davis', startDate: '2023-11-18', endDate: '2023-11-21', totalDays: 4, description: 'Family trip to visit grandparents.', status: 'Forwarded' },
-  { id: 'leave-3', studentName: 'Alice Johnson', startDate: '2023-11-01', endDate: '2023-11-02', totalDays: 2, description: 'Urgent personal matters.', status: 'Pending' },
-  { id: 'leave-4', studentName: 'Diana Miller', startDate: '2023-11-12', endDate: '2023-11-15', totalDays: 4, description: 'Going on a short vacation with my family.', status: 'Approved' },
-];
-
-type LeaveRequest = typeof initialLeaveRequests[0];
-type RequestStatus = 'Pending' | 'Approved' | 'Rejected' | 'Forwarded' | 'Cancelled';
+import { useAppContext, LeaveRequest, RequestStatus } from '@/context/AppContext';
+import { format, parseISO } from 'date-fns';
 
 const AdminLeaveApprovePage = () => {
-  const [leaveRequests, setLeaveRequests] = useState(initialLeaveRequests);
+  const { leaveRequests, updateLeaveRequestStatus, approveRejectLeaveCancellation } = useAppContext();
   const [selectedRequest, setSelectedRequest] = useState<LeaveRequest | null>(null);
 
-  const handleRequestAction = (id: string, newStatus: 'Approved' | 'Rejected') => {
-    setLeaveRequests(prev => prev.map(req => req.id === id ? { ...req, status: newStatus } : req));
+  const handleRequestAction = async (id: string, newStatus: 'Approved' | 'Rejected') => {
+    await updateLeaveRequestStatus(id, newStatus);
     showSuccess(`Request has been ${newStatus.toLowerCase()}!`);
     setSelectedRequest(null);
+  };
+
+  const handleCancellationAction = async (id: string, approve: boolean) => {
+    await approveRejectLeaveCancellation(id, approve);
+    setSelectedRequest(null);
+  };
+
+  const getStatusBadge = (status: RequestStatus) => {
+    const colorClasses = {
+      'Approved': 'bg-green-100 text-green-800',
+      'Pending': 'bg-yellow-100 text-yellow-800',
+      'Rejected': 'bg-red-100 text-red-800',
+      'Cancelled': 'bg-gray-100 text-gray-800',
+      'Forwarded': 'bg-blue-100 text-blue-800',
+      'Cancellation Pending': 'bg-purple-100 text-purple-800',
+    };
+    return <span className={cn("px-3 py-1 rounded-full text-xs font-semibold", colorClasses[status] || 'bg-gray-100 text-gray-800')}>{status}</span>;
   };
 
   return (
@@ -32,7 +41,7 @@ const AdminLeaveApprovePage = () => {
       <Card className="w-full mx-auto">
         <CardHeader>
           <CardTitle className="text-2xl md:text-3xl font-bold">Admin Leave Management</CardTitle>
-          <CardDescription>Review, approve, or reject all student leave requests, including those forwarded by tutors.</CardDescription>
+          <CardDescription>Review, approve, or reject all student leave requests, including those forwarded by tutors and cancellation requests.</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
@@ -48,17 +57,26 @@ const AdminLeaveApprovePage = () => {
               </TableHeader>
               <TableBody>
                 {leaveRequests.map((request) => (
-                  <TableRow key={request.id}>
-                    <TableCell className="font-medium">{request.studentName}</TableCell>
-                    <TableCell>{request.startDate} to {request.endDate}</TableCell>
-                    <TableCell className="text-right">{request.totalDays}</TableCell>
+                  <TableRow key={request.id} className="transition-colors hover:bg-muted/50">
+                    <TableCell className="font-medium">
+                      <div>{request.student_name}</div>
+                      <div className="text-xs text-muted-foreground">[{request.student_register_number}]</div>
+                    </TableCell>
+                    <TableCell>{format(parseISO(request.start_date), 'MMMM d yyyy')} to {format(parseISO(request.end_date), 'MMMM d yyyy')}</TableCell>
+                    <TableCell className="text-right">{request.total_days}</TableCell>
                     <TableCell className="text-center">
-                      <span className={cn("px-3 py-1 rounded-full text-xs font-semibold", request.status === 'Approved' && 'bg-green-100 text-green-800', request.status === 'Pending' && 'bg-yellow-100 text-yellow-800', request.status === 'Rejected' && 'bg-red-100 text-red-800', request.status === 'Forwarded' && 'bg-blue-100 text-blue-800')}>
-                        {request.status}
-                      </span>
+                      {getStatusBadge(request.status)}
                     </TableCell>
                     <TableCell className="text-center">
-                      {request.status === 'Pending' || request.status === 'Forwarded' ? (
+                      {request.status === 'Approved' ? (
+                        <Button 
+                          variant="destructive" 
+                          size="sm" 
+                          onClick={() => handleRequestAction(request.id, 'Rejected')}
+                        >
+                          Reject
+                        </Button>
+                      ) : (request.status === 'Pending' || request.status === 'Forwarded' || request.status === 'Cancellation Pending') ? (
                         <Button variant="outline" size="sm" onClick={() => setSelectedRequest(request)}>Review</Button>
                       ) : (
                         <span className="text-xs text-muted-foreground">No actions</span>
@@ -78,13 +96,51 @@ const AdminLeaveApprovePage = () => {
             <>
               <DialogHeader>
                 <DialogTitle>Leave Request Details</DialogTitle>
-                <DialogDescription>From: <strong>{selectedRequest.studentName}</strong></DialogDescription>
+                <DialogDescription>From: <strong>{selectedRequest.student_name}</strong> [{selectedRequest.student_register_number}]</DialogDescription>
               </DialogHeader>
-              <div className="py-4">{selectedRequest.description}</div>
+              <div className="grid gap-4 py-4">
+                <div className="flex flex-col space-y-1">
+                  <span className="text-sm font-medium text-muted-foreground">Dates</span>
+                  <p>{format(parseISO(selectedRequest.start_date), 'MMMM d yyyy')} to {format(parseISO(selectedRequest.end_date), 'MMMM d yyyy')} ({selectedRequest.total_days} days)</p>
+                </div>
+                <div className="flex flex-col space-y-1">
+                  <span className="text-sm font-medium text-muted-foreground">Subject</span>
+                  <p>{selectedRequest.subject}</p>
+                </div>
+                <div className="flex flex-col space-y-1">
+                  <span className="text-sm font-medium text-muted-foreground">Description</span>
+                  <p>{selectedRequest.description}</p>
+                </div>
+                <div className="flex flex-col space-y-1">
+                  <span className="text-sm font-medium text-muted-foreground">Current Status</span>
+                  {getStatusBadge(selectedRequest.status)}
+                </div>
+                {selectedRequest.original_status && (
+                  <div className="flex flex-col space-y-1">
+                    <span className="text-sm font-medium text-muted-foreground">Original Status</span>
+                    {getStatusBadge(selectedRequest.original_status)}
+                  </div>
+                )}
+                {selectedRequest.cancel_reason && (
+                  <div className="flex flex-col space-y-1">
+                    <span className="text-sm font-medium text-muted-foreground">Cancellation Reason</span>
+                    <p>{selectedRequest.cancel_reason}</p>
+                  </div>
+                )}
+              </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setSelectedRequest(null)}>Cancel</Button>
-                <Button variant="destructive" onClick={() => handleRequestAction(selectedRequest.id, 'Rejected')}>Reject</Button>
-                <Button className="bg-green-500 hover:bg-green-600 text-white" onClick={() => handleRequestAction(selectedRequest.id, 'Approved')}>Approve</Button>
+                {selectedRequest.status === 'Cancellation Pending' ? (
+                  <>
+                    <Button variant="destructive" onClick={() => handleCancellationAction(selectedRequest.id, false)}>Reject Cancellation</Button>
+                    <Button className="bg-green-500 hover:bg-green-600 text-white" onClick={() => handleCancellationAction(selectedRequest.id, true)}>Approve Cancellation</Button>
+                  </>
+                ) : (
+                  <>
+                    <Button variant="destructive" onClick={() => handleRequestAction(selectedRequest.id, 'Rejected')}>Reject</Button>
+                    <Button className="bg-green-500 hover:bg-green-600 text-white" onClick={() => handleRequestAction(selectedRequest.id, 'Approved')}>Approve</Button>
+                  </>
+                )}
               </DialogFooter>
             </>
           )}

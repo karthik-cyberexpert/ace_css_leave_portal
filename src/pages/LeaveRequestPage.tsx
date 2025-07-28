@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { differenceInCalendarDays } from 'date-fns';
+import { differenceInCalendarDays, format } from 'date-fns';
 import { Link } from 'react-router-dom';
 
 import { Button } from '@/components/ui/button';
@@ -13,6 +13,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { DatePicker } from '@/components/ui/datepicker';
 import { showSuccess } from '@/utils/toast';
 import Layout from '@/components/Layout';
+import { useAppContext } from '@/context/AppContext';
 
 const leaveRequestSchema = z.object({
   startDate: z.date({
@@ -26,12 +27,23 @@ const leaveRequestSchema = z.object({
 }).refine((data) => data.endDate >= data.startDate, {
   message: "End date cannot be before start date.",
   path: ["endDate"],
+}).refine((data) => {
+  if (data.startDate && data.endDate) {
+    const days = differenceInCalendarDays(data.endDate, data.startDate) + 1;
+    return days <= 10;
+  }
+  return true;
+}, {
+  message: "Leave duration cannot exceed 10 days.",
+  path: ["endDate"],
 });
 
 type LeaveRequestFormValues = z.infer<typeof leaveRequestSchema>;
 
 const LeaveRequestPage = () => {
+  const { addLeaveRequest } = useAppContext();
   const [totalDays, setTotalDays] = useState(0);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const form = useForm<LeaveRequestFormValues>({
     resolver: zodResolver(leaveRequestSchema),
     defaultValues: {
@@ -52,16 +64,30 @@ const LeaveRequestPage = () => {
     }
   }, [startDate, endDate]);
 
-  const onSubmit = (data: LeaveRequestFormValues) => {
-    console.log('Leave Request Submitted:', { ...data, totalDays });
-    showSuccess('Leave request submitted successfully!');
-    form.reset();
-    setTotalDays(0);
+  const onSubmit = async (data: LeaveRequestFormValues) => {
+    setIsSubmitting(true);
+    const requestData = {
+      subject: data.subject,
+      description: data.description,
+      start_date: format(data.startDate, 'yyyy-MM-dd'),
+      end_date: format(data.endDate, 'yyyy-MM-dd'),
+      total_days: totalDays,
+    };
+    try {
+      await addLeaveRequest(requestData as any);
+      showSuccess('Leave request submitted successfully!');
+      form.reset();
+      setTotalDays(0);
+    } catch (error) {
+      console.error("Failed to submit leave request:", error);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
     <Layout>
-      <Card className="w-full max-w-4xl mx-auto">
+      <Card className="w-full max-w-4xl mx-auto transition-all duration-300 hover:shadow-xl">
         <CardHeader>
           <CardTitle className="text-2xl md:text-3xl font-bold">Leave Request Form</CardTitle>
           <CardDescription>Fill out the form below to request time off.</CardDescription>
@@ -150,7 +176,9 @@ const LeaveRequestPage = () => {
                 <Button variant="outline" type="button" asChild>
                   <Link to="/dashboard">Cancel</Link>
                 </Button>
-                <Button type="submit">Submit Request</Button>
+                <Button type="submit" disabled={isSubmitting}>
+                  {isSubmitting ? 'Submitting...' : 'Submit Request'}
+                </Button>
               </div>
             </form>
           </Form>
