@@ -7,20 +7,29 @@ A comprehensive leave management system for educational institutions, enabling s
 ### For Students
 - **Leave Requests**: Apply for various types of leave (Medical, Personal, Emergency, Academic)
 - **OD Requests**: Apply for On Duty requests with certificate upload support
-- **Status Tracking**: View status of submitted requests (Pending, Approved, Rejected)
+- **Status Tracking**: View status of submitted requests (Pending, Approved, Rejected, Forwarded, Retried)
+- **Request Retry**: Retry rejected requests for reconsideration
+- **Request Cancellation**: Request cancellation of approved/pending requests
+- **Partial Cancellation**: Cancel specific date ranges within approved leave requests
+- **Automatic Leave Count**: System automatically tracks and updates leave days taken
 - **Profile Management**: Update personal information
 - **Session Security**: Single active session per user
+- **Real-time Updates**: Dashboard data refreshes automatically every 10 seconds without manual refresh
 
 ### For Tutors
 - **Review Requests**: Approve or reject leave and OD requests
-- **Student Management**: View and manage assigned students
+- **Partial Cancellation Review**: Approve or reject partial cancellation requests
+- **Student Management**: View and manage assigned students with real-time leave counts
 - **Dashboard**: Overview of pending requests and statistics
+- **Real-time Updates**: Dashboard data refreshes automatically every 10 seconds without manual refresh
 
 ### For Administrators
 - **User Management**: Create, update, and manage student and staff accounts
 - **System Overview**: Complete visibility of all requests and users
+- **Leave Day Management**: Automatic calculation and tracking of student leave days
 - **Data Export**: Export system data for reporting
 - **Automated Notifications**: System sends reminders for pending requests
+- **Real-time Updates**: Dashboard data refreshes automatically every 10 seconds without manual refresh
 
 ## Technology Stack
 
@@ -61,14 +70,15 @@ A comprehensive leave management system for educational institutions, enabling s
    ```
 
 3. **Database Setup**
-   - Create MySQL database named `radiant_zebra_twirl`
+   - Create MySQL database named `cyber_security_leave_portal`
    - Run the schema setup:
      ```bash
-     mysql -u root -p radiant_zebra_twirl < database/schema.sql
+     mysql -u root -p cyber_security_leave_portal < database/schema.sql
      ```
    - Apply migrations:
      ```bash
-     mysql -u root -p radiant_zebra_twirl < backend/migrations/add_last_notification_date.sql
+     mysql -u root -p cyber_security_leave_portal < backend/migrations/add_last_notification_date.sql
+     mysql -u root -p cyber_security_leave_portal < backend/migrations/add_partial_cancellation_fields.sql
      ```
 
 4. **Environment Configuration**
@@ -78,24 +88,26 @@ A comprehensive leave management system for educational institutions, enabling s
      DB_HOST=localhost
      DB_USER=root
      DB_PASSWORD=your_password
-     DB_NAME=radiant_zebra_twirl
+     DB_NAME=cyber_security_leave_portal
      JWT_SECRET=your_jwt_secret_key
      PORT=5000
      ```
 
 5. **Start the Application**
    ```bash
-   # Start both frontend and backend
+   # Start frontend (Vite dev server)
    npm run dev
    
+   # Start both frontend and backend together
+   npm run dev-full
+   
    # Or start individually
-   npm run server    # Backend only
-   npm run client    # Frontend only
+   npm run server    # Backend only (port 3002)
    ```
 
 6. **Access the Application**
-   - Frontend: http://localhost:3000
-   - Backend API: http://localhost:5000
+   - Frontend: http://localhost:8080
+   - Backend API: http://localhost:3002
 
 ### Default Admin Account
 - **Username**: admin
@@ -167,6 +179,8 @@ leave_portal/
 - **Daily Reminders**: Automated email reminders for pending requests
 - **Session Cleanup**: Automatic cleanup of expired sessions
 - **File Management**: Organized file storage for OD certificates
+- **Leave Day Tracking**: Automatic calculation and update of student leave days based on approvals and cancellations
+- **Real-time Data Updates**: Automatic polling every 10 seconds for real-time updates across all user interfaces with intelligent rate limiting
 
 ## Development
 

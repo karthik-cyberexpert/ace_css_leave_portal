@@ -46,6 +46,7 @@ const TutorODApprovePage = () => {
       'Cancelled': 'bg-gray-100 text-gray-800',
       'Forwarded': 'bg-blue-100 text-blue-800',
       'Cancellation Pending': 'bg-purple-100 text-purple-800',
+      'Retried': 'bg-orange-100 text-orange-800',
       'Pending Upload': 'bg-orange-100 text-orange-800',
       'Pending Verification': 'bg-purple-100 text-purple-800',
       'Overdue': 'bg-red-200 text-red-900',
@@ -89,7 +90,7 @@ const TutorODApprovePage = () => {
                           Reject
                         </Button>
                       )}
-                      {(request.status === 'Pending' || request.status === 'Cancellation Pending') && <Button variant="outline" size="sm" onClick={() => setSelectedRequest(request)}>Review</Button>}
+                      {(request.status === 'Pending' || request.status === 'Retried' || request.status === 'Cancellation Pending') && <Button variant="outline" size="sm" onClick={() => setSelectedRequest(request)}>Review</Button>}
                       {request.certificate_status === 'Pending Verification' && <Button variant="default" size="sm" onClick={() => setVerifyRequest(request)}>Verify Cert</Button>}
                     </TableCell>
                   </TableRow>

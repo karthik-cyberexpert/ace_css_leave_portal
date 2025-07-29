@@ -1,0 +1,5 @@
+name,registerNumber,tutorName,year,username,password,profilePhoto
+John Doe,S101,Dr. Smith,1,john.d,password123,https://github.com/shadcn.png
+Jane Smith,S102,Dr. Brown,2,jane.s,password456,
+Mike Johnson,S103,Dr. Smith,3,mike.j,mypassword,
+Sarah Wilson,S104,Dr. Brown,1,sarah.w,securepass,

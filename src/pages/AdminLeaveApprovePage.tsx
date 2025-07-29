@@ -32,6 +32,7 @@ const AdminLeaveApprovePage = () => {
       'Cancelled': 'bg-gray-100 text-gray-800',
       'Forwarded': 'bg-blue-100 text-blue-800',
       'Cancellation Pending': 'bg-purple-100 text-purple-800',
+      'Retried': 'bg-orange-100 text-orange-800',
     };
     return <span className={cn("px-3 py-1 rounded-full text-xs font-semibold", colorClasses[status] || 'bg-gray-100 text-gray-800')}>{status}</span>;
   };
@@ -76,7 +77,7 @@ const AdminLeaveApprovePage = () => {
                         >
                           Reject
                         </Button>
-                      ) : (request.status === 'Pending' || request.status === 'Forwarded' || request.status === 'Cancellation Pending') ? (
+                      ) : (request.status === 'Pending' || request.status === 'Forwarded' || request.status === 'Retried' || request.status === 'Cancellation Pending') ? (
                         <Button variant="outline" size="sm" onClick={() => setSelectedRequest(request)}>Review</Button>
                       ) : (
                         <span className="text-xs text-muted-foreground">No actions</span>

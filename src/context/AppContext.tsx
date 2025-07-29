@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect, useCallback, useMemo } from 'react';
 import { BulkStudent } from '@/components/BulkAddStudentsDialog';
-import { format, addDays, isBefore, parseISO } from 'date-fns';
+import { format, addDays, isBefore, parseISO, differenceInDays } from 'date-fns';
 import { showError, showSuccess } from '@/utils/toast';
 import axios from 'axios';
 
@@ -52,13 +52,15 @@ type User = {
 };
 
 // --- DATA TYPES ---
-export type RequestStatus = 'Pending' | 'Approved' | 'Rejected' | 'Forwarded' | 'Cancelled' | 'Cancellation Pending';
+export type RequestStatus = 'Pending' | 'Approved' | 'Rejected' | 'Forwarded' | 'Cancelled' | 'Cancellation Pending' | 'Retried';
 export type CertificateStatus = 'Pending Upload' | 'Pending Verification' | 'Approved' | 'Rejected' | 'Overdue';
 
 export type Profile = {
   id: string;
   first_name: string;
   last_name: string;
+  email: string;
+  username?: string;
   is_admin: boolean;
   is_tutor: boolean;
   profile_photo?: string;
@@ -179,6 +181,7 @@ interface IAppContext {
   verifyODCertificate: (id: string, isApproved: boolean) => Promise<void>;
   handleOverdueCertificates: () => Promise<void>;
   clearAllRequests: () => Promise<void>;
+  refreshData: () => Promise<void>;
 }
 
 const AppContext = createContext<IAppContext | undefined>(undefined);
@@ -197,6 +200,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   
   const [currentUser, setCurrentUser] = useState<Student | null>(null);
   const [currentTutor, setCurrentTutor] = useState<Staff | null>(null);
+  const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(null);
+  const [lastFetchTime, setLastFetchTime] = useState<number>(0);
 
   const role = useMemo(() => {
     if (!profile) return null;
@@ -205,7 +210,88 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     return 'Student';
   }, [profile]);
 
-  // Fetch data based on user profile and role
+  // Automatic data polling function
+  const pollData = useCallback(async (userProfile: Profile, silent: boolean = true) => {
+    try {
+      const currentRole = userProfile.is_admin ? 'Admin' : userProfile.is_tutor ? 'Tutor' : 'Student';
+      const now = Date.now();
+      
+      // Rate limiting: don't fetch more than once every 5 seconds
+      if (now - lastFetchTime < 5000 && silent) {
+        return;
+      }
+      
+      setLastFetchTime(now);
+
+      if (currentRole === 'Admin') {
+        // Get all students, staff, leave requests, and OD requests
+        const [studentsResponse, staffResponse, leaveResponse, odResponse] = await Promise.all([
+          apiClient.get('/students'),
+          apiClient.get('/staff'),
+          apiClient.get('/leave-requests'),
+          apiClient.get('/od-requests')
+        ]);
+
+        const adminRecord = staffResponse.data.find((staff: Staff) => staff.id === userProfile.id);
+        if (adminRecord) setCurrentTutor(adminRecord);
+        
+        setStudents(studentsResponse.data || []);
+        setStaff(staffResponse.data || []);
+        setLeaveRequests(leaveResponse.data || []);
+        setODRequests(odResponse.data || []);
+
+      } else if (currentRole === 'Tutor') {
+        // Get staff, students, and requests for tutor's students
+        const [studentsResponse, staffResponse, leaveResponse, odResponse] = await Promise.all([
+          apiClient.get('/students'),
+          apiClient.get('/staff'),
+          apiClient.get('/leave-requests'),
+          apiClient.get('/od-requests')
+        ]);
+
+        const tutorRecord = staffResponse.data.find((staff: Staff) => staff.id === userProfile.id);
+        if (tutorRecord) {
+          setCurrentTutor(tutorRecord);
+          
+          const tutorStudents = studentsResponse.data.filter((student: Student) => student.tutor_id === tutorRecord.id);
+          const studentIds = tutorStudents.map((s: Student) => s.id);
+          
+          setStudents(tutorStudents || []);
+          setLeaveRequests(leaveResponse.data.filter((req: LeaveRequest) => studentIds.includes(req.student_id)) || []);
+          setODRequests(odResponse.data.filter((req: ODRequest) => studentIds.includes(req.student_id)) || []);
+        }
+
+      } else if (currentRole === 'Student') {
+        // Get student data and their requests
+        const [studentsResponse, staffResponse, leaveResponse, odResponse] = await Promise.all([
+          apiClient.get('/students'),
+          apiClient.get('/staff'),
+          apiClient.get('/leave-requests'),
+          apiClient.get('/od-requests')
+        ]);
+
+        const studentRecord = studentsResponse.data.find((student: Student) => student.id === userProfile.id);
+        if (studentRecord) {
+          setCurrentUser(studentRecord);
+          
+          if (studentRecord.tutor_id) {
+            const tutorRecord = staffResponse.data.find((staff: Staff) => staff.id === studentRecord.tutor_id);
+            if (tutorRecord) setStaff([tutorRecord]);
+          }
+          
+          setLeaveRequests(leaveResponse.data.filter((req: LeaveRequest) => req.student_id === userProfile.id) || []);
+          setODRequests(odResponse.data.filter((req: ODRequest) => req.student_id === userProfile.id) || []);
+        }
+      }
+    } catch (error: any) {
+      if (!silent) {
+        showError(`Failed to refresh data: ${error.response?.data?.error || error.message}`);
+      }
+      console.error('Polling error:', error);
+    }
+  }, [lastFetchTime]);
+
+  // Fetch data based on user profile and role (initial load)
   const fetchDataForProfile = useCallback(async (userProfile: Profile) => {
     const currentRole = userProfile.is_admin ? 'Admin' : userProfile.is_tutor ? 'Tutor' : 'Student';
 
@@ -267,17 +353,37 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         setODRequests(tutorODRequests || []);
 
       } else if (currentRole === 'Student') {
+        console.log('Fetching student data for profile:', userProfile);
+        
         // Get student record
         const studentsResponse = await apiClient.get('/students');
+        console.log('Students API response:', studentsResponse.data);
+        
         const studentRecord = studentsResponse.data.find((student: Student) => student.id === userProfile.id);
-        if (!studentRecord) throw new Error("Student record not found");
+        console.log('Found student record:', studentRecord);
+        console.log('Looking for student with ID:', userProfile.id);
+        console.log('Available student IDs:', studentsResponse.data.map((s: Student) => s.id));
+        
+        if (!studentRecord) {
+          const error = `Student record not found for ID: ${userProfile.id}`;
+          console.error(error);
+          showError(error);
+          throw new Error(error);
+        }
+        
+        console.log('Setting currentUser:', studentRecord);
         setCurrentUser(studentRecord);
 
         // Get tutor information
         if (studentRecord.tutor_id) {
           const staffResponse = await apiClient.get('/staff');
           const tutorRecord = staffResponse.data.find((staff: Staff) => staff.id === studentRecord.tutor_id);
-          if (tutorRecord) setStaff([tutorRecord]);
+          if (tutorRecord) {
+            console.log('Found tutor record:', tutorRecord);
+            setStaff([tutorRecord]);
+          } else {
+            console.warn('Tutor not found for ID:', studentRecord.tutor_id);
+          }
         }
 
         // Get student's leave requests
@@ -285,6 +391,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         const studentLeaveRequests = leaveResponse.data.filter((req: LeaveRequest) => 
           req.student_id === userProfile.id
         );
+        console.log('Student leave requests:', studentLeaveRequests);
         setLeaveRequests(studentLeaveRequests || []);
 
         // Get student's OD requests
@@ -292,12 +399,45 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         const studentODRequests = odResponse.data.filter((req: ODRequest) => 
           req.student_id === userProfile.id
         );
+        console.log('Student OD requests:', studentODRequests);
         setODRequests(studentODRequests || []);
+        
+        console.log('Student data fetch completed successfully');
       }
     } catch (error: any) {
       showError(`Failed to fetch data: ${error.response?.data?.error || error.message}`);
     }
   }, []);
+
+  // Setup polling effect
+  useEffect(() => {
+    if (profile && session) {
+      // Start polling every 10 seconds for real-time updates
+      const interval = setInterval(() => {
+        pollData(profile, true); // Silent polling
+      }, 10000); // 10 seconds
+      
+      setPollingInterval(interval);
+      
+      // Also poll when the user focuses on the window
+      const handleFocus = () => {
+        pollData(profile, true);
+      };
+      
+      window.addEventListener('focus', handleFocus);
+      
+      return () => {
+        clearInterval(interval);
+        window.removeEventListener('focus', handleFocus);
+      };
+    } else {
+      // Clear polling when logged out
+      if (pollingInterval) {
+        clearInterval(pollingInterval);
+        setPollingInterval(null);
+      }
+    }
+  }, [profile, session, pollData, pollingInterval]);
 
   useEffect(() => {
     const initializeSessionAndData = async () => {
@@ -342,6 +482,23 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     initializeSessionAndData();
   }, [fetchDataForProfile]);
 
+  // Utility function to upload profile photo
+  const uploadProfilePhoto = async (file: File): Promise<string> => {
+    const formData = new FormData();
+    formData.append('profilePhoto', file);
+    
+    try {
+      const response = await apiClient.post('/upload/profile-photo', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      return response.data.filePath;
+    } catch (error: any) {
+      throw new Error(error.response?.data?.error || 'Failed to upload photo');
+    }
+  };
+
   const handleLogin = async (identifier: string, password: string) => {
     try {
       const response = await apiClient.post('/auth/login', { identifier, password });
@@ -363,10 +520,13 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         await fetchDataForProfile(userProfile);
 
         return { error: null };
+      } else {
+        return { error: { message: "Login failed: No token received" } };
       }
     } catch (error: any) {
       console.error('Login failed:', error);
-      return { error: { message: error.response?.data?.error?.message || "Invalid username or password." } };
+      const errorMessage = error.response?.data?.error || error.response?.data?.message || error.message || "Invalid username or password.";
+      return { error: { message: errorMessage } };
     }
   };
   
@@ -428,46 +588,139 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const bulkAddStudents = async (newStudents: BulkStudent[]) => {
+    console.log('Starting bulk add process with students:', newStudents);
+    console.log('Current staff list:', staff);
+    console.log('Current students list:', students);
+    
     setLoadingInitial(true);
     let successCount = 0;
-    const errors = [];
+    const errors: string[] = [];
+    const detailedErrors: any[] = [];
 
-    for (const student of newStudents) {
-      const tutor = staff.find(s => s.name === student.tutorName);
-      if (!tutor) {
-        errors.push(`Row for ${student.name}: Tutor '${student.tutorName}' not found.`);
-        continue;
+    try {
+      // Validate input
+      if (!newStudents || newStudents.length === 0) {
+        throw new Error('No students provided for bulk add');
       }
 
-      try {
-        const payload = {
-          email: `${student.username}@college.portal`,
-          password: student.password,
-          name: student.name,
-          registerNumber: student.registerNumber,
-          tutorId: tutor.id,
-          year: student.year,
-          username: student.username,
-          profilePhoto: student.profilePhoto,
-        };
-
-        await apiClient.post('/students', payload);
-        successCount++;
-      } catch (error: any) {
-        const errorMessage = error.response?.data?.error || error.message;
-        errors.push(`Row for ${student.name}: ${errorMessage}`);
+      if (!staff || staff.length === 0) {
+        throw new Error('No staff members found. Please ensure staff data is loaded.');
       }
-    }
 
-    if (errors.length > 0) {
-      showError(`Bulk add finished with ${errors.length} errors. ${successCount} students added.`);
-      console.error("Bulk add errors:", errors);
-    } else {
-      showSuccess(`${successCount} students added successfully.`);
+      console.log('Processing', newStudents.length, 'students...');
+
+      for (let i = 0; i < newStudents.length; i++) {
+        const student = newStudents[i];
+        console.log(`Processing student ${i + 1}/${newStudents.length}:`, student);
+
+        try {
+          // Validate required fields
+          if (!student.name || !student.username || !student.password || !student.registerNumber || !student.tutorName || !student.year) {
+            const missingFields = [];
+            if (!student.name) missingFields.push('name');
+            if (!student.username) missingFields.push('username');
+            if (!student.password) missingFields.push('password');
+            if (!student.registerNumber) missingFields.push('registerNumber');
+            if (!student.tutorName) missingFields.push('tutorName');
+            if (!student.year) missingFields.push('year');
+            
+            const error = `Student ${student.name || 'Unknown'}: Missing required fields: ${missingFields.join(', ')}`;
+            errors.push(error);
+            detailedErrors.push({ student, error: 'Missing fields', details: missingFields });
+            continue;
+          }
+
+          // Find tutor
+          const tutor = staff.find(s => s.name === student.tutorName);
+          if (!tutor) {
+            const availableTutors = staff.filter(s => s.is_tutor).map(s => s.name);
+            const error = `Student ${student.name}: Tutor '${student.tutorName}' not found. Available tutors: ${availableTutors.join(', ')}`;
+            errors.push(error);
+            detailedErrors.push({ student, error: 'Tutor not found', details: { requestedTutor: student.tutorName, availableTutors } });
+            continue;
+          }
+
+          // Check for duplicate username/register number
+          const existingByUsername = students.find(existing => existing.username === student.username);
+          const existingByRegNum = students.find(existing => existing.register_number === student.registerNumber);
+          
+          if (existingByUsername) {
+            const error = `Student ${student.name}: Username '${student.username}' already exists (used by ${existingByUsername.name})`;
+            errors.push(error);
+            detailedErrors.push({ student, error: 'Duplicate username', details: { existingStudent: existingByUsername } });
+            continue;
+          }
+          
+          if (existingByRegNum) {
+            const error = `Student ${student.name}: Register Number '${student.registerNumber}' already exists (used by ${existingByRegNum.name})`;
+            errors.push(error);
+            detailedErrors.push({ student, error: 'Duplicate register number', details: { existingStudent: existingByRegNum } });
+            continue;
+          }
+
+          // Prepare payload
+          const payload = {
+            email: `${student.username}@college.portal`,
+            password: student.password,
+            name: student.name,
+            registerNumber: student.registerNumber,
+            tutorId: tutor.id,
+            year: student.year,
+            username: student.username,
+            profilePhoto: student.profilePhoto || '',
+          };
+
+          console.log('Sending payload for student', student.name, ':', payload);
+
+          // Make API call
+          const response = await apiClient.post('/students', payload);
+          console.log('Successfully created student', student.name, ':', response.data);
+          successCount++;
+          
+        } catch (studentError: any) {
+          console.error(`Error processing student ${student.name}:`, studentError);
+          const errorMessage = studentError.response?.data?.error || studentError.message || 'Unknown error';
+          errors.push(`Student ${student.name}: ${errorMessage}`);
+          detailedErrors.push({ 
+            student, 
+            error: 'API call failed', 
+            details: { 
+              message: errorMessage, 
+              status: studentError.response?.status,
+              data: studentError.response?.data 
+            } 
+          });
+        }
+      }
+
+      // Final reporting
+      console.log('Bulk add completed. Success:', successCount, 'Errors:', errors.length);
+      console.log('Detailed errors:', detailedErrors);
+
+      if (errors.length > 0) {
+        const errorSummary = `Bulk add completed with ${errors.length} errors and ${successCount} successful additions.`;
+        showError(errorSummary);
+        console.error('Bulk add error details:', {
+          summary: errorSummary,
+          errors: errors,
+          detailedErrors: detailedErrors
+        });
+      } else {
+        showSuccess(`Successfully added all ${successCount} students!`);
+      }
+      
+      // Refresh data
+      if (profile) {
+        console.log('Refreshing data after bulk add...');
+        await fetchDataForProfile(profile);
+      }
+      
+    } catch (generalError: any) {
+      console.error('General error in bulk add process:', generalError);
+      showError(`Bulk add failed: ${generalError.message || 'Unknown error'}`);
+    } finally {
+      setLoadingInitial(false);
     }
-    
-    if (profile) await fetchDataForProfile(profile);
-    setLoadingInitial(false);
   };
 
   const addStaff = async (staffMember: NewStaffData) => {
@@ -559,14 +812,38 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const requestLeaveCancellation = async (id: string, reason: string) => {
+  const requestLeaveCancellation = async (id: string, reason: string, cancelData?: any) => {
     try {
-      const response = await apiClient.put(`/leave-requests/${id}/status`, { 
+      const data: any = {
         status: 'Cancellation Pending', 
         cancelReason: reason 
-      });
+      };
+
+      // If partial cancellation data is provided, add it to the request
+      if (cancelData?.isPartial) {
+        data.startDate = cancelData.startDate;
+        data.endDate = cancelData.endDate;
+        data.isPartial = true;
+      }
+
+      const response = await apiClient.put(`/leave-requests/${id}/status`, data);
       showSuccess('Cancellation request sent!');
-      setLeaveRequests(prev => prev.map(req => req.id === id ? response.data : req));
+
+      if (cancelData?.isPartial) {
+        const partialDays = differenceInDays(new Date(cancelData.endDate), new Date(cancelData.startDate)) + 1;
+
+        setLeaveRequests(prev => prev.map(req => {
+          if (req.id === id) {
+            return { 
+              ...response.data, 
+              total_days: req.total_days - partialDays
+            };
+          }
+          return req;
+        }));
+      } else {
+        setLeaveRequests(prev => prev.map(req => req.id === id ? response.data : req));
+      }
     } catch (error: any) {
       showError(`Failed to request cancellation: ${error.response?.data?.error || error.message}`);
     }
@@ -716,6 +993,14 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  // Manual refresh function for user-triggered updates
+  const refreshData = useCallback(async () => {
+    if (profile) {
+      await pollData(profile, false); // Non-silent refresh
+      showSuccess('Data refreshed successfully!');
+    }
+  }, [profile, pollData]);
+
   const value = {
     session, user, profile, role, loading: loadingInitial,
     students, staff, leaveRequests, odRequests, currentUser, currentTutor,
@@ -725,7 +1010,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     addLeaveRequest, updateLeaveRequestStatus, requestLeaveCancellation, approveRejectLeaveCancellation,
     addODRequest, updateODRequestStatus, requestODCancellation, approveRejectODCancellation,
     getTutors, uploadODCertificate, verifyODCertificate, handleOverdueCertificates,
-    clearAllRequests,
+    clearAllRequests, refreshData,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

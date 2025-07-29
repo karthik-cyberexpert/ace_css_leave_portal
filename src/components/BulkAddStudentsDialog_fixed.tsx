@@ -2,7 +2,6 @@ import React, { useState, useCallback, useEffect } from 'react';
 import * as z from 'zod';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
-import JSZip from 'jszip';
 
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog';
@@ -10,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { ScrollArea } from './ui/scroll-area';
 import { Alert, AlertDescription, AlertTitle } from './ui/alert';
-import { FileWarning, CheckCircle, Upload } from 'lucide-react';
+import { FileWarning, CheckCircle } from 'lucide-react';
 import { showError, showSuccess } from '@/utils/toast';
 import { DownloadFormatDialog } from './DownloadFormatDialog';
 
@@ -30,14 +29,13 @@ export type BulkStudent = z.infer<typeof bulkStudentSchema>;
 interface BulkAddStudentsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onImport: (newStudents: BulkStudent[]) => Promise<void>;
+  onImport: (newStudents: BulkStudent[]) => void;
   existingStudents: { registerNumber: string; username: string }[];
 }
 
 export const BulkAddStudentsDialog: React.FC<BulkAddStudentsDialogProps> = ({ open, onOpenChange, onImport, existingStudents }) => {
   const [file, setFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [isImporting, setIsImporting] = useState(false);
   const [validStudents, setValidStudents] = useState<BulkStudent[]>([]);
   const [errors, setErrors] = useState<string[]>([]);
   const [isDownloadDialogOpen, setIsDownloadDialogOpen] = useState(false);
@@ -66,10 +64,13 @@ export const BulkAddStudentsDialog: React.FC<BulkAddStudentsDialogProps> = ({ op
     const selectedFile = event.target.files?.[0];
     if (selectedFile) {
       const fileExtension = selectedFile.name.split('.').pop()?.toLowerCase();
+      console.log('File selected:', selectedFile.name, 'Type:', fileExtension);
       if (fileExtension && ['csv', 'xlsx', 'json'].includes(fileExtension)) {
         setFile(selectedFile);
+        setProcessingStatus(`File "${selectedFile.name}" selected successfully.`);
       } else {
         showError("Invalid File Type. Please upload a CSV, XLSX, or JSON file.");
+        setErrors(["Invalid file type. Please select a CSV, XLSX, or JSON file."]);
       }
     }
   };
@@ -239,28 +240,11 @@ export const BulkAddStudentsDialog: React.FC<BulkAddStudentsDialogProps> = ({ op
     }
   }, [file, processData]);
 
-  const handleImportClick = async () => {
-    console.log('Starting import for students:', validStudents);
-    setIsImporting(true);
-    setProcessingStatus(`Importing ${validStudents.length} students...`);
-    
-    try {
-      console.log('Calling onImport function with data:', validStudents);
-      await onImport(validStudents);
-      console.log('Import completed successfully');
-      setProcessingStatus(`Successfully imported ${validStudents.length} students!`);
-      
-      // Give user time to see the success message
-      setTimeout(() => {
-        onOpenChange(false);
-      }, 2000);
-    } catch (error) {
-      console.error('Import failed with error:', error);
-      setProcessingStatus('');
-      showError(`Failed to import students: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    } finally {
-      setIsImporting(false);
-    }
+  const handleImportClick = () => {
+    console.log('Importing students:', validStudents);
+    onImport(validStudents);
+    showSuccess(`${validStudents.length} students will be added.`);
+    onOpenChange(false);
   };
 
   const handleDownloadFormat = (format: 'xlsx' | 'csv' | 'json') => {
@@ -312,19 +296,27 @@ export const BulkAddStudentsDialog: React.FC<BulkAddStudentsDialogProps> = ({ op
         <DialogContent className="max-w-4xl">
           <DialogHeader>
             <DialogTitle>Bulk Add Students</DialogTitle>
-          <DialogDescription>
-            Upload a CSV, XLSX, JSON, or ZIP file with student data. For ZIP files, include a data file (CSV/XLSX/JSON) and optional profile photos. The `profilePhoto` column can contain image URLs or filenames matching photos in the ZIP.
-            <Button variant="link" className="p-0 h-auto ml-1 text-blue-600" onClick={() => setIsDownloadDialogOpen(true)}>
-              Download a template.
-            </Button>
-          </DialogDescription>
+            <DialogDescription>
+              Upload a file with student data. The `profilePhoto` column is optional and must contain a valid image URL.
+              <Button variant="link" className="p-0 h-auto ml-1 text-blue-600" onClick={() => setIsDownloadDialogOpen(true)}>
+                Download a template.
+              </Button>
+            </DialogDescription>
           </DialogHeader>
+          
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 py-4 items-center">
-            <Input id="bulk-student-upload" type="file" accept=".csv, .xlsx, .json" onChange={handleFileChange} className="md:col-span-2" />
-            <Button onClick={handleProcessFile} disabled={!file || isProcessing}>
+            <Input 
+              id="bulk-student-upload" 
+              type="file" 
+              accept=".csv, .xlsx, .json" 
+              onChange={handleFileChange} 
+              className="md:col-span-2" 
+            />
+            <Button onClick={handleProcessFile} disabled={isProcessing}>
               {isProcessing ? 'Processing...' : 'Process File'}
             </Button>
           </div>
+          
           {file && (
             <div className="text-sm text-gray-600 mb-4">
               Selected file: <span className="font-medium">{file.name}</span> ({Math.round(file.size / 1024)} KB)
@@ -343,7 +335,7 @@ export const BulkAddStudentsDialog: React.FC<BulkAddStudentsDialogProps> = ({ op
               <FileWarning className="h-4 w-4" />
               <AlertTitle>Validation Errors ({errors.length})</AlertTitle>
               <AlertDescription>
-                <ScrollArea className="h-24">
+                <ScrollArea className="h-32">
                   <ul className="list-disc pl-5 text-xs">
                     {errors.map((error, i) => <li key={i}>{error}</li>)}
                   </ul>
@@ -381,13 +373,14 @@ export const BulkAddStudentsDialog: React.FC<BulkAddStudentsDialogProps> = ({ op
           )}
 
           <DialogFooter>
-            <DialogClose asChild><Button variant="outline" disabled={isImporting}>Cancel</Button></DialogClose>
-            <Button onClick={handleImportClick} disabled={validStudents.length === 0 || isProcessing || isImporting}>
-              {isImporting ? 'Importing...' : `Import ${validStudents.length} Students`}
+            <DialogClose asChild><Button variant="outline">Cancel</Button></DialogClose>
+            <Button onClick={handleImportClick} disabled={validStudents.length === 0 || isProcessing}>
+              Import {validStudents.length} Students
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      
       <DownloadFormatDialog 
         open={isDownloadDialogOpen}
         onOpenChange={setIsDownloadDialogOpen}

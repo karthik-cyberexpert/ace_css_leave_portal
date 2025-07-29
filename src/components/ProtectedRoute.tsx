@@ -36,19 +36,28 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles 
 
   if (allowedRoles && !allowedRoles.includes(role)) {
     // Redirect to the appropriate dashboard if the role is mismatched
-    switch (role) {
-      case 'Student':
-        navigate('/dashboard');
-        break;
-      case 'Tutor':
-        navigate('/tutor-dashboard');
-        break;
-      case 'Admin':
-        navigate('/admin-dashboard');
-        break;
-      default:
-        navigate('/login');
-    }
+    React.useEffect(() => {
+      switch (role) {
+        case 'Student':
+          if (location.pathname !== '/dashboard') {
+            navigate('/dashboard', { replace: true });
+          }
+          break;
+        case 'Tutor':
+          if (location.pathname !== '/tutor-dashboard') {
+            navigate('/tutor-dashboard', { replace: true });
+          }
+          break;
+        case 'Admin':
+          if (location.pathname !== '/admin-dashboard') {
+            navigate('/admin-dashboard', { replace: true });
+          }
+          break;
+        default:
+          navigate('/login');
+      }
+    }, [role, navigate, location.pathname]);
+    
     return null; // Return null while redirecting
   }
 

@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAppContext, LeaveRequest, ODRequest, RequestStatus, CertificateStatus } from '@/context/AppContext';
-import { format, parseISO } from 'date-fns'; // Import format and parseISO for displaying dates
+import { format, parseISO, differenceInDays } from 'date-fns'; // Import format, parseISO, and differenceInDays for displaying dates
 
 type CombinedRequest = (LeaveRequest & { type: 'Leave' }) | (ODRequest & { type: 'OD' });
 
@@ -19,8 +19,15 @@ const RequestStatusPage = () => {
   const [selectedRequestForReview, setSelectedRequestForReview] = useState<CombinedRequest | null>(null);
   const [cancelReason, setCancelReason] = useState('');
   const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [cancelStartDate, setCancelStartDate] = useState('');
+  const [cancelEndDate, setCancelEndDate] = useState('');
+  const [isPartialCancellation, setIsPartialCancellation] = useState(false);
 
   const allRequests = useMemo(() => {
+    if (!currentUser?.id || !Array.isArray(leaveRequests) || !Array.isArray(odRequests)) {
+      return [];
+    }
+    
     const studentLeaveRequests = leaveRequests.filter(r => r.student_id === currentUser.id);
     const studentODRequests = odRequests.filter(r => r.student_id === currentUser.id);
 
@@ -29,17 +36,33 @@ const RequestStatusPage = () => {
       ...studentODRequests.map(r => ({ ...r, type: 'OD' as const, subject: r.purpose })),
     ];
     return combined.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()); // Sort by created_at for latest first
-  }, [leaveRequests, odRequests, currentUser.id]);
+  }, [leaveRequests, odRequests, currentUser?.id]);
 
   const handleRequestCancellation = async () => {
     if (!selectedRequestForReview || !cancelReason.trim()) return;
+    
+    let cancellationData = { reason: cancelReason };
+    
+    // For partial leave cancellations, include date range
+    if (selectedRequestForReview.type === 'Leave' && isPartialCancellation && cancelStartDate && cancelEndDate) {
+      cancellationData = {
+        ...cancellationData,
+        startDate: cancelStartDate,
+        endDate: cancelEndDate,
+        isPartial: true
+      };
+    }
+    
     if (selectedRequestForReview.type === 'Leave') {
-      await requestLeaveCancellation(selectedRequestForReview.id, cancelReason);
+      await requestLeaveCancellation(selectedRequestForReview.id, cancelReason, cancellationData);
     } else {
       await requestODCancellation(selectedRequestForReview.id, cancelReason);
     }
     setSelectedRequestForReview(null);
     setCancelReason('');
+    setCancelStartDate('');
+    setCancelEndDate('');
+    setIsPartialCancellation(false);
   };
 
   const handleRetryRequest = async () => {
@@ -75,7 +98,8 @@ const RequestStatusPage = () => {
       'Rejected': 'bg-red-100 text-red-800',
       'Cancelled': 'bg-gray-100 text-gray-800',
       'Forwarded': 'bg-blue-100 text-blue-800',
-      'Cancellation Pending': 'bg-purple-100 text-purple-800', // New color for cancellation pending
+      'Cancellation Pending': 'bg-purple-100 text-purple-800',
+      'Retried': 'bg-orange-100 text-orange-800',
       'Pending Upload': 'bg-orange-100 text-orange-800',
       'Pending Verification': 'bg-purple-100 text-purple-800',
       'Overdue': 'bg-red-200 text-red-900',
@@ -135,6 +159,9 @@ const RequestStatusPage = () => {
           setSelectedRequestForReview(null);
           setCancelReason('');
           setUploadFile(null);
+          setCancelStartDate('');
+          setCancelEndDate('');
+          setIsPartialCancellation(false);
         }
       }}>
         <DialogContent className="sm:max-w-[500px]">
@@ -182,9 +209,71 @@ const RequestStatusPage = () => {
 
                 {/* Conditional input for cancellation reason or certificate upload */}
                 {canRequestCancellation && selectedRequestForReview.status !== 'Cancellation Pending' && (
-                  <div className="space-y-2">
-                    <Label htmlFor="cancel-reason">Reason for Cancellation</Label>
-                    <Textarea id="cancel-reason" placeholder="Type your reason here..." value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} rows={3} />
+                  <div className="space-y-4">
+                    {selectedRequestForReview.type === 'Leave' && selectedRequestForReview.status === 'Approved' && (
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          id="partial-cancellation"
+                          checked={isPartialCancellation}
+                          onChange={(e) => setIsPartialCancellation(e.target.checked)}
+                          className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                        />
+                        <Label htmlFor="partial-cancellation" className="text-sm font-medium">
+                          Request partial cancellation (specify date range)
+                        </Label>
+                      </div>
+                    )}
+                    
+                    {isPartialCancellation && selectedRequestForReview.type === 'Leave' && (
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="cancel-start-date">Cancel From Date</Label>
+                          <Input
+                            id="cancel-start-date"
+                            type="date"
+                            value={cancelStartDate}
+                            onChange={(e) => setCancelStartDate(e.target.value)}
+                            min={selectedRequestForReview.start_date}
+                            max={selectedRequestForReview.end_date}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="cancel-end-date">Cancel To Date</Label>
+                          <Input
+                            id="cancel-end-date"
+                            type="date"
+                            value={cancelEndDate}
+                            onChange={(e) => setCancelEndDate(e.target.value)}
+                            min={cancelStartDate || selectedRequestForReview.start_date}
+                            max={selectedRequestForReview.end_date}
+                          />
+                        </div>
+                      </div>
+                    )}
+                    
+                    {isPartialCancellation && cancelStartDate && cancelEndDate && (
+                      <div className="p-3 bg-blue-50 rounded-lg">
+                        <p className="text-sm text-blue-800">
+                          <strong>Days to cancel:</strong> {differenceInDays(new Date(cancelEndDate), new Date(cancelStartDate)) + 1} days
+                          <br />
+                          <strong>From:</strong> {format(new Date(cancelStartDate), 'MMMM d, yyyy')}
+                          <br />
+                          <strong>To:</strong> {format(new Date(cancelEndDate), 'MMMM d, yyyy')}
+                        </p>
+                      </div>
+                    )}
+                    
+                    <div className="space-y-2">
+                      <Label htmlFor="cancel-reason">Reason for Cancellation</Label>
+                      <Textarea 
+                        id="cancel-reason" 
+                        placeholder="Type your reason here..." 
+                        value={cancelReason} 
+                        onChange={(e) => setCancelReason(e.target.value)} 
+                        rows={3} 
+                      />
+                    </div>
                   </div>
                 )}
                 {canUploadCertificate && (
@@ -201,7 +290,13 @@ const RequestStatusPage = () => {
                 {canUploadCertificate ? (
                   <Button onClick={handleUploadSubmit} disabled={!uploadFile}>Upload Certificate</Button>
                 ) : canRequestCancellation && selectedRequestForReview.status !== 'Cancellation Pending' ? (
-                  <Button variant="destructive" onClick={handleRequestCancellation} disabled={!cancelReason.trim()}>Request Cancellation</Button>
+                  <Button 
+                    variant="destructive" 
+                    onClick={handleRequestCancellation} 
+                    disabled={!cancelReason.trim() || (isPartialCancellation && (!cancelStartDate || !cancelEndDate))}
+                  >
+                    Request Cancellation
+                  </Button>
                 ) : canRetryRequest && (
                   <Button onClick={handleRetryRequest}>Retry Request</Button>
                 )}

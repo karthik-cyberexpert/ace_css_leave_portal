@@ -15,7 +15,7 @@ const LatestLeaveDetails = () => {
   
   const latestLeaves = leaveRequests
     .filter(r => r.student_id === currentUser.id)
-    .sort((a, b) => new Date(b.start_date).getTime() - new Date(a.start_date).getTime())
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
     .slice(0, 3);
 
   return (
@@ -36,7 +36,13 @@ const LatestLeaveDetails = () => {
             <TableBody>
               {latestLeaves.map((leave) => (
                 <TableRow key={leave.id} className="transition-colors hover:bg-muted/50">
-                  <TableCell className="font-medium">{leave.start_date}</TableCell>
+                  <TableCell className="font-medium">
+                    {new Date(leave.created_at).toLocaleDateString('en-US', {
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric'
+                    })}
+                  </TableCell>
                   <TableCell>
                     <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
                       leave.status === 'Approved' ? 'bg-green-100 text-green-800' :

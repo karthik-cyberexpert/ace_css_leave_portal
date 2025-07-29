@@ -34,7 +34,7 @@ export const Notifications = ({ role }: { role: 'student' | 'tutor' | 'admin' })
   const { leaveRequests, odRequests, currentUser, currentTutor, students } = useAppContext();
 
   useEffect(() => {
-    if (!leaveRequests || !odRequests) return;
+    if (!Array.isArray(leaveRequests) || !Array.isArray(odRequests)) return;
 
     const generatedNotifications: Notification[] = [];
     const now = new Date();
@@ -65,7 +65,7 @@ export const Notifications = ({ role }: { role: 'student' | 'tutor' | 'admin' })
           });
         }
       });
-    } else if (role === 'tutor' && currentTutor) {
+    } else if (role === 'tutor' && currentTutor && Array.isArray(students)) {
       const myStudentIds = new Set(students.filter(s => s.tutor_id === currentTutor.id).map(s => s.id));
       
       leaveRequests.filter(r => myStudentIds.has(r.student_id)).forEach(req => {
@@ -91,23 +91,27 @@ export const Notifications = ({ role }: { role: 'student' | 'tutor' | 'admin' })
         }
       });
     } else if (role === 'admin') {
-      leaveRequests.filter(r => r.status === 'Forwarded').forEach(req => {
+      leaveRequests.filter(r => r.status === 'Forwarded' || r.status === 'Pending').forEach(req => {
         if (differenceInDays(now, parseISO(req.created_at)) <= 7) {
           generatedNotifications.push({
             id: req.id,
-            title: `Forwarded Leave Request`,
-            description: `Request from ${req.student_name} forwarded by ${req.tutor_name}.`,
+            title: req.status === 'Forwarded' ? `Forwarded Leave Request` : `New Leave Request`,
+            description: req.status === 'Forwarded' ? 
+              `Request from ${req.student_name} forwarded by ${req.tutor_name}.` :
+              `New request from ${req.student_name} for "${req.subject}".`,
             read: false,
             href: '/admin-leave-requests',
           });
         }
       });
-      odRequests.filter(r => r.status === 'Forwarded').forEach(req => {
+      odRequests.filter(r => r.status === 'Forwarded' || r.status === 'Pending').forEach(req => {
         if (differenceInDays(now, parseISO(req.created_at)) <= 7) {
           generatedNotifications.push({
             id: req.id,
-            title: `Forwarded OD Request`,
-            description: `Request from ${req.student_name} forwarded by ${req.tutor_name}.`,
+            title: req.status === 'Forwarded' ? `Forwarded OD Request` : `New OD Request`,
+            description: req.status === 'Forwarded' ? 
+              `Request from ${req.student_name} forwarded by ${req.tutor_name}.` :
+              `New request from ${req.student_name} for "${req.purpose}".`,
             read: false,
             href: '/admin-od-requests',
           });

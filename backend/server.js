@@ -6,11 +6,57 @@ import jwt from 'jsonwebtoken';
 import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
 import cron from 'node-cron';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
 import { dbConfig, jwtSecret } from './config/database.js';
+
+// ES module path resolution
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Create uploads directory if it doesn't exist
+const uploadsDir = path.join(__dirname, 'uploads', 'profile-photos');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+// Configure multer for file uploads
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadsDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const fileExtension = path.extname(file.originalname);
+    cb(null, file.fieldname + '-' + uniqueSuffix + fileExtension);
+  }
+});
+
+const fileFilter = (req, file, cb) => {
+  // Accept only image files
+  if (file.mimetype.startsWith('image/')) {
+    cb(null, true);
+  } else {
+    cb(new Error('Only image files are allowed!'), false);
+  }
+};
+
+const upload = multer({ 
+  storage: storage,
+  fileFilter: fileFilter,
+  limits: {
+    fileSize: 5 * 1024 * 1024 // 5MB limit
+  }
+});
 
 const app = express();
 app.use(express.json());
 app.use(cors());
+
+// Serve uploaded files statically
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 const port = 3002;
 
@@ -181,6 +227,20 @@ app.get('/staff', authenticateToken, async (req, res) => {
   }
 });
 
+// Upload profile photo
+app.post('/upload/profile-photo', authenticateToken, upload.single('profilePhoto'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+    const filePath = `/uploads/profile-photos/${req.file.filename}`;
+    res.json({ message: 'File uploaded successfully', filePath });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to upload photo' });
+  }
+});
+
 // Create a new student
 app.post('/students', authenticateToken, async (req, res) => {
   try {
@@ -332,16 +392,88 @@ app.post('/leave-requests', authenticateToken, async (req, res) => {
   }
 });
 
+// Helper function to calculate days between dates
+const calculateDaysBetween = (startDate, endDate) => {
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  const timeDifference = end.getTime() - start.getTime();
+  return Math.ceil(timeDifference / (1000 * 3600 * 24)) + 1;
+};
+
 // Update leave request status
 app.put('/leave-requests/:id/status', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
-    const { status, cancelReason } = req.body;
+    const { status, cancelReason, startDate, endDate, isPartial } = req.body;
     
-    await query(
-      'UPDATE leave_requests SET status = ?, cancel_reason = ? WHERE id = ?',
-      [status, cancelReason || null, id]
-    );
+    // Get the original request to check current status and student info
+    const [originalRequest] = await query('SELECT * FROM leave_requests WHERE id = ?', [id]);
+    if (!originalRequest) {
+      return res.status(404).json({ error: 'Leave request not found' });
+    }
+    
+    // Get current student data
+    const [student] = await query('SELECT * FROM students WHERE id = ?', [originalRequest.student_id]);
+    if (!student) {
+      return res.status(404).json({ error: 'Student not found' });
+    }
+    
+    let updateData = {
+      status: status,
+      cancel_reason: cancelReason || null
+    };
+    
+    let newLeaveTaken = student.leave_taken;
+    
+    // Handle partial cancellation for approved leave requests
+    if (isPartial && originalRequest.status === 'Approved' && status === 'Cancellation Pending') {
+      const partialDays = calculateDaysBetween(startDate, endDate);
+      
+      // Store partial cancellation data
+      updateData.partial_cancel_start = startDate;
+      updateData.partial_cancel_end = endDate;
+      updateData.partial_cancel_days = partialDays;
+      
+      // Subtract the partially cancelled days from leave taken
+      newLeaveTaken = Math.max(0, student.leave_taken - partialDays);
+      
+      // Update the total days of the request to reflect partial cancellation
+      updateData.total_days = originalRequest.total_days - partialDays;
+    }
+    
+    // Handle full approval - add leave days to student's count (only for leave requests, not OD)
+    else if (status === 'Approved' && originalRequest.status !== 'Approved') {
+      // This handles approval from Pending, Forwarded, or Retried status
+      newLeaveTaken = student.leave_taken + originalRequest.total_days;
+    }
+    
+    // Handle full cancellation of approved requests - subtract leave days
+    else if (status === 'Cancelled' && originalRequest.status === 'Approved') {
+      newLeaveTaken = Math.max(0, student.leave_taken - originalRequest.total_days);
+    }
+    
+    // Handle rejection after approval - subtract leave days
+    else if (status === 'Rejected' && originalRequest.status === 'Approved') {
+      newLeaveTaken = Math.max(0, student.leave_taken - originalRequest.total_days);
+    }
+    
+    // Handle rejection of retried requests - no leave days to subtract since they weren't approved
+    else if (status === 'Rejected' && originalRequest.status === 'Retried') {
+      // No change to leave_taken since retried requests weren't previously approved
+      newLeaveTaken = student.leave_taken;
+    }
+    
+    // Update the leave request
+    const setClause = Object.keys(updateData).map(key => `${key} = ?`).join(', ');
+    const values = Object.values(updateData);
+    values.push(id);
+    
+    await query(`UPDATE leave_requests SET ${setClause} WHERE id = ?`, values);
+    
+    // Update student's leave_taken count if it changed
+    if (newLeaveTaken !== student.leave_taken) {
+      await query('UPDATE students SET leave_taken = ? WHERE id = ?', [newLeaveTaken, originalRequest.student_id]);
+    }
     
     const [updatedRequest] = await query('SELECT * FROM leave_requests WHERE id = ?', [id]);
     res.json(updatedRequest);
@@ -390,7 +522,7 @@ app.put('/od-requests/:id/status', authenticateToken, async (req, res) => {
     const { id } = req.params;
     const { status, cancelReason } = req.body;
     
-    // Set upload deadline when approved
+    // Set upload deadline when approved (including from retried status)
     let updateQuery = 'UPDATE od_requests SET status = ?, cancel_reason = ?';
     let params = [status, cancelReason || null];
     
@@ -399,6 +531,16 @@ app.put('/od-requests/:id/status', authenticateToken, async (req, res) => {
       uploadDeadline.setDate(uploadDeadline.getDate() + 7);
       updateQuery += ', certificate_status = ?, upload_deadline = ?';
       params.push('Pending Upload', uploadDeadline);
+    }
+    
+    // Reset details for Retried requests
+    if (status === 'Retried') {
+      updateQuery += ', certificate_status = NULL, upload_deadline = NULL';
+    }
+    
+    // Handle rejection of retried requests - ensure clean status
+    if (status === 'Rejected') {
+      updateQuery += ', certificate_status = NULL, upload_deadline = NULL';
     }
     
     updateQuery += ' WHERE id = ?';

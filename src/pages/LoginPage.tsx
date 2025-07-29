@@ -20,7 +20,7 @@ type LoginFormValues = z.infer<typeof loginSchema>;
 
 const LoginPage = () => {
   const navigate = useNavigate();
-  const { handleLogin } = useAppContext();
+  const { handleLogin, profile, role } = useAppContext();
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -32,14 +32,37 @@ const LoginPage = () => {
   const onSubmit = async (data: LoginFormValues) => {
     setIsLoading(true);
     const { error } = await handleLogin(data.identifier, data.password);
-    setIsLoading(false);
-
+    
     if (error) {
+      setIsLoading(false);
       showError(error.message);
     } else {
-      navigate('/');
+      // Login successful - navigate based on role
+      // Wait a bit for context to update, then navigate
+      setTimeout(() => {
+        setIsLoading(false);
+      }, 100);
     }
   };
+
+  // Effect to handle navigation after successful login
+  React.useEffect(() => {
+    if (profile && role && !isLoading) {
+      switch (role) {
+        case 'Student':
+          navigate('/dashboard', { replace: true });
+          break;
+        case 'Tutor':
+          navigate('/tutor-dashboard', { replace: true });
+          break;
+        case 'Admin':
+          navigate('/admin-dashboard', { replace: true });
+          break;
+        default:
+          navigate('/dashboard', { replace: true });
+      }
+    }
+  }, [profile, role, navigate, isLoading]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">

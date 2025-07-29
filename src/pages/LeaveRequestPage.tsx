@@ -57,7 +57,15 @@ const LeaveRequestPage = () => {
 
   useEffect(() => {
     if (startDate && endDate && endDate >= startDate) {
-      const days = differenceInCalendarDays(endDate, startDate) + 1;
+      let days = differenceInCalendarDays(endDate, startDate) + 1;
+      let currentDate = startDate;
+      while (currentDate <= endDate) {
+        if (currentDate.getDay() === 0) {
+          days--;
+        }
+        currentDate = new Date(currentDate);
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
       setTotalDays(days);
     } else {
       setTotalDays(0);

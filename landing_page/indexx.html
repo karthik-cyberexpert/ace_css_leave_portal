@@ -1,0 +1,940 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Leave Portal - Adhiyamaan College of Engineering</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #0a192f; /* Navy blue */
+            --primary-light: #172a45;
+            --secondary: #64ffda; /* Teal */
+            --accent: #ff6484; /* Pink */
+            --light: #ccd6f6;
+            --dark: #020c1b;
+            --gray: #8892b0;
+            --light-gray: #233554;
+            --gradient-bg: linear-gradient(135deg, #0a192f 0%, #172a45 100%);
+            --glass-bg: rgba(10, 25, 47, 0.8);
+            --glass-border: rgba(100, 255, 218, 0.1);
+        }
+
+        /* Alternative theme colors */
+        .theme-dark {
+            --primary: #0a192f;
+            --primary-light: #172a45;
+            --secondary: #64ffda;
+            --accent: #ff6484;
+            --light: #ccd6f6;
+            --dark: #020c1b;
+            --gray: #8892b0;
+            --light-gray: #233554;
+            --gradient-bg: linear-gradient(135deg, #0a192f 0%, #172a45 100%);
+            --glass-bg: rgba(10, 25, 47, 0.8);
+            --glass-border: rgba(100, 255, 218, 0.1);
+        }
+
+        .theme-light {
+            --primary: #f8f9fa;
+            --primary-light: #e9ecef;
+            --secondary: #20c997;
+            --accent: #fd7e14;
+            --light: #212529;
+            --dark: #343a40;
+            --gray: #6c757d;
+            --light-gray: #adb5bd;
+            --gradient-bg: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            --glass-bg: rgba(248, 249, 250, 0.8);
+            --glass-border: rgba(32, 201, 151, 0.1);
+        }
+
+        .theme-purple {
+            --primary: #2b0a3d;
+            --primary-light: #3d1257;
+            --secondary: #9c27b0;
+            --accent: #ff9800;
+            --light: #e1bee7;
+            --dark: #1a0326;
+            --gray: #9575cd;
+            --light-gray: #4a2b6b;
+            --gradient-bg: linear-gradient(135deg, #2b0a3d 0%, #3d1257 100%);
+            --glass-bg: rgba(43, 10, 61, 0.8);
+            --glass-border: rgba(156, 39, 176, 0.1);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Poppins', sans-serif;
+        }
+
+        body {
+            background: var(--gradient-bg);
+            background-attachment: fixed;
+            color: var(--light);
+            overflow-x: hidden;
+            line-height: 1.6;
+            min-height: 100vh;
+            transition: all 0.5s ease;
+        }
+
+        .container {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Enhanced Header with Glassmorphism */
+        header {
+            background: var(--glass-bg);
+            backdrop-filter: blur(20px);
+            color: white;
+            padding: 15px 5%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            border-bottom: 1px solid var(--glass-border);
+            transition: all 0.5s ease;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+        }
+
+        .logo img {
+            height: 60px;
+            margin-right: 15px;
+            filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3));
+            transition: all 0.3s ease;
+        }
+
+        .logo:hover img {
+            transform: scale(1.05);
+        }
+
+        .logo-text h1 {
+            font-size: 1.3rem;
+            font-weight: 700;
+            line-height: 1.2;
+            color: white;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .logo-text p {
+            font-size: 0.8rem;
+            color: rgba(255, 255, 255, 0.8);
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+        }
+
+        nav ul {
+            display: flex;
+            list-style: none;
+        }
+
+        nav ul li {
+            margin-left: 25px;
+        }
+
+        nav ul li a {
+            color: white;
+            text-decoration: none;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            font-size: 0.9rem;
+            position: relative;
+            padding: 8px 16px;
+            border-radius: 25px;
+            backdrop-filter: blur(10px);
+        }
+
+        nav ul li a:hover {
+            background: rgba(100, 255, 218, 0.1);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+        }
+
+        nav ul li a:after {
+            content: '';
+            position: absolute;
+            width: 0;
+            height: 2px;
+            background: var(--secondary);
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            transition: width 0.3s;
+        }
+
+        nav ul li a:hover:after {
+            width: 80%;
+        }
+
+        /* Enhanced Hero Section */
+        .hero {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            padding: 0 5%;
+            background: 
+                linear-gradient(rgba(10, 25, 47, 0.9), rgba(23, 42, 69, 0.9)),
+                url('./Handler.ashx') no-repeat center center;
+            background-size: cover;
+            min-height: 500px;
+            color: white;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .hero-content {
+            max-width: 800px;
+            position: relative;
+            z-index: 2;
+        }
+
+        .hero-content h2 {
+            font-size: 2.5rem;
+            margin-bottom: 20px;
+            line-height: 1.3;
+            font-weight: 600;
+            text-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+            color: var(--light);
+        }
+
+        .hero-content p {
+            font-size: 1.1rem;
+            margin-bottom: 30px;
+            opacity: 0.95;
+            max-width: 600px;
+            text-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+            color: var(--gray);
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 12px 30px;
+            background: linear-gradient(135deg, var(--secondary), #52d1b8);
+            color: var(--dark);
+            border: none;
+            border-radius: 50px;
+            font-size: 1rem;
+            font-weight: 600;
+            text-decoration: none;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 8px 25px rgba(100, 255, 218, 0.4);
+        }
+
+        .btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 12px 35px rgba(100, 255, 218, 0.5);
+            background: linear-gradient(135deg, var(--secondary), #45b8a5);
+        }
+
+        /* Login Cards with Glassmorphism */
+        .login-section {
+            padding: 80px 5%;
+            background: var(--glass-bg);
+            backdrop-filter: blur(20px);
+        }
+
+        .section-title {
+            text-align: center;
+            margin-bottom: 50px;
+        }
+
+        .section-title h2 {
+            font-size: 2rem;
+            color: var(--light);
+            margin-bottom: 15px;
+            font-weight: 600;
+            position: relative;
+            display: inline-block;
+        }
+
+        .section-title h2:after {
+            content: '';
+            position: absolute;
+            width: 50px;
+            height: 3px;
+            background: linear-gradient(135deg, var(--secondary), #52d1b8);
+            bottom: -10px;
+            left: 50%;
+            transform: translateX(-50%);
+            border-radius: 2px;
+        }
+
+        .section-title p {
+            color: var(--gray);
+            max-width: 700px;
+            margin: 0 auto;
+        }
+
+        .login-cards {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 30px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .login-card {
+            background: var(--glass-bg);
+            backdrop-filter: blur(20px);
+            border-radius: 20px;
+            padding: 30px;
+            width: 350px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+            transition: all 0.3s ease;
+            text-align: center;
+            border: 1px solid var(--glass-border);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .login-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            background: linear-gradient(135deg, var(--secondary), #52d1b8);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .login-card:hover::before {
+            opacity: 1;
+        }
+
+        .login-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+            background: rgba(10, 25, 47, 0.9);
+        }
+
+        .login-icon {
+            width: 80px;
+            height: 80px;
+            background: linear-gradient(135deg, var(--primary-light), #1f3a68);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 20px;
+            color: var(--secondary);
+            font-size: 2rem;
+            box-shadow: 0 8px 25px rgba(23, 42, 69, 0.4);
+        }
+
+        .login-card h3 {
+            font-size: 1.5rem;
+            margin-bottom: 15px;
+            color: var(--light);
+            font-weight: 600;
+        }
+
+        .login-card p {
+            color: var(--gray);
+            margin-bottom: 25px;
+        }
+
+        .btn-card {
+            display: inline-block;
+            padding: 10px 25px;
+            background: linear-gradient(135deg, var(--primary-light), #1f3a68);
+            color: var(--light);
+            border: none;
+            border-radius: 50px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            text-decoration: none;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(23, 42, 69, 0.4);
+        }
+
+        .btn-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(23, 42, 69, 0.5);
+            background: linear-gradient(135deg, #1f3a68, var(--primary-light));
+        }
+
+        /* Department Info with Glassmorphism */
+        .dept-info {
+            background: var(--glass-bg);
+            backdrop-filter: blur(20px);
+            color: white;
+            padding: 60px 5%;
+            text-align: center;
+            border-top: 1px solid var(--glass-border);
+            border-bottom: 1px solid var(--glass-border);
+        }
+
+        .dept-info h2 {
+            font-size: 2rem;
+            margin-bottom: 20px;
+            font-weight: 600;
+            color: var(--light);
+        }
+
+        .dept-info p {
+            max-width: 800px;
+            margin: 0 auto 30px;
+            opacity: 0.9;
+            color: var(--gray);
+        }
+
+        .dept-logo {
+            width: 150px;
+            margin: 0 auto 20px;
+            filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.3));
+        }
+
+        /* Features Section with Enhanced Glassmorphism */
+        .features {
+            padding: 80px 5%;
+            background: rgba(10, 25, 47, 0.8);
+            backdrop-filter: blur(15px);
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .feature-card {
+            background: var(--glass-bg);
+            backdrop-filter: blur(20px);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+            transition: all 0.3s ease;
+            border: 1px solid var(--glass-border);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .feature-card::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: linear-gradient(45deg, transparent, rgba(100, 255, 218, 0.1), transparent);
+            transform: rotate(45deg);
+            transition: all 0.5s ease;
+            opacity: 0;
+        }
+
+        .feature-card:hover::before {
+            animation: shimmer 1.5s ease-in-out;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(202, 18, 18, 0.3);
+            background: rgba(10, 25, 47, 0.9);
+        }
+
+        .feature-card.highlight {
+            border-left: 4px solid var(--secondary);
+        }
+
+        .feature-card.with-image {
+            padding: 0;
+        }
+
+        .feature-image {
+            height: 180px;
+            overflow: hidden;
+            border-radius: 20px 20px 0 0;
+        }
+
+        .feature-image img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transition: transform 0.5s ease;
+        }
+
+        .feature-card:hover .feature-image img {
+            transform: scale(1.05);
+        }
+
+        .feature-card h3,
+        .feature-card p {
+            padding: 0 25px;
+        }
+
+        .feature-card h3 {
+            margin-top: 20px;
+            margin-bottom: 15px;
+            font-size: 1.3rem;
+            color: var(--light);
+            font-weight: 600;
+        }
+
+        .feature-card p {
+            margin-bottom: 25px;
+            color: var(--gray);
+            font-size: 0.95rem;
+            line-height: 1.6;
+        }
+
+        .feature-icon-bg {
+            width: 70px;
+            height: 70px;
+            background: linear-gradient(135deg, var(--primary-light), #1f3a68);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 20px;
+            color: var(--secondary);
+            font-size: 1.8rem;
+            box-shadow: 0 8px 25px rgba(23, 42, 69, 0.4);
+        }
+
+        .feature-badge {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: linear-gradient(135deg, var(--secondary), #52d1b8);
+            color: var(--dark);
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            z-index: 1;
+            box-shadow: 0 2px 8px rgba(100, 255, 218, 0.3);
+        }
+
+        /* Enhanced Footer */
+        footer {
+            background: var(--glass-bg);
+            backdrop-filter: blur(20px);
+            color: white;
+            padding: 60px 5% 30px;
+            text-align: center;
+            border-top: 1px solid var(--glass-border);
+        }
+
+        .footer-content {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            max-width: 1200px;
+            margin: 0 auto 40px;
+            text-align: left;
+        }
+
+        .footer-column {
+            flex: 1;
+            min-width: 250px;
+            margin-bottom: 30px;
+            padding: 0 15px;
+        }
+
+        .footer-column h3 {
+            font-size: 1.2rem;
+            margin-bottom: 20px;
+            font-weight: 600;
+            position: relative;
+            padding-bottom: 10px;
+            color: var(--light);
+        }
+
+        .footer-column h3:after {
+            content: '';
+            position: absolute;
+            width: 40px;
+            height: 2px;
+            background: linear-gradient(135deg, var(--secondary), #52d1b8);
+            bottom: 0;
+            left: 0;
+        }
+
+        .footer-column p {
+            opacity: 0.8;
+            margin-bottom: 15px;
+            color: var(--gray);
+        }
+
+        .footer-links {
+            list-style: none;
+        }
+
+        .footer-links li {
+            margin-bottom: 10px;
+        }
+
+        .footer-links a {
+            color: var(--gray);
+            text-decoration: none;
+            transition: all 0.3s ease;
+        }
+
+        .footer-links a:hover {
+            color: var(--secondary);
+            padding-left: 5px;
+        }
+
+        .contact-info p {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 15px;
+            color: var(--gray);
+        }
+
+        .contact-info i {
+            margin-right: 10px;
+            color: var(--secondary);
+            margin-top: 3px;
+        }
+
+        .social-links {
+            display: flex;
+            gap: 15px;
+        }
+
+        .social-links a {
+            display: inline-block;
+            width: 40px;
+            height: 40px;
+            background: var(--glass-bg);
+            backdrop-filter: blur(10px);
+            border-radius: 50%;
+            color: var(--light);
+            font-size: 1.2rem;
+            line-height: 40px;
+            transition: all 0.3s ease;
+            border: 1px solid var(--glass-border);
+        }
+
+        .social-links a:hover {
+            background: linear-gradient(135deg, var(--secondary), #52d1b8);
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(100, 255, 218, 0.4);
+            color: var(--dark);
+        }
+
+        .copyright {
+            color: var(--gray);
+            font-size: 0.9rem;
+            padding-top: 30px;
+            border-top: 1px solid rgba(100, 255, 218, 0.1);
+        }
+
+        /* Animations */
+        @keyframes shimmer {
+            0% { transform: translateX(-100%) translateY(-100%) rotate(45deg); opacity: 0; }
+            50% { opacity: 1; }
+            100% { transform: translateX(100%) translateY(100%) rotate(45deg); opacity: 0; }
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            header {
+                flex-direction: column;
+                text-align: center;
+                padding: 15px;
+            }
+
+            .logo {
+                margin-bottom: 15px;
+                justify-content: center;
+                flex-direction: column;
+                text-align: center;
+            }
+
+            .logo img {
+                margin-right: 0;
+                margin-bottom: 10px;
+            }
+
+            nav ul {
+                flex-direction: column;
+                align-items: center;
+            }
+
+            nav ul li {
+                margin: 8px 0;
+            }
+
+            .hero-content {
+                text-align: center;
+                padding: 40px 20px;
+            }
+
+            .hero-content h2 {
+                font-size: 1.8rem;
+            }
+
+            .login-cards {
+                flex-direction: column;
+                align-items: center;
+            }
+
+            .footer-content {
+                flex-direction: column;
+            }
+
+            .footer-column {
+                text-align: center;
+            }
+
+            .footer-column h3:after {
+                left: 50%;
+                transform: translateX(-50%);
+            }
+
+            .footer-links {
+                padding-left: 0;
+            }
+
+            .social-links {
+                justify-content: center;
+            }
+        }
+    </style>
+</head>
+<body class="theme-dark">
+    <div class="container">
+        <!-- Header -->
+        <header>
+            <div class="logo" id="logo">
+                <img src="./logo33.png" alt="Adhiyamaan College of Engineering Logo">
+                <div class="logo-text">
+                    <h1>Adhiyamaan College of Engineering</h1>
+                    <p>Department of Cyber Security</p>
+                </div>
+            </div>
+            <nav>
+                <ul>
+                    <li><a href="#features">Features</a></li>
+                    <li><a href="#login">Login</a></li>
+                    <li><a href="#contact">Contact</a></li>
+                </ul>
+            </nav>
+        </header>
+
+        <!-- Hero Section -->
+        <section class="hero">
+            <div class="hero-content">
+                <h2>Cyber Security Department Leave Management Portal</h2>
+                <p>A secure and efficient platform for students and faculty to manage leave applications, OD requests, and approvals within the Department of Cyber Security at Adhiyamaan College of Engineering.</p>
+                <a href="#login" class="btn">Access Portal</a>
+            </div>
+        </section>
+
+        <!-- Department Info -->
+        <section class="dept-info">
+            <img src="./image.png" alt="ACE Logo" class="dept-logo">
+            <h2>Department of Cyber Security</h2>
+            <p>The Cyber Security Department at Adhiyamaan College of Engineering is committed to providing cutting-edge education and research opportunities in the field of information security, preparing students to tackle modern cybersecurity challenges.</p>
+        </section>
+
+        <!-- Login Section -->
+        <section class="login-section" id="login">
+            <div class="section-title">
+                <h2>Portal Login</h2>
+                <p>Select your role to access the appropriate portal interface</p>
+            </div>
+            <div class="login-cards">
+                <div class="login-card">
+                    <div class="login-icon">
+                        <i class="fas fa-user-graduate"></i>
+                    </div>
+                    <h3>Student Portal</h3>
+                    <p>Submit leave and OD requests, track your application status, and view your leave history.</p>
+                    <a href="leave.html?type=student" class="btn-card">Login as Student</a>
+                </div>
+                <div class="login-card">
+                    <div class="login-icon">
+                        <i class="fas fa-chalkboard-teacher"></i>
+                    </div>
+                    <h3>Faculty Portal</h3>
+                    <p>Review and approve student leave applications, generate reports, and manage your class.</p>
+                    <a href="leave.html?type=tutor" class="btn-card">Login as Faculty</a>
+                </div>
+                <div class="login-card">
+                    <div class="login-icon">
+                        <i class="fas fa-user-shield"></i>
+                    </div>
+                    <h3>Admin Portal</h3>
+                    <p>Manage all leave applications, generate institutional reports, and administer user accounts.</p>
+                    <a href="leave.html?type=admin" class="btn-card">Login as Admin</a>
+                </div>
+            </div>
+        </section>
+
+        <!-- Features Section -->
+        <section class="features" id="features">
+            <div class="section-title">
+                <h2>Key Features & Department Facilities</h2>
+                <p>Our leave management system and department offer comprehensive solutions and world-class facilities</p>
+            </div>
+
+            <div class="features-container">
+                <div class="features-grid">
+                    <!-- Secure Submission -->
+                    <div class="feature-card with-image">
+                        <div class="feature-image">
+                            <img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?ixlib=rb-1.2.1&auto=format&fit=crop&w=500&q=80" alt="Secure data submission">
+                        </div>
+                        <h3>Secure Submission</h3>
+                        <p>Students can securely submit leave and OD requests with end-to-end encryption for all sensitive data.</p>
+                    </div>
+
+                    <!-- Smart Classrooms -->
+                    <div class="feature-card with-image highlight">
+                        <div class="feature-image">
+                            <img src="https://images.unsplash.com/photo-1588072432836-e10032774350?ixlib=rb-1.2.1&auto=format&fit=crop&w=500&q=80" alt="Smart classroom">
+                        </div>
+                        <h3>Smart Classrooms</h3>
+                        <p>Equipped with interactive smart boards, audio-visual systems, and high-speed internet for enhanced learning.</p>
+                        <div class="feature-badge">Popular</div>
+                    </div>
+
+                    <!-- Advanced Labs -->
+                    <div class="feature-card with-image">
+                        <div class="feature-image">
+                            <img src="https://images.unsplash.com/photo-1581093057305-1cb5a0ed9b7d?ixlib=rb-1.2.1&auto=format&fit=crop&w=500&q=80" alt="Advanced cybersecurity lab">
+                        </div>
+                        <h3>Advanced Labs</h3>
+                        <p>State-of-the-art cybersecurity labs with ethical hacking tools, forensic workstations, and virtual environments.</p>
+                    </div>
+
+                    <!-- Collaborative Learning -->
+                    <div class="feature-card with-image">
+                        <div class="feature-image">
+                            <img src="./Collobrative_learning.jpg" alt="Students collaborating">
+                        </div>
+                        <h3>Collaborative Learning</h3>
+                        <p>Students learn from one another in an engaging, supportive environment that encourages knowledge sharing and teamwork.</p>
+                    </div>
+
+                    <!-- Experienced Faculty -->
+                    <div class="feature-card with-image">
+                        <div class="feature-image">
+                            <img src="https://images.unsplash.com/photo-1606326608606-aa0b62935f2b?ixlib=rb-1.2.1&auto=format&fit=crop&w=500&q=80" alt="Experienced faculty teaching">
+                        </div>
+                        <h3>Experienced Faculty</h3>
+                        <p>Our faculty bring years of academic and industry experience, offering students a rich, informed perspective in every lecture.</p>
+                    </div>
+
+                    <!-- Dynamic Campus -->
+                    <div class="feature-card with-image">
+                        <div class="feature-image">
+                            <img src="https://images.unsplash.com/photo-1541178735493-479c1a27ed24?ixlib=rb-1.2.1&auto=format&fit=crop&w=500&q=80" alt="Modern campus facilities">
+                        </div>
+                        <h3>Dynamic Campus</h3>
+                        <p>Our campus features modern facilities including high-tech labs, collaborative spaces, and recreational areas to enhance the student experience.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Footer Section -->
+        <footer id="contact">
+            <div class="footer-content">
+                <div class="footer-column">
+                    <h3>About Us</h3>
+                    <p>The Department of Cyber Security at Adhiyamaan College of Engineering is dedicated to excellence in cybersecurity education and research, preparing students for successful careers in this critical field.</p>
+                    <div class="social-links">
+                        <a href="#"><i class="fab fa-facebook-f"></i></a>
+                        <a href="#"><i class="fab fa-twitter"></i></a>
+                        <a href="#"><i class="fab fa-linkedin-in"></i></a>
+                        <a href="#"><i class="fab fa-instagram"></i></a>
+                    </div>
+                </div>
+                <div class="footer-column">
+                    <h3>Quick Links</h3>
+                    <ul class="footer-links">
+                        <li><a href="#">Home</a></li>
+                        <li><a href="#features">Features</a></li>
+                        <li><a href="#login">Login</a></li>
+                        <li><a href="#">Academic Calendar</a></li>
+                        <li><a href="#">Department News</a></li>
+                    </ul>
+                </div>
+                <div class="footer-column">
+                    <h3>Contact Info</h3>
+                    <div class="contact-info">
+                        <p><i class="fas fa-map-marker-alt"></i> Adhiyamaan College of Engineering, Hosur, Tamil Nadu 635109</p>
+                        <p><i class="fas fa-phone"></i> +91 1234567890</p>
+                        <p><i class="fas fa-envelope"></i> cybersecurity@adhiyamaan.ac.in</p>
+                        <p><i class="fas fa-clock"></i> Mon-Fri: 9:00 AM - 5:00 PM</p>
+                    </div>
+                </div>
+            </div>
+            <div class="copyright">
+                <p>&copy; 2023 Adhiyamaan College of Engineering - Department of Cyber Security. All Rights Reserved.</p>
+            </div>
+        </footer>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const logo = document.getElementById('logo');
+            const body = document.body;
+            let currentTheme = 0;
+            const themes = ['theme-dark', 'theme-light', 'theme-purple'];
+            
+            // Function to scroll to top
+            function scrollToTop() {
+                window.scrollTo({
+                    top: 0,
+                    behavior: 'smooth'
+                });
+            }
+            
+            // Function to change theme
+            function changeTheme() {
+                // Remove current theme class
+                body.classList.remove(themes[currentTheme]);
+                
+                // Increment theme index or reset to 0
+                currentTheme = (currentTheme + 1) % themes.length;
+                
+                // Add new theme class
+                body.classList.add(themes[currentTheme]);
+                
+                // Store theme preference in localStorage
+                localStorage.setItem('themePreference', currentTheme);
+            }
+            
+            // Check for saved theme preference
+            const savedTheme = localStorage.getItem('themePreference');
+            if (savedTheme !== null) {
+                currentTheme = parseInt(savedTheme);
+                body.classList.remove('theme-dark');
+                body.classList.add(themes[currentTheme]);
+            }
+            
+            // Add click event to logo
+            logo.addEventListener('click', function(e) {
+                e.preventDefault();
+                scrollToTop();
+                changeTheme();
+            });
+        });
+    </script>
+</body>
+</html>
