@@ -1,9 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import { useBatchContext, SemesterDates } from '@/context/BatchContext';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
 import { DatePicker } from '@/components/ui/datepicker';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { useAppContext } from '@/context/AppContext';
 import { addDays, isAfter, isSameDay } from 'date-fns';
 import { showSuccess, showError } from '@/utils/toast';
-import { Plus, Edit2, Trash2 } from 'lucide-react';
+import { Plus, Settings, Trash2, ChevronDown, ChevronRight } from 'lucide-react';
 
 interface Semester {
   id: string;
@@ -29,6 +29,7 @@ export const BatchManagement = () => {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [newBatchYear, setNewBatchYear] = useState<string>('');
   const [editingBatch, setEditingBatch] = useState<{ id: string; name: string } | null>(null);
+  const [expandedBatches, setExpandedBatches] = useState<Record<string, boolean>>({});
 
   // Function to determine current semester based on batch start year and current date
   const getCurrentSemesterForBatch = (batchStartYear: number): number => {
@@ -129,18 +130,40 @@ export const BatchManagement = () => {
     // Calculate which academic year this semester falls in
     const semesterYear = batchStartYear + Math.floor((semester - 1) / 2);
     
-    // For current year restrictions, only allow dates within reasonable academic year ranges
     let minDate: Date;
     let maxDate: Date;
     
     if (semester % 2 === 1) {
-      // Odd semesters (1, 3, 5, 7) typically run from June to December
-      minDate = new Date(semesterYear, 5, 1); // June 1st
-      maxDate = new Date(semesterYear, 11, 31); // December 31st
+      // Odd semesters (1, 3, 5, 7) run from June to January of next year
+      if (semester === 1) {
+        // First semester starts from June 1st
+        minDate = new Date(semesterYear, 5, 1); // June 1st
+      } else {
+        // For subsequent odd semesters, check if previous even semester has ended
+        const prevSemester = semesterDates.find(s => s.batch === batchId && s.semester === semester - 1);
+        if (prevSemester?.endDate) {
+          // Start the day after previous semester ends
+          const prevEndDate = new Date(prevSemester.endDate);
+          minDate = new Date(prevEndDate.getTime() + 24 * 60 * 60 * 1000); // Next day
+        } else {
+          // Default to June 1st if previous semester end date is not set
+          minDate = new Date(semesterYear, 5, 1);
+        }
+      }
+      maxDate = new Date(semesterYear + 1, 0, 31); // January 31st of next year
     } else {
-      // Even semesters (2, 4, 6, 8) typically run from January to May of the next year
-      minDate = new Date(semesterYear + 1, 0, 1); // January 1st
-      maxDate = new Date(semesterYear + 1, 4, 31); // May 31st
+      // Even semesters (2, 4, 6, 8) run from January to June
+      // Check if previous odd semester has ended
+      const prevSemester = semesterDates.find(s => s.batch === batchId && s.semester === semester - 1);
+      if (prevSemester?.endDate) {
+        // Start the day after previous semester ends
+        const prevEndDate = new Date(prevSemester.endDate);
+        minDate = new Date(prevEndDate.getTime() + 24 * 60 * 60 * 1000); // Next day
+      } else {
+        // Default to January 1st if previous semester end date is not set
+        minDate = new Date(semesterYear + 1, 0, 1); // January 1st
+      }
+      maxDate = new Date(semesterYear + 1, 5, 30); // June 30th
     }
     
     // For current year batches, don't allow future dates beyond current year + 4
@@ -310,147 +333,122 @@ export const BatchManagement = () => {
   };
 
   return (
-    <Card className="shadow-lg transition-all duration-300 hover:shadow-xl">
-      <CardHeader>
-        <div className="flex justify-between items-start">
-          <div>
-            <CardTitle>Batch Management</CardTitle>
-            <CardDescription>Manage batches and their semester dates.</CardDescription>
-          </div>
-          <div className="flex gap-2">
-            <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-              <DialogTrigger asChild>
-                <Button className="flex items-center gap-2">
-                  <Plus size={16} />
-                  Create New Batch
+    <Card className="shadow-sm border-gray-200">
+      <CardHeader className="pb-3">
+        <div className="flex justify-between items-center">
+          <CardTitle className="text-xl">Batch Management</CardTitle>
+          <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm" className="flex items-center gap-2">
+                <Plus size={16} />
+                New Batch
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Create New Batch</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="batchYear">Starting Year</Label>
+                  <Input
+                    id="batchYear"
+                    type="number"
+                    placeholder="e.g., 2024"
+                    value={newBatchYear}
+                    onChange={(e) => setNewBatchYear(e.target.value)}
+                    min="2000"
+                    max="2050"
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
+                  Cancel
                 </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Create New Batch</DialogTitle>
-                  <DialogDescription>
-                    Enter the starting year for the new batch. The batch will span 4 years (e.g., 2024-2028).
-                  </DialogDescription>
-                </DialogHeader>
+                <Button onClick={handleCreateBatch}>
+                  Create
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* Edit Batch Dialog */}
+          <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Edit Batch Settings</DialogTitle>
+              </DialogHeader>
+              {editingBatch && (
                 <div className="space-y-4">
                   <div>
-                    <Label htmlFor="batchYear">Starting Year</Label>
-                    <Input
-                      id="batchYear"
-                      type="number"
-                      placeholder="e.g., 2024"
-                      value={newBatchYear}
-                      onChange={(e) => setNewBatchYear(e.target.value)}
-                      min="2000"
-                      max="2050"
-                    />
+                    <Label>Batch</Label>
+                    <Input value={editingBatch.name} disabled className="bg-gray-50" />
+                  </div>
+                  <div>
+                    <Label>Current Status</Label>
+                    <div className="mt-2">
+                      <Badge variant={batches.find(b => b.id === editingBatch.id)?.isActive ? "default" : "secondary"}>
+                        {batches.find(b => b.id === editingBatch.id)?.isActive ? 'Active' : 'Inactive'}
+                      </Badge>
+                    </div>
                   </div>
                 </div>
-                <DialogFooter>
-                  <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
-                    Cancel
-                  </Button>
-                  <Button onClick={handleCreateBatch}>
-                    Create Batch
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
-            
-            {/* Edit Batch Dialog */}
-            <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Edit Batch</DialogTitle>
-                  <DialogDescription>
-                    Modify batch settings. Currently you can toggle the active status.
-                  </DialogDescription>
-                </DialogHeader>
-                {editingBatch && (
-                  <div className="space-y-4">
-                    <div>
-                      <Label>Batch Name</Label>
-                      <Input value={editingBatch.name} disabled className="bg-gray-50" />
-                    </div>
-                    <div>
-                      <Label>Current Status</Label>
-                      <div className="mt-2">
-                        <span className={`px-2 py-1 rounded-full text-xs ${
-                          batches.find(b => b.id === editingBatch.id)?.isActive
-                            ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' 
-                            : 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
-                        }`}>
-                          {batches.find(b => b.id === editingBatch.id)?.isActive ? 'Active' : 'Inactive'}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="text-sm text-gray-600">
-                      Clicking "Update Batch" will toggle the active status of this batch.
-                    </div>
-                  </div>
-                )}
-                <DialogFooter>
-                  <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
-                    Cancel
-                  </Button>
-                  <Button onClick={handleUpdateBatch}>
-                    {editingBatch && batches.find(b => b.id === editingBatch.id)?.isActive ? 'Deactivate' : 'Activate'} Batch
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
-          </div>
+              )}
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={handleUpdateBatch}>
+                  {editingBatch && batches.find(b => b.id === editingBatch.id)?.isActive ? 'Deactivate' : 'Activate'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
       </CardHeader>
       <CardContent>
         {/* Batch List Section */}
         <div className="mb-8">
-          <h3 className="text-lg font-semibold mb-4">Existing Batches</h3>
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Batch</TableHead>
+                  <TableHead>Batch Period</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Start Year</TableHead>
-                  <TableHead>End Year</TableHead>
-                  <TableHead>Actions</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {batches.map((batch) => (
                   <TableRow key={batch.id}>
-                    <TableCell className="font-medium">{batch.name}</TableCell>
                     <TableCell>
-                      <span className={`px-2 py-1 rounded-full text-xs ${
-                        batch.isActive 
-                          ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' 
-                          : 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
-                      }`}>
-                        {batch.isActive ? 'Active' : 'Inactive'}
-                      </span>
+                      <div>
+                        <div className="font-medium">{batch.name}</div>
+                        <div className="text-sm text-gray-500">{batch.startYear} - {batch.endYear}</div>
+                      </div>
                     </TableCell>
-                    <TableCell>{batch.startYear}</TableCell>
-                    <TableCell>{batch.endYear}</TableCell>
                     <TableCell>
-                      <div className="flex gap-2">
+                      <Badge variant={batch.isActive ? "default" : "secondary"}>
+                        {batch.isActive ? 'Active' : 'Inactive'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex gap-1 justify-end">
                         <Button
-                          variant="outline"
+                          variant="ghost"
                           size="sm"
                           onClick={() => handleEditBatch({ id: batch.id, name: batch.name })}
-                          className="flex items-center gap-1"
                         >
-                          <Edit2 size={14} />
-                          Edit
+                          <Settings size={16} />
                         </Button>
                         <Button
-                          variant="destructive"
+                          variant="ghost"
                           size="sm"
                           onClick={() => handleDeleteBatch(batch.id, batch.name)}
-                          className="flex items-center gap-1"
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
                         >
-                          <Trash2 size={14} />
-                          Delete
+                          <Trash2 size={16} />
                         </Button>
                       </div>
                     </TableCell>
@@ -458,7 +456,7 @@ export const BatchManagement = () => {
                 ))}
                 {batches.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center py-8 text-gray-500">
+                    <TableCell colSpan={3} className="text-center py-8 text-gray-500">
                       No batches found. Create your first batch to get started.
                     </TableCell>
                   </TableRow>
@@ -492,13 +490,13 @@ export const BatchManagement = () => {
                   // Create a description of the current semester period
                   let semesterPeriod = '';
                   if (currentSemester % 2 === 1) {
-                    // Odd semester (June-December)
+                    // Odd semester (June to January of next year)
                     const semesterYear = (batchObj?.startYear || 0) + Math.floor((currentSemester - 1) / 2);
-                    semesterPeriod = `(Jun ${semesterYear} - Dec ${semesterYear})`;
+                    semesterPeriod = `(Jun ${semesterYear} - Jan ${semesterYear + 1})`;
                   } else {
-                    // Even semester (January-May)
+                    // Even semester (February-May)
                     const semesterYear = (batchObj?.startYear || 0) + Math.floor((currentSemester - 1) / 2) + 1;
-                    semesterPeriod = `(Jan ${semesterYear} - May ${semesterYear})`;
+                    semesterPeriod = `(Feb ${semesterYear} - May ${semesterYear})`;
                   }
 
                   return (
