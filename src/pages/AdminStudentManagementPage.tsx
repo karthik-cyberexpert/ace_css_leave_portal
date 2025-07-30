@@ -54,8 +54,8 @@ const AdminStudentManagementPage = () => {
           tutor_id: tutor.id,
           batch: data.batch,
           semester: data.semester,
-          username: data.username,
-          profile_photo: data.profilePhoto,
+          email: data.email,
+          mobile: data.mobile,
         };
         await updateStudent(editingStudent.id, studentData);
       } else {
@@ -163,7 +163,7 @@ const AdminStudentManagementPage = () => {
         open={isBulkAddOpen}
         onOpenChange={setIsBulkAddOpen}
         onImport={bulkAddStudents}
-        existingStudents={students.map(s => ({ registerNumber: s.register_number, username: s.username }))}
+        existingStudents={students.map(s => ({ registerNumber: s.register_number, email: s.email }))}
       />
     </AdminLayout>
   );

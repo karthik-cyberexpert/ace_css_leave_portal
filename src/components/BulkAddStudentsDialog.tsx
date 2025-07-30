@@ -22,9 +22,9 @@ const bulkStudentSchema = z.object({
   tutorName: z.string().min(2, "Tutor name is required"),
   batch: z.string().min(4, "Batch is required"),
   semester: z.preprocess((val) => parseInt(String(val), 10), z.number().min(1).max(8, "Semester must be between 1-8")),
-  username: z.string().min(3, "Username is too short"),
+  email: z.string().email("Invalid email address"),
+  mobile: z.string().regex(/^(\+91)?[6-9]\d{9}$/, "Invalid Indian mobile number"),
   password: z.string().min(6, "Password must be at least 6 characters"),
-  profilePhoto: z.string().optional().refine(val => !val || val === '' || z.string().url().safeParse(val).success, "Must be a valid URL or empty"),
 });
 
 export type BulkStudent = z.infer<typeof bulkStudentSchema>;
@@ -33,7 +33,7 @@ interface BulkAddStudentsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onImport: (newStudents: BulkStudent[]) => Promise<void>;
-  existingStudents: { registerNumber: string; username: string }[];
+  existingStudents: { registerNumber: string; email: string }[];
 }
 
 export const BulkAddStudentsDialog: React.FC<BulkAddStudentsDialogProps> = ({ open, onOpenChange, onImport, existingStudents }) => {
@@ -120,9 +120,9 @@ export const BulkAddStudentsDialog: React.FC<BulkAddStudentsDialogProps> = ({ op
     
     const newValidStudents: BulkStudent[] = [];
     const newErrors: string[] = [];
-    const existingUsernames = new Set(existingStudents.map(s => s.username));
+    const existingEmails = new Set(existingStudents.map(s => s.email));
     const existingRegNos = new Set(existingStudents.map(s => s.registerNumber));
-    const fileUsernames = new Set<string>();
+    const fileEmails = new Set<string>();
     const fileRegNos = new Set<string>();
 
     if (!data || data.length === 0) {
@@ -136,7 +136,7 @@ export const BulkAddStudentsDialog: React.FC<BulkAddStudentsDialogProps> = ({ op
       console.log(`Processing row ${index + 1}:`, row);
 
       // Check for required fields
-      const requiredFields = ['name', 'registerNumber', 'tutorName', 'batch', 'semester', 'username', 'password'];
+      const requiredFields = ['name', 'registerNumber', 'tutorName', 'batch', 'semester', 'email', 'mobile', 'password'];
       const missingFields = requiredFields.filter(field => !row[field] || (typeof row[field] === 'string' && row[field].trim() === ''));
       
       if (missingFields.length > 0) {
@@ -151,9 +151,9 @@ export const BulkAddStudentsDialog: React.FC<BulkAddStudentsDialogProps> = ({ op
         tutorName: String(row.tutorName).trim(),
         batch: String(row.batch).trim(),
         semester: parseInt(String(row.semester), 10),
-        username: String(row.username).trim(),
+        email: String(row.email).trim(),
+        mobile: String(row.mobile).trim(),
         password: String(row.password).trim(),
-        profilePhoto: row.profilePhoto ? String(row.profilePhoto).trim() : ''
       };
 
       const validationResult = bulkStudentSchema.safeParse(cleanedRow);
@@ -162,10 +162,6 @@ export const BulkAddStudentsDialog: React.FC<BulkAddStudentsDialogProps> = ({ op
         const student = validationResult.data;
         let hasError = false;
         
-        if (existingUsernames.has(student.username) || fileUsernames.has(student.username)) {
-          newErrors.push(`Row ${index + 2}: Username '${student.username}' already exists.`);
-          hasError = true;
-        }
         if (existingRegNos.has(student.registerNumber) || fileRegNos.has(student.registerNumber)) {
           newErrors.push(`Row ${index + 2}: Register Number '${student.registerNumber}' already exists.`);
           hasError = true;
@@ -173,7 +169,6 @@ export const BulkAddStudentsDialog: React.FC<BulkAddStudentsDialogProps> = ({ op
         
         if (!hasError) {
           newValidStudents.push(student);
-          fileUsernames.add(student.username);
           fileRegNos.add(student.registerNumber);
         }
       } else {
@@ -305,12 +300,12 @@ export const BulkAddStudentsDialog: React.FC<BulkAddStudentsDialogProps> = ({ op
   };
 
   const handleDownloadFormat = (format: 'xlsx' | 'csv' | 'json') => {
-    const headers = ['name', 'registerNumber', 'tutorName', 'batch', 'semester', 'username', 'password', 'profilePhoto'];
+    const headers = ['name', 'registerNumber', 'tutorName', 'batch', 'semester', 'email', 'mobile', 'password'];
     // Use current active semesters for the example data
     const batch2024Semester = getCurrentActiveSemester('2024');
     const batch2025Semester = getCurrentActiveSemester('2025');
-    const exampleRow1 = ['John Doe', 'S101', 'Dr. Smith', '2024', String(batch2024Semester), 'john.d', 'password123', 'https://github.com/shadcn.png'];
-    const exampleRow2 = ['Jane Smith', 'S102', 'Dr. Brown', '2025', String(batch2025Semester), 'jane.s', 'password456', ''];
+    const exampleRow1 = ['John Doe', 'S101', 'Dr. Smith', '2024', String(batch2024Semester), 'john.doe@example.com', '9876543210', 'password123'];
+    const exampleRow2 = ['Jane Smith', 'S102', 'Dr. Brown', '2025', String(batch2025Semester), 'jane.smith@example.com', '9123456780', 'password456'];
     const dataRows = [headers].concat([exampleRow1, exampleRow2]);
 
     if (format === 'xlsx') {
@@ -332,11 +327,11 @@ export const BulkAddStudentsDialog: React.FC<BulkAddStudentsDialogProps> = ({ op
       const jsonObject = [
         {
           name: 'John Doe', registerNumber: 'S101', tutorName: 'Dr. Smith',
-          batch: '2024', semester: batch2024Semester, username: 'john.d', password: 'password123', profilePhoto: 'https://github.com/shadcn.png'
+          batch: '2024', semester: batch2024Semester, email: 'john.doe@example.com', mobile: '9876543210', password: 'password123'
         },
         {
           name: 'Jane Smith', registerNumber: 'S102', tutorName: 'Dr. Brown',
-          batch: '2025', semester: batch2025Semester, username: 'jane.s', password: 'password456', profilePhoto: ''
+          batch: '2025', semester: batch2025Semester, email: 'jane.smith@example.com', mobile: '9123456780', password: 'password456'
         }
       ];
       const jsonString = `data:text/json;charset=utf-8,${encodeURIComponent(JSON.stringify(jsonObject, null, 2))}`;
@@ -357,7 +352,7 @@ export const BulkAddStudentsDialog: React.FC<BulkAddStudentsDialogProps> = ({ op
           <DialogHeader>
             <DialogTitle>Bulk Add Students</DialogTitle>
           <DialogDescription>
-            Upload a CSV, XLSX, JSON, or ZIP file with student data. For ZIP files, include a data file (CSV/XLSX/JSON) and optional profile photos. The `profilePhoto` column can contain image URLs or filenames matching photos in the ZIP.
+            Upload a CSV, XLSX, or JSON file with student data. Please ensure the file includes all required fields: name, registerNumber, tutorName, batch, semester, email, mobile, and password.
             <Button variant="link" className="p-0 h-auto ml-1 text-blue-600" onClick={() => setIsDownloadDialogOpen(true)}>
               Download a template.
             </Button>

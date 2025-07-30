@@ -92,7 +92,19 @@ const AdminReportPage = () => {
             const leaveStart = parseISO(req.start_date);
             const leaveEnd = parseISO(req.end_date);
             
-            if (isWithinInterval(day, { start: leaveStart, end: leaveEnd })) {
+            // Normalize the day to start of day for consistent comparison
+            const dayStart = new Date(day);
+            dayStart.setHours(0, 0, 0, 0);
+            
+            // Normalize leave dates to start of day for consistent comparison
+            const leaveStartNormalized = new Date(leaveStart);
+            leaveStartNormalized.setHours(0, 0, 0, 0);
+            
+            const leaveEndNormalized = new Date(leaveEnd);
+            leaveEndNormalized.setHours(23, 59, 59, 999); // End of the end date
+            
+            // Check if the current day falls within the leave period (inclusive)
+            if (dayStart >= leaveStartNormalized && dayStart <= leaveEndNormalized) {
               studentsOnLeave.add(req.student_id);
             }
           }

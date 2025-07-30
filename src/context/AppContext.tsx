@@ -74,7 +74,8 @@ export interface Student {
   batch: string;
   semester: number;
   leave_taken: number;
-  username: string;
+  email: string;
+  mobile: string;
   profile_photo?: string;
 }
 
@@ -144,9 +145,9 @@ export type NewStudentData = {
   tutorName: string;
   batch: string;
   semester: number;
-  username: string;
+  email: string;
+  mobile: string;
   password?: string;
-  profilePhoto?: string;
 };
 
 // --- CONTEXT DEFINITION ---
@@ -182,6 +183,8 @@ interface IAppContext {
   uploadODCertificate: (id: string, certificateUrl: string) => Promise<void>;
   verifyODCertificate: (id: string, isApproved: boolean) => Promise<void>;
   handleOverdueCertificates: () => Promise<void>;
+  uploadProfilePhoto: (file: File) => Promise<string>;
+  removeProfilePhoto: () => Promise<void>;
   refreshData: () => Promise<void>;
 }
 
@@ -494,9 +497,67 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
           'Content-Type': 'multipart/form-data',
         },
       });
+      
+      // Get updated profile from backend to reflect the change
+      try {
+        const profileResponse = await apiClient.get('/profile');
+        const updatedProfile = profileResponse.data;
+        setProfile(updatedProfile);
+        
+        // Manually update currentUser or currentTutor to reflect the new profile photo immediately
+        const updatedRole = updatedProfile.is_admin ? 'Admin' : updatedProfile.is_tutor ? 'Tutor' : 'Student';
+        if (updatedRole === 'Student' && currentUser) {
+          setCurrentUser(prev => prev ? { ...prev, profile_photo: updatedProfile.profile_photo } : null);
+        } else if ((updatedRole === 'Admin' || updatedRole === 'Tutor') && currentTutor) {
+          setCurrentTutor(prev => prev ? { ...prev, profile_photo: updatedProfile.profile_photo } : null);
+        }
+        
+        // Use silent polling to refresh data without clearing existing data
+        await pollData(updatedProfile, true);
+      } catch (profileError) {
+        console.error('Failed to refresh profile after upload:', profileError);
+        // Still try to refresh with current profile if available
+        if (profile) {
+          await pollData(profile, true);
+        }
+      }
+      
       return response.data.filePath;
     } catch (error: any) {
       throw new Error(error.response?.data?.error || 'Failed to upload photo');
+    }
+  };
+
+  // Utility function to remove profile photo
+  const removeProfilePhoto = async (): Promise<void> => {
+    try {
+      await apiClient.delete('/upload/profile-photo');
+      
+      // Get updated profile from backend to reflect the change
+      try {
+        const profileResponse = await apiClient.get('/profile');
+        const updatedProfile = profileResponse.data;
+        setProfile(updatedProfile);
+        
+        // Manually update currentUser or currentTutor to reflect the new profile photo immediately
+        const updatedRole = updatedProfile.is_admin ? 'Admin' : updatedProfile.is_tutor ? 'Tutor' : 'Student';
+        if (updatedRole === 'Student' && currentUser) {
+          setCurrentUser(prev => prev ? { ...prev, profile_photo: updatedProfile.profile_photo } : null);
+        } else if ((updatedRole === 'Admin' || updatedRole === 'Tutor') && currentTutor) {
+          setCurrentTutor(prev => prev ? { ...prev, profile_photo: updatedProfile.profile_photo } : null);
+        }
+
+        // Use silent polling to refresh data without clearing existing data
+        await pollData(updatedProfile, true);
+      } catch (profileError) {
+        console.error('Failed to refresh profile after removal:', profileError);
+        // Still try to refresh with current profile if available
+        if (profile) {
+          await pollData(profile, true);
+        }
+      }
+    } catch (error: any) {
+      throw new Error(error.response?.data?.error || 'Failed to remove profile photo');
     }
   };
 
@@ -544,15 +605,14 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
     try {
       const payload = {
-        email: `${studentData.username}@college.portal`,
+        email: studentData.email,
         password: studentData.password,
         name: studentData.name,
         registerNumber: studentData.registerNumber,
         tutorId: tutor.id,
         batch: studentData.batch,
         semester: studentData.semester,
-        username: studentData.username,
-        profilePhoto: studentData.profilePhoto,
+        mobile: studentData.mobile,
       };
 
       console.log('Adding student with payload:', payload);
@@ -633,10 +693,11 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
         try {
           // Validate required fields
-          if (!student.name || !student.username || !student.password || !student.registerNumber || !student.tutorName || !student.batch || !student.semester) {
+          if (!student.name || !student.email || !student.mobile || !student.password || !student.registerNumber || !student.tutorName || !student.batch || !student.semester) {
             const missingFields = [];
             if (!student.name) missingFields.push('name');
-            if (!student.username) missingFields.push('username');
+            if (!student.email) missingFields.push('email');
+            if (!student.mobile) missingFields.push('mobile');
             if (!student.password) missingFields.push('password');
             if (!student.registerNumber) missingFields.push('registerNumber');
             if (!student.tutorName) missingFields.push('tutorName');
@@ -659,14 +720,14 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             continue;
           }
 
-          // Check for duplicate username/register number
-          const existingByUsername = students.find(existing => existing.username === student.username);
+          // Check for duplicate email/register number
+          const existingByEmail = students.find(existing => existing.email === student.email);
           const existingByRegNum = students.find(existing => existing.register_number === student.registerNumber);
           
-          if (existingByUsername) {
-            const error = `Student ${student.name}: Username '${student.username}' already exists (used by ${existingByUsername.name})`;
+          if (existingByEmail) {
+            const error = `Student ${student.name}: Email '${student.email}' already exists (used by ${existingByEmail.name})`;
             errors.push(error);
-            detailedErrors.push({ student, error: 'Duplicate username', details: { existingStudent: existingByUsername } });
+            detailedErrors.push({ student, error: 'Duplicate email', details: { existingStudent: existingByEmail } });
             continue;
           }
           
@@ -679,15 +740,14 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
           // Prepare payload
           const payload = {
-            email: `${student.username}@college.portal`,
+            email: student.email,
             password: student.password,
             name: student.name,
             registerNumber: student.registerNumber,
             tutorId: tutor.id,
             batch: student.batch,
             semester: student.semester,
-            username: student.username,
-            profilePhoto: student.profilePhoto || '',
+            mobile: student.mobile,
           };
 
           console.log('Sending payload for student', student.name, ':', payload);
@@ -1013,6 +1073,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     addLeaveRequest, updateLeaveRequestStatus, requestLeaveCancellation, approveRejectLeaveCancellation,
     addODRequest, updateODRequestStatus, requestODCancellation, approveRejectODCancellation,
     getTutors, uploadODCertificate, verifyODCertificate, handleOverdueCertificates,
+    uploadProfilePhoto, removeProfilePhoto,
     refreshData,
   };
 

@@ -9,13 +9,27 @@ export interface SemesterDates {
   endDate: Date | undefined;
 }
 
+export interface Batch {
+  id: string;
+  startYear: number;
+  endYear: number;
+  name: string;
+  isActive: boolean;
+}
+
 interface BatchContextType {
   semesterDates: SemesterDates[];
   setSemesterDates: React.Dispatch<React.SetStateAction<SemesterDates[]>>;
+  batches: Batch[];
+  setBatches: React.Dispatch<React.SetStateAction<Batch[]>>;
   getSemesterDateRange: (batch: string, semester: number) => { start: Date; end: Date } | null;
   getCurrentActiveSemester: (batch: string) => number;
   isDateWithinSemester: (date: Date, batch: string, semester: number) => boolean;
   saveSemesterDates: () => Promise<void>;
+  createBatch: (startYear: number) => Promise<void>;
+  updateBatch: (batchId: string, updates: Partial<Batch>) => Promise<void>;
+  deleteBatch: (batchId: string) => Promise<void>;
+  getAvailableBatches: () => Batch[];
 }
 
 const BatchContext = createContext<BatchContextType | undefined>(undefined);
@@ -30,14 +44,15 @@ export const useBatchContext = () => {
 
 export const BatchProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [semesterDates, setSemesterDates] = useState<SemesterDates[]>([]);
+  const [batches, setBatches] = useState<Batch[]>([]);
 
-  // Load semester dates from localStorage on mount
+  // Load data from localStorage on mount
   useEffect(() => {
+    // Load semester dates
     const savedDates = localStorage.getItem('batchSemesterDates');
     if (savedDates) {
       try {
         const parsed = JSON.parse(savedDates);
-        // Convert date strings back to Date objects
         const datesWithDateObjects = parsed.map((item: any) => ({
           ...item,
           startDate: item.startDate ? new Date(item.startDate) : undefined,
@@ -48,7 +63,70 @@ export const BatchProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         console.error('Error loading semester dates:', error);
       }
     }
+
+    // Load batches
+    const savedBatches = localStorage.getItem('batches');
+    if (savedBatches) {
+      try {
+        setBatches(JSON.parse(savedBatches));
+      } catch (error) {
+        console.error('Error loading batches:', error);
+      }
+    } else {
+      // Initialize with default batches if none are saved
+      const currentYear = new Date().getFullYear();
+      const defaultBatches: Batch[] = [];
+      for (let year = 2024; year <= currentYear -1; year++) {
+        defaultBatches.push({
+          id: year.toString(),
+          startYear: year,
+          endYear: year + 4,
+          name: `${year}-${year + 4}`,
+          isActive: true,
+        });
+      }
+      setBatches(defaultBatches.sort((a, b) => b.startYear - a.startYear));
+    }
   }, []);
+
+  // Function to save batches to localStorage
+  const saveBatches = async (updatedBatches: Batch[]) => {
+    try {
+      localStorage.setItem('batches', JSON.stringify(updatedBatches));
+      setBatches(updatedBatches);
+    } catch (error) {
+      console.error('Error saving batches:', error);
+      throw error;
+    }
+  };
+
+  // CRUD operations for batches
+  const createBatch = async (startYear: number) => {
+    const newBatch: Batch = {
+      id: startYear.toString(),
+      startYear,
+      endYear: startYear + 4,
+      name: `${startYear}-${startYear + 4}`,
+      isActive: true,
+    };
+    const updatedBatches = [...batches, newBatch].sort((a, b) => b.startYear - a.startYear);
+    await saveBatches(updatedBatches);
+  };
+
+  const updateBatch = async (batchId: string, updates: Partial<Batch>) => {
+    const updatedBatches = batches.map(b => b.id === batchId ? { ...b, ...updates } : b);
+    await saveBatches(updatedBatches);
+  };
+
+  const deleteBatch = async (batchId: string) => {
+    const updatedBatches = batches.filter(b => b.id !== batchId);
+    await saveBatches(updatedBatches);
+  };
+
+  const getAvailableBatches = () => {
+    return batches.filter(b => b.isActive);
+  };
+
 
   const getSemesterDateRange = (batch: string, semester: number) => {
     const semesterData = semesterDates.find(s => s.batch === batch && s.semester === semester);
@@ -157,10 +235,16 @@ export const BatchProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const value = {
     semesterDates,
     setSemesterDates,
+    batches,
+    setBatches,
     getSemesterDateRange,
     getCurrentActiveSemester,
     isDateWithinSemester,
     saveSemesterDates,
+    createBatch,
+    updateBatch,
+    deleteBatch,
+    getAvailableBatches,
   };
 
   return (

@@ -2,8 +2,8 @@ import React from 'react';
 import Layout from '@/components/Layout';
 import { useAppContext } from '@/context/AppContext';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { UserCircle } from 'lucide-react';
+import ProfilePictureUpload from '@/components/ProfilePictureUpload';
 
 const ProfilePage = () => {
   const { currentUser, staff, user } = useAppContext();
@@ -25,12 +25,17 @@ const ProfilePage = () => {
       <Card className="w-full max-w-4xl mx-auto">
         <CardHeader>
           <div className="flex items-center gap-4">
-            <Avatar className="h-20 w-20 border-2 border-primary">
-              <AvatarImage src={currentUser.profile_photo} alt={currentUser.name} />
-              <AvatarFallback className="text-3xl">
-                <UserCircle className="h-12 w-12" />
-              </AvatarFallback>
-            </Avatar>
+            <ProfilePictureUpload
+              currentImageSrc={currentUser.profile_photo}
+              fallbackIcon={<UserCircle className="h-12 w-12" />}
+              altText={currentUser.name}
+              className="h-20 w-20 border-2 border-primary"
+              onUploadSuccess={(imageUrl) => {
+                // The upload is handled by the component
+                // The profile will be refreshed automatically through the context
+                console.log('Profile picture uploaded:', imageUrl);
+              }}
+            />
             <div>
               <CardTitle className="text-3xl font-bold">{currentUser.name}</CardTitle>
               <CardDescription className="text-md">Student Profile Details</CardDescription>
@@ -44,16 +49,20 @@ const ProfilePage = () => {
               <p className="font-medium text-base">{currentUser.register_number}</p>
             </div>
             <div className="flex flex-col space-y-1">
-              <span className="font-semibold text-muted-foreground">Year</span>
-              <p className="font-medium text-base">{currentUser.year}</p>
+              <span className="font-semibold text-muted-foreground">Batch</span>
+              <p className="font-medium text-base">{currentUser.batch}</p>
+            </div>
+            <div className="flex flex-col space-y-1">
+              <span className="font-semibold text-muted-foreground">Semester</span>
+              <p className="font-medium text-base">{currentUser.semester}</p>
             </div>
             <div className="flex flex-col space-y-1">
               <span className="font-semibold text-muted-foreground">Email</span>
-              <p className="font-medium text-base">{user?.email}</p>
+              <p className="font-medium text-base">{currentUser.email}</p>
             </div>
             <div className="flex flex-col space-y-1">
-              <span className="font-semibold text-muted-foreground">Username</span>
-              <p className="font-medium text-base">{currentUser.username}</p>
+              <span className="font-semibold text-muted-foreground">Mobile</span>
+              <p className="font-medium text-base">{currentUser.mobile}</p>
             </div>
             <div className="flex flex-col space-y-1">
               <span className="font-semibold text-muted-foreground">Tutor</span>

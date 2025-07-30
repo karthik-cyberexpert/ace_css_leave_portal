@@ -33,8 +33,8 @@ const TutorStudentManagementPage = () => {
         tutor_id: currentTutor.id, // Always use currentTutor's ID
         batch: data.batch,
         semester: data.semester,
-        username: data.username,
-        profile_photo: data.profilePhoto, // Ensure profile_photo is passed
+        email: data.email,
+        mobile: data.mobile,
       };
       try {
         // Password update logic not handled by updateStudent in AppContext

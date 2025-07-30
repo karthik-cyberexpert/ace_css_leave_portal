@@ -7,9 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogC
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { Eye, EyeOff, UserPlus } from 'lucide-react';
+import { Eye, EyeOff } from 'lucide-react';
 import { Student, Staff } from '@/context/AppContext'; // Import Staff type
 import { useBatchContext } from '@/context/BatchContext';
 
@@ -19,9 +17,9 @@ const studentFormSchema = (isEditing: boolean) => z.object({
   tutorName: z.string({ required_error: "Please select a tutor." }),
   batch: z.string({ required_error: "Please select a batch." }),
   semester: z.number({ required_error: "Please select a semester." }).min(1).max(8),
-  username: z.string().min(3, "Username must be at least 3 characters."),
+  email: z.string().email("Invalid email address."),
+  mobile: z.string().regex(/^(\+91)?[6-9]\d{9}$/, "Invalid Indian mobile number."),
   password: z.string().min(6, "Password must be at least 6 characters.").optional().or(z.literal('')),
-  profilePhoto: z.string().url("Please enter a valid URL.").optional().or(z.literal('')),
 }).refine((data) => isEditing || (data.password && data.password.length > 0), {
   message: "Password is required for new students.",
   path: ["password"],
@@ -49,19 +47,18 @@ export const StudentFormDialog: React.FC<StudentFormDialogProps> = ({
   isTutorView = false,
 }) => {
   const [showPassword, setShowPassword] = useState(false);
-  const [photoInputMode, setPhotoInputMode] = useState<'url' | 'upload'>('url');
   const { getCurrentActiveSemester } = useBatchContext();
 
   const form = useForm<StudentFormValues>({
     resolver: zodResolver(studentFormSchema(!!editingStudent)),
-    defaultValues: { name: '', registerNumber: '', tutorName: '', batch: '', semester: 1, username: '', password: '', profilePhoto: '' },
+    defaultValues: { name: '', registerNumber: '', tutorName: '', batch: '', semester: 1, email: '', mobile: '', password: '' },
   });
 
   // Function to handle batch change and auto-set semester
   const handleBatchChange = (selectedBatch: string) => {
     form.setValue('batch', selectedBatch);
     // Auto-fetch the current active semester for the selected batch
-    if (selectedBatch && !editingStudent) {
+    if (selectedBatch) {
       const defaultSemester = getCurrentActiveSemester(selectedBatch);
       form.setValue('semester', defaultSemester);
     }
@@ -73,12 +70,15 @@ export const StudentFormDialog: React.FC<StudentFormDialogProps> = ({
         // Find tutor name from tutor_id
         const currentTutorName = staffMembers.find(t => t.id === editingStudent.tutor_id)?.name || '';
         form.reset({ 
-          ...editingStudent, 
+          name: editingStudent.name,
+          registerNumber: editingStudent.register_number, // Fix property name mismatch
           tutorName: currentTutorName, // Set tutorName for the form
+          batch: editingStudent.batch,
+          semester: editingStudent.semester,
+          email: editingStudent.email,
+          mobile: editingStudent.mobile,
           password: '', 
-          profilePhoto: editingStudent.profile_photo || '' // Use profile_photo from Student
         });
-        setPhotoInputMode(editingStudent.profile_photo?.startsWith('blob:') ? 'upload' : 'url'); // Use profile_photo
       } else {
         const defaultTutorName = isTutorView && staffMembers.length > 0 
           ? staffMembers.filter(s => s.is_tutor)[0]?.name || '' 
@@ -89,27 +89,16 @@ export const StudentFormDialog: React.FC<StudentFormDialogProps> = ({
           tutorName: defaultTutorName, 
           batch: '', 
           semester: 1, 
-          username: '', 
+          email: '', 
+          mobile: '', 
           password: '', 
-          profilePhoto: '' 
         });
-        setPhotoInputMode('url');
       }
     }
   }, [editingStudent, open, form, isTutorView, staffMembers]); // Add staffMembers to dependency array
 
-  const handleDialogChange = (isOpen: boolean) => {
-    if (!isOpen) {
-      const photoUrl = form.getValues('profilePhoto');
-      if (photoUrl && photoUrl.startsWith('blob:')) {
-        URL.revokeObjectURL(photoUrl);
-      }
-    }
-    onOpenChange(isOpen);
-  };
-
   return (
-    <Dialog open={open} onOpenChange={handleDialogChange}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{editingStudent ? 'Edit Student' : 'Add New Student'}</DialogTitle>
@@ -123,59 +112,6 @@ export const StudentFormDialog: React.FC<StudentFormDialogProps> = ({
                 <FormMessage />
               </FormItem>
             )} />
-            <FormField
-              control={form.control}
-              name="profilePhoto"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Profile Photo</FormLabel>
-                  <ToggleGroup
-                    type="single"
-                    value={photoInputMode}
-                    onValueChange={(value: 'url' | 'upload') => {
-                      if (value) {
-                        if (field.value?.startsWith('blob:')) URL.revokeObjectURL(field.value);
-                        field.onChange('');
-                        setPhotoInputMode(value);
-                      }
-                    }}
-                    className="mb-2"
-                  >
-                    <ToggleGroupItem value="url">URL</ToggleGroupItem>
-                    <ToggleGroupItem value="upload">Upload</ToggleGroupItem>
-                  </ToggleGroup>
-                  <div className="flex items-center gap-4">
-                    <div className="flex-1">
-                      {photoInputMode === 'url' ? (
-                        <FormControl>
-                          <Input placeholder="https://example.com/photo.png" {...field} />
-                        </FormControl>
-                      ) : (
-                        <FormControl>
-                          <Input
-                            type="file"
-                            accept="image/png, image/jpeg, image/gif"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (file) {
-                                if (field.value?.startsWith('blob:')) URL.revokeObjectURL(field.value);
-                                const newUrl = URL.createObjectURL(file);
-                                field.onChange(newUrl);
-                              }
-                            }}
-                          />
-                        </FormControl>
-                      )}
-                    </div>
-                    <Avatar>
-                      <AvatarImage src={field.value} />
-                      <AvatarFallback><UserPlus /></AvatarFallback>
-                    </Avatar>
-                  </div>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
             <FormField control={form.control} name="registerNumber" render={({ field }) => (
               <FormItem>
                 <FormLabel>Register Number</FormLabel>
@@ -223,13 +159,22 @@ export const StudentFormDialog: React.FC<StudentFormDialogProps> = ({
                 </FormItem>
               )} />
             </div>
-            <FormField control={form.control} name="username" render={({ field }) => (
-              <FormItem>
-                <FormLabel>Username</FormLabel>
-                <FormControl><Input placeholder="john.doe" {...field} /></FormControl>
-                <FormMessage />
-              </FormItem>
-            )} />
+            <div className="grid grid-cols-2 gap-4">
+              <FormField control={form.control} name="email" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Email</FormLabel>
+                  <FormControl><Input placeholder="john.doe@example.com" type="email" {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="mobile" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Mobile Number</FormLabel>
+                  <FormControl><Input placeholder="9876543210" {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+            </div>
             <FormField control={form.control} name="password" render={({ field }) => (
               <FormItem>
                 <FormLabel>Password</FormLabel>

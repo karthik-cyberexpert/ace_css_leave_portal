@@ -1,11 +1,11 @@
 import React from 'react';
 import { useAppContext } from '@/context/AppContext';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { UserCog, Shield, Users } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import AdminLayout from '@/components/AdminLayout';
 import TutorLayout from '@/components/TutorLayout';
+import ProfilePictureUpload from '@/components/ProfilePictureUpload';
 
 const StaffProfilePage = () => {
   const { profile, user, role, currentTutor, students } = useAppContext();
@@ -39,12 +39,17 @@ const StaffProfilePage = () => {
       <Card className="w-full max-w-4xl mx-auto">
         <CardHeader>
           <div className="flex items-center gap-4">
-            <Avatar className="h-20 w-20 border-2 border-primary">
-              <AvatarImage src={avatarSrc} alt={displayName} />
-              <AvatarFallback className="text-3xl">
-                {role === 'Admin' ? <Shield className="h-12 w-12" /> : <UserCog className="h-12 w-12" />}
-              </AvatarFallback>
-            </Avatar>
+            <ProfilePictureUpload
+              currentImageSrc={avatarSrc}
+              fallbackIcon={role === 'Admin' ? <Shield className="h-12 w-12" /> : <UserCog className="h-12 w-12" />}
+              altText={displayName}
+              className="h-20 w-20 border-2 border-primary"
+              onUploadSuccess={(imageUrl) => {
+                // The upload is handled by the component
+                // The profile will be refreshed automatically through the context
+                console.log('Profile picture uploaded:', imageUrl);
+              }}
+            />
             <div>
               <CardTitle className="text-3xl font-bold">{displayName}</CardTitle>
               <CardDescription className="text-md">{role} Profile Details</CardDescription>

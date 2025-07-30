@@ -116,7 +116,7 @@ const ODRequestPage = () => {
                       <DatePicker
                         date={field.value}
                         setDate={field.onChange}
-                        disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
+                        disabled={(date) => date <= new Date(new Date().setHours(0, 0, 0, 0))}
                       />
                       <FormMessage />
                     </FormItem>

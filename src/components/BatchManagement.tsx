@@ -5,9 +5,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { DatePicker } from '@/components/ui/datepicker';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { useAppContext } from '@/context/AppContext';
 import { addDays, isAfter, isSameDay } from 'date-fns';
 import { showSuccess, showError } from '@/utils/toast';
+import { Plus, Edit2, Trash2 } from 'lucide-react';
 
 interface Semester {
   id: string;
@@ -19,23 +23,19 @@ interface Semester {
 
 export const BatchManagement = () => {
   const { students } = useAppContext();
-  const { semesterDates, setSemesterDates, saveSemesterDates } = useBatchContext();
+  const { semesterDates, setSemesterDates, saveSemesterDates, batches, createBatch, updateBatch, deleteBatch } = useBatchContext();
   const [selectedSemesters, setSelectedSemesters] = useState<Record<string, number>>({});
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [newBatchYear, setNewBatchYear] = useState<string>('');
+  const [editingBatch, setEditingBatch] = useState<{ id: string; name: string } | null>(null);
 
-  const batches = useMemo(() => {
-    const currentYear = new Date().getFullYear();
-    const latestBatchYear = currentYear - 1;
-    const batchData: { batch: string, semesters: number[] }[] = [];
-
-    for (let year = 2024; year <= latestBatchYear; year++) {
-      // For any given batch, all 8 semesters should be available for selection.
-      const availableSemesters = [1, 2, 3, 4, 5, 6, 7, 8];
-      batchData.push({ batch: year.toString(), semesters: availableSemesters });
-    }
-
-    batchData.sort((a, b) => parseInt(b.batch) - parseInt(a.batch));
-    return batchData;
-  }, []);
+  const batchData = useMemo(() => {
+    return batches.filter(b => b.isActive).map(batch => ({
+      batch: batch.id,
+      semesters: [1, 2, 3, 4, 5, 6, 7, 8] as number[]
+    }));
+  }, [batches]);
 
   const handleSemesterChange = (batch: string, semester: number) => {
     setSelectedSemesters(prev => ({ ...prev, [batch]: semester }));

@@ -244,26 +244,26 @@ app.post('/upload/profile-photo', authenticateToken, upload.single('profilePhoto
 // Create a new student
 app.post('/students', authenticateToken, async (req, res) => {
   try {
-    const { email, password, name, registerNumber, tutorId, year, username, profilePhoto } = req.body;
+    const { email, password, name, registerNumber, tutorId, batch, semester, mobile } = req.body;
     const id = uuidv4();
     const passwordHash = await bcrypt.hash(password, 10);
 
     // Insert into users table first
     await query(
-      'INSERT INTO users (id, email, password_hash, first_name, last_name, profile_photo) VALUES (?, ?, ?, ?, ?, ?)',
-      [id, email, passwordHash, name.split(' ')[0], name.split(' ').slice(1).join(' '), profilePhoto]
+      'INSERT INTO users (id, email, password_hash, first_name, last_name) VALUES (?, ?, ?, ?, ?)',
+      [id, email, passwordHash, name.split(' ')[0], name.split(' ').slice(1).join(' ')]
     );
 
     // Insert into students table
     await query(
-      'INSERT INTO students (id, name, register_number, tutor_id, year, username, profile_photo) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [id, name, registerNumber, tutorId, year, username, profilePhoto]
+      'INSERT INTO students (id, name, register_number, tutor_id, batch, semester, email, mobile) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [id, name, registerNumber, tutorId, batch, semester, email, mobile]
     );
 
     res.status(201).json({ message: 'Student created successfully', id });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Failed to create student' });
+    console.error('Error creating student:', error);
+    res.status(500).json({ error: 'Failed to create student', details: error.message });
   }
 });
 
@@ -791,17 +791,12 @@ app.post('/auth/login', async (req, res) => {
     if (identifier.includes('@')) {
       [user] = await query('SELECT * FROM users WHERE email = ?', [identifier]);
     } else {
-      // Check in staff table for username
+      // Check in staff table for username (staff still have usernames)
       const [staffMember] = await query('SELECT * FROM staff WHERE username = ?', [identifier]);
       if (staffMember) {
         [user] = await query('SELECT * FROM users WHERE id = ?', [staffMember.id]);
-      } else {
-        // Check in students table for username
-        const [student] = await query('SELECT * FROM students WHERE username = ?', [identifier]);
-        if (student) {
-          [user] = await query('SELECT * FROM users WHERE id = ?', [student.id]);
-        }
       }
+      // Students no longer have usernames, they must login with email
     }
     
     if (!user || !await bcrypt.compare(password, user.password_hash)) {
