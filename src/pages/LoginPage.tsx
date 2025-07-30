@@ -65,11 +65,11 @@ const LoginPage = () => {
   }, [profile, role, navigate, isLoading]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 p-4">
       <Card className="w-full max-w-md shadow-lg">
         <CardHeader className="text-center pb-6">
-          <CardTitle className="text-4xl font-extrabold text-gray-900">Leave Portal</CardTitle>
-          <CardDescription className="text-md text-gray-600 mt-2">Sign in to your account</CardDescription>
+          <CardTitle className="text-4xl font-extrabold text-gray-900 dark:text-gray-100">Leave Portal</CardTitle>
+          <CardDescription className="text-md text-gray-600 dark:text-gray-400 mt-2">Sign in to your account</CardDescription>
         </CardHeader>
         <CardContent>
           <Form {...form}>

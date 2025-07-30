@@ -253,8 +253,8 @@ const RequestStatusPage = () => {
                     )}
                     
                     {isPartialCancellation && cancelStartDate && cancelEndDate && (
-                      <div className="p-3 bg-blue-50 rounded-lg">
-                        <p className="text-sm text-blue-800">
+                      <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                        <p className="text-sm text-blue-800 dark:text-blue-300">
                           <strong>Days to cancel:</strong> {differenceInDays(new Date(cancelEndDate), new Date(cancelStartDate)) + 1} days
                           <br />
                           <strong>From:</strong> {format(new Date(cancelStartDate), 'MMMM d, yyyy')}

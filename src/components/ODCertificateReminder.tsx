@@ -21,9 +21,9 @@ const ODCertificateReminder = () => {
   }
 
   return (
-    <Card className="mb-6 border-yellow-400 bg-yellow-50">
+    <Card className="mb-6 border-yellow-400 bg-yellow-50 dark:bg-yellow-900/20 dark:border-yellow-600">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-yellow-800">
+        <CardTitle className="flex items-center gap-2 text-yellow-800 dark:text-yellow-300">
           <AlertTriangle />
           Action Required: Upload OD Certificates
         </CardTitle>
@@ -33,7 +33,7 @@ const ODCertificateReminder = () => {
           const deadline = parseISO(req.upload_deadline!);
           const daysRemaining = differenceInDays(deadline, new Date());
           return (
-            <Alert key={req.id} variant="default" className="bg-white">
+            <Alert key={req.id} variant="default" className="bg-white dark:bg-gray-800">
               <FileUp className="h-4 w-4" />
               <AlertTitle>OD for: {req.purpose}</AlertTitle>
               <AlertDescription className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mt-2">

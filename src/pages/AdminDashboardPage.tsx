@@ -36,8 +36,8 @@ const AdminDashboardPage = () => {
 
   return (
     <AdminLayout>
-      <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-6">Admin Dashboard</h1>
-      <p className="text-md md:text-lg text-gray-700 mb-8">
+      <h1 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-gray-100 mb-6">Admin Dashboard</h1>
+      <p className="text-md md:text-lg text-gray-700 dark:text-gray-300 mb-8">
         Oversee all portal activity and manage requests from a central hub.
       </p>
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">

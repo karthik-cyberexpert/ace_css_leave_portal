@@ -60,8 +60,8 @@ const DashboardPage = () => {
         <div className="flex items-center justify-center h-full">
           <div className="text-center">
             <p>Loading student data...</p>
-            <p className="text-sm text-gray-500 mt-2">Profile ID: {profile.id}</p>
-            <p className="text-sm text-gray-500">Role: {role}</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">Profile ID: {profile.id}</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Role: {role}</p>
           </div>
         </div>
       </Layout>
@@ -72,8 +72,8 @@ const DashboardPage = () => {
     <Layout>
       <Marquee text={warningMessage} className="mb-6 rounded-md" />
       <ODCertificateReminder />
-      <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-6">Dashboard Overview</h1>
-      <p className="text-md md:text-lg text-gray-700 mb-8">
+      <h1 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-gray-100 mb-6">Dashboard Overview</h1>
+      <p className="text-md md:text-lg text-gray-700 dark:text-gray-300 mb-8">
         Welcome to your college portal dashboard. Here you can manage your requests and view important information.
       </p>
       <div className="grid gap-6">

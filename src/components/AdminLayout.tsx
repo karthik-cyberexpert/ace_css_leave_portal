@@ -37,7 +37,7 @@ const SidebarContent = ({ isMobile = false }: { isMobile?: boolean }) => {
           <AvatarImage src={avatarSrc} alt="Admin" />
           <AvatarFallback><Shield className="h-6 w-6" /></AvatarFallback>
         </Avatar>
-        <span className="font-semibold text-lg text-gray-900">{displayName}</span>
+        <span className="font-semibold text-lg text-foreground">{displayName}</span>
       </Link>
       <Separator className="bg-sidebar-border mb-6" />
       <nav className="flex flex-col space-y-2">
@@ -67,12 +67,12 @@ const AdminLayout = ({ children }: { children: React.ReactNode }) => {
   const navigate = useNavigate();
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
+    <div className="flex min-h-screen bg-background">
       <aside className="w-64 bg-sidebar text-sidebar-foreground border-r border-sidebar-border p-4 flex-col shadow-lg hidden md:flex">
         <SidebarContent />
       </aside>
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="flex items-center justify-between bg-white border-b p-4 sticky top-0 z-10 h-16">
+        <header className="flex items-center justify-between bg-background border-b border-border p-4 sticky top-0 z-10 h-16">
           {/* Mobile menu */}
           <div className="md:hidden">
             <Sheet>

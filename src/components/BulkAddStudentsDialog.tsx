@@ -44,33 +44,70 @@ export const BulkAddStudentsDialog: React.FC<BulkAddStudentsDialogProps> = ({ op
   const [processingStatus, setProcessingStatus] = useState<string>('');
 
   const resetState = useCallback(() => {
+    console.log('Resetting component state');
     setFile(null);
     setIsProcessing(false);
+    setIsImporting(false);
     setValidStudents([]);
     setErrors([]);
     setProcessingStatus('');
+    
+    // Force reset the file input
     const fileInput = document.getElementById('bulk-student-upload') as HTMLInputElement;
     if (fileInput) {
       fileInput.value = '';
+      fileInput.files = null;
+      console.log('File input reset');
     }
   }, []);
 
   useEffect(() => {
     if (!open) {
       resetState();
+    } else {
+      // Debug: Check browser compatibility when dialog opens
+      console.log('Dialog opened, checking browser compatibility:');
+      console.log('FileReader support:', typeof FileReader !== 'undefined');
+      console.log('File API support:', !!(window.File && window.FileReader && window.FileList && window.Blob));
+      console.log('User agent:', navigator.userAgent);
     }
   }, [open, resetState]);
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    resetState();
+    console.log('File change event triggered', event.target.files);
+    console.log('Event target value:', event.target.value);
+    
+    // Clear previous state but don't reset the file input
+    setIsProcessing(false);
+    setIsImporting(false);
+    setValidStudents([]);
+    setErrors([]);
+    setProcessingStatus('');
+    
     const selectedFile = event.target.files?.[0];
+    console.log('Selected file:', selectedFile);
+    
     if (selectedFile) {
       const fileExtension = selectedFile.name.split('.').pop()?.toLowerCase();
+      console.log('File extension:', fileExtension);
+      console.log('File name:', selectedFile.name);
+      console.log('File size:', selectedFile.size);
+      console.log('File type:', selectedFile.type);
+      
       if (fileExtension && ['csv', 'xlsx', 'json'].includes(fileExtension)) {
+        console.log('File accepted, setting file state');
         setFile(selectedFile);
+        setProcessingStatus(`File "${selectedFile.name}" selected successfully. Click "Process File" to continue.`);
       } else {
+        console.log('File rejected - invalid extension');
         showError("Invalid File Type. Please upload a CSV, XLSX, or JSON file.");
+        setErrors(["Invalid file type. Please select a CSV, XLSX, or JSON file."]);
+        setFile(null);
       }
+    } else {
+      console.log('No file selected');
+      setFile(null);
+      setProcessingStatus('');
     }
   };
 
@@ -320,21 +357,41 @@ export const BulkAddStudentsDialog: React.FC<BulkAddStudentsDialogProps> = ({ op
           </DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 py-4 items-center">
-            <Input id="bulk-student-upload" type="file" accept=".csv, .xlsx, .json" onChange={handleFileChange} className="md:col-span-2" />
+            <div className="md:col-span-2">
+              <Input 
+                id="bulk-student-upload" 
+                type="file" 
+                accept=".csv,.xlsx,.json" 
+                onChange={handleFileChange} 
+                className="w-full" 
+                onClick={(e) => {
+                  console.log('File input clicked');
+                  console.log('Current input value:', e.currentTarget.value);
+                  console.log('Current file state:', file?.name || 'No file in state');
+                }}
+              />
+              <div className="text-xs text-gray-500 mt-1">
+                Accepted formats: CSV, XLSX, JSON (Max size: 10MB)
+              </div>
+            </div>
             <Button onClick={handleProcessFile} disabled={!file || isProcessing}>
               {isProcessing ? 'Processing...' : 'Process File'}
             </Button>
           </div>
-          {file && (
-            <div className="text-sm text-gray-600 mb-4">
-              Selected file: <span className="font-medium">{file.name}</span> ({Math.round(file.size / 1024)} KB)
+          {file ? (
+            <div className="text-sm text-green-600 mb-4 bg-green-50 border border-green-200 rounded p-2">
+              ✅ Selected file: <span className="font-medium">{file.name}</span> ({file.size < 1024 ? `${file.size} bytes` : `${Math.round(file.size / 1024)} KB`})
+            </div>
+          ) : (
+            <div className="text-sm text-gray-500 mb-4">
+              No file selected. Please choose a CSV, XLSX, or JSON file.
             </div>
           )}
 
           {processingStatus && (
-            <div className="text-sm bg-blue-50 border border-blue-200 rounded p-3 mb-4">
-              <CheckCircle className="h-4 w-4 inline mr-2 text-blue-500" />
-              {processingStatus}
+            <div className="text-sm bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded p-3 mb-4">
+              <CheckCircle className="h-4 w-4 inline mr-2 text-blue-500 dark:text-blue-400" />
+              <span className="text-blue-700 dark:text-blue-300">{processingStatus}</span>
             </div>
           )}
 

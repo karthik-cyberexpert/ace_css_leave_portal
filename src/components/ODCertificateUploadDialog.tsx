@@ -55,7 +55,7 @@ export const ODCertificateUploadDialog = ({ open, onOpenChange, odRequest }: ODC
         <div className="space-y-4">
           <div>
             <Label className="text-sm font-medium">Request Details</Label>
-            <div className="bg-gray-50 p-3 rounded-md text-sm">
+            <div className="bg-gray-50 dark:bg-gray-800 p-3 rounded-md text-sm">
               <p><strong>Purpose:</strong> {odRequest.purpose}</p>
               <p><strong>Destination:</strong> {odRequest.destination}</p>
               <p><strong>Duration:</strong> {odRequest.start_date} to {odRequest.end_date}</p>
@@ -102,7 +102,7 @@ export const ODCertificateUploadDialog = ({ open, onOpenChange, odRequest }: ODC
                   onChange={handleFileUpload}
                 />
                 {certificateUrl && (
-                  <p className="text-sm text-green-600 mt-2 flex items-center gap-2">
+                  <p className="text-sm text-green-600 dark:text-green-400 mt-2 flex items-center gap-2">
                     <Eye size={14} />
                     File ready for upload
                   </p>
@@ -112,8 +112,8 @@ export const ODCertificateUploadDialog = ({ open, onOpenChange, odRequest }: ODC
           </div>
 
           {certificateUrl && (
-            <div className="bg-blue-50 p-3 rounded-md">
-              <p className="text-sm text-blue-800">
+            <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-md">
+              <p className="text-sm text-blue-800 dark:text-blue-300">
                 <strong>Note:</strong> Once uploaded, your certificate will be sent for verification. 
                 You'll be notified of the verification status.
               </p>
