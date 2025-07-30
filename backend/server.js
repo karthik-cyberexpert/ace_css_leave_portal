@@ -517,6 +517,8 @@ app.post('/od-requests', authenticateToken, async (req, res) => {
 });
 
 // Update OD request status
+// IMPORTANT: OD (Official Duty) requests do NOT affect student leave_taken count.
+// Only leave requests affect the leave_taken field in the students table.
 app.put('/od-requests/:id/status', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
@@ -546,6 +548,8 @@ app.put('/od-requests/:id/status', authenticateToken, async (req, res) => {
     updateQuery += ' WHERE id = ?';
     params.push(id);
     
+    // NOTE: We deliberately do NOT update student.leave_taken here because
+    // OD requests are separate from leave requests and should not count as leave days.
     await query(updateQuery, params);
     
     const [updatedRequest] = await query('SELECT * FROM od_requests WHERE id = ?', [id]);
@@ -631,18 +635,17 @@ async function processODCertificateReminders() {
        AND DATE_ADD(end_date, INTERVAL 3 DAY) < CURDATE()`
     );
     
-    // Auto-reject overdue requests
-    if (autoRejectCandidates.length > 0) {
-      await query(
-        `UPDATE od_requests 
-         SET status = 'Rejected', 
-             certificate_status = 'Rejected', 
-             cancel_reason = 'Certificate not submitted within 3 days after OD completion' 
-         WHERE status = 'Approved' 
-         AND certificate_status = 'Pending Upload' 
-         AND DATE_ADD(end_date, INTERVAL 3 DAY) < CURDATE()`
-      );
-    }
+      // Auto-reject overdue requests and reset leave taken if it was added for OD
+      for (const request of autoRejectCandidates) {
+        await query(
+          `UPDATE od_requests 
+           SET status = 'Rejected', 
+               certificate_status = 'Rejected', 
+               cancel_reason = 'Certificate not submitted within 3 days after OD completion' 
+           WHERE id = ?`,
+          [request.id]
+        );
+      }
     
     // 2. Find OD requests that need daily reminders (within the 3-day window)
     const reminderCandidates = await query(

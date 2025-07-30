@@ -1,9 +1,12 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import AdminLayout from '@/components/AdminLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import WeeklyLeaveChart from '@/components/WeeklyLeaveChart';
 import { useAppContext } from '@/context/AppContext';
-import { subWeeks, startOfWeek, endOfWeek, format, isWithinInterval, parseISO } from 'date-fns';
+import { subWeeks, startOfWeek, endOfWeek, format, isWithinInterval, parseISO, startOfMonth, endOfMonth, subMonths, eachWeekOfInterval, getWeeksInMonth, getWeekOfMonth } from 'date-fns';
+import { ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
 
 const AdminDashboardPage = () => {
   const { students, leaveRequests, odRequests } = useAppContext();
@@ -12,27 +15,84 @@ const AdminDashboardPage = () => {
   const pendingODs = odRequests.filter(r => r.status === 'Pending' || r.status === 'Forwarded').length;
   const totalStudents = students.length;
 
+  const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [selectedBatch, setSelectedBatch] = useState('all');
+
+  const handlePrevMonth = () => {
+    setCurrentMonth(prev => subMonths(prev, 1));
+  };
+
+  const handleNextMonth = () => {
+    setCurrentMonth(prev => subMonths(prev, -1));
+  };
+  
+  const isNextMonthDisabled = () => {
+    const today = new Date();
+    return currentMonth.getFullYear() === today.getFullYear() && currentMonth.getMonth() === today.getMonth();
+  };
+
   const weeklyLeaveData = useMemo(() => {
     const approvedLeaves = leaveRequests.filter(r => r.status === 'Approved');
-    const now = new Date();
-    const last4Weeks = Array.from({ length: 4 }, (_, i) => {
-      const weekStart = startOfWeek(subWeeks(now, i));
-      const weekEnd = endOfWeek(subWeeks(now, i));
-      return { start: weekStart, end: weekEnd };
-    }).reverse();
-
-    return last4Weeks.map((week, index) => {
-      const studentsOnLeave = new Set<string>();
-      approvedLeaves.forEach(leave => {
-        const leaveStart = parseISO(leave.start_date);
-        const leaveEnd = parseISO(leave.end_date);
-        if (isWithinInterval(leaveStart, { start: week.start, end: week.end }) || isWithinInterval(leaveEnd, { start: week.start, end: week.end })) {
-          studentsOnLeave.add(leave.student_id);
-        }
+    const monthStart = startOfMonth(currentMonth);
+    const monthEnd = endOfMonth(currentMonth);
+    const weeksInMonth = eachWeekOfInterval({ start: monthStart, end: monthEnd });
+    
+    if (selectedBatch === 'all') {
+      // Show all batches separately with different colors
+      const uniqueBatches = [...new Set(students.map(s => s.batch))].sort((a,b) => parseInt(b) - parseInt(a));
+      
+      return weeksInMonth.map((weekStart, index) => {
+        const weekEnd = endOfWeek(weekStart);
+        const weekData: any = { week: `Week ${index + 1}` };
+        
+        uniqueBatches.forEach(batch => {
+          const batchStudents = students.filter(s => s.batch === batch);
+          const batchStudentIds = new Set(batchStudents.map(s => s.id));
+          const studentsOnLeave = new Set<string>();
+          
+          approvedLeaves.forEach(leave => {
+            if (batchStudentIds.has(leave.student_id)) {
+              const leaveStart = parseISO(leave.start_date);
+              const leaveEnd = parseISO(leave.end_date);
+              if (isWithinInterval(leaveStart, { start: weekStart, end: weekEnd }) || isWithinInterval(leaveEnd, { start: weekStart, end: weekEnd })) {
+                studentsOnLeave.add(leave.student_id);
+              }
+            }
+          });
+          
+          weekData[`batch_${batch}`] = studentsOnLeave.size;
+        });
+        
+        return weekData;
       });
-      return { week: `W${index + 1}`, students: studentsOnLeave.size };
-    });
-  }, [leaveRequests]);
+    } else {
+      // Show single batch data
+      const studentsInBatch = students.filter(s => s.batch === selectedBatch);
+      const batchStudentIds = new Set(studentsInBatch.map(s => s.id));
+
+      return weeksInMonth.map((weekStart, index) => {
+        const weekEnd = endOfWeek(weekStart);
+        const studentsOnLeave = new Set<string>();
+        
+        approvedLeaves.forEach(leave => {
+          if (batchStudentIds.has(leave.student_id)) {
+            const leaveStart = parseISO(leave.start_date);
+            const leaveEnd = parseISO(leave.end_date);
+            if (isWithinInterval(leaveStart, { start: weekStart, end: weekEnd }) || isWithinInterval(leaveEnd, { start: weekStart, end: weekEnd })) {
+              studentsOnLeave.add(leave.student_id);
+            }
+          }
+        });
+        
+        return { week: `Week ${index + 1}`, students: studentsOnLeave.size };
+      });
+    }
+  }, [leaveRequests, students, currentMonth, selectedBatch]);
+
+  const batchOptions = useMemo(() => {
+    const uniqueBatches = [...new Set(students.map(s => s.batch))].sort((a,b) => parseInt(b) - parseInt(a));
+    return ['all', ...uniqueBatches];
+  }, [students]);
 
   return (
     <AdminLayout>
@@ -68,7 +128,16 @@ const AdminDashboardPage = () => {
             <p className="text-xs text-muted-foreground">currently enrolled</p>
           </CardContent>
         </Card>
-        <WeeklyLeaveChart data={weeklyLeaveData} />
+        <WeeklyLeaveChart 
+          data={weeklyLeaveData}
+          currentMonth={currentMonth}
+          selectedBatch={selectedBatch}
+          batchOptions={batchOptions}
+          onPrevMonth={handlePrevMonth}
+          onNextMonth={handleNextMonth}
+          onBatchChange={setSelectedBatch}
+          isNextMonthDisabled={isNextMonthDisabled()}
+        />
       </div>
     </AdminLayout>
   );
