@@ -5,11 +5,13 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import WeeklyLeaveChart from '@/components/WeeklyLeaveChart';
 import { useAppContext } from '@/context/AppContext';
+import { useBatchContext } from '@/context/BatchContext';
 import { subWeeks, startOfWeek, endOfWeek, format, isWithinInterval, parseISO, startOfMonth, endOfMonth, subMonths, eachWeekOfInterval, getWeeksInMonth, getWeekOfMonth } from 'date-fns';
 import { ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
 
 const AdminDashboardPage = () => {
   const { students, leaveRequests, odRequests } = useAppContext();
+  const { getAvailableBatches } = useBatchContext();
 
   const pendingLeaves = leaveRequests.filter(r => r.status === 'Pending' || r.status === 'Forwarded').length;
   const pendingODs = odRequests.filter(r => r.status === 'Pending' || r.status === 'Forwarded').length;
@@ -39,7 +41,7 @@ const AdminDashboardPage = () => {
     
     if (selectedBatch === 'all') {
       // Show all batches separately with different colors
-      const uniqueBatches = [...new Set(students.map(s => s.batch))].sort((a,b) => parseInt(b) - parseInt(a));
+      const uniqueBatches = getAvailableBatches().map(b => b.id).sort((a,b) => parseInt(b) - parseInt(a));
       
       return weeksInMonth.map((weekStart, index) => {
         const weekEnd = endOfWeek(weekStart);
@@ -87,12 +89,12 @@ const AdminDashboardPage = () => {
         return { week: `Week ${index + 1}`, students: studentsOnLeave.size };
       });
     }
-  }, [leaveRequests, students, currentMonth, selectedBatch]);
+  }, [leaveRequests, students, currentMonth, selectedBatch, getAvailableBatches]);
 
   const batchOptions = useMemo(() => {
-    const uniqueBatches = [...new Set(students.map(s => s.batch))].sort((a,b) => parseInt(b) - parseInt(a));
+    const uniqueBatches = getAvailableBatches().map(b => b.id).sort((a,b) => parseInt(b) - parseInt(a));
     return ['all', ...uniqueBatches];
-  }, [students]);
+  }, [getAvailableBatches]);
 
   return (
     <AdminLayout>

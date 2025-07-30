@@ -13,27 +13,14 @@ const AdminReportPage = () => {
   const [selectedBatch, setSelectedBatch] = useState<string>('all');
   const [selectedSemester, setSelectedSemester] = useState<string>('all');
 
-  const { getSemesterDateRange } = useBatchContext();
+  const { getSemesterDateRange, getAvailableBatches } = useBatchContext();
 
   const tutors = getTutors();
 
   const batches = useMemo(() => {
-    const currentYear = new Date().getFullYear();
-    // New batches are added based on the previous year.
-    // e.g., in 2027, the newest batch available for selection is 2026-2030.
-    const latestBatchYear = currentYear - 1;
-    
-    const batchYears = [];
-    // Generate batches from 2024 up to the latest batch year
-    for (let year = 2024; year <= latestBatchYear; year++) {
-      batchYears.push(year);
-    }
-    
-    // Sort in descending order (newest first)
-    batchYears.sort((a, b) => b - a);
-    
-    return ['all', ...batchYears];
-  }, []);
+    const availableBatches = getAvailableBatches().map(b => parseInt(b.id)).sort((a, b) => b - a);
+    return ['all', ...availableBatches];
+  }, [getAvailableBatches]);
 
   const semesters = useMemo(() => {
     if (selectedBatch === 'all') return ['all'];

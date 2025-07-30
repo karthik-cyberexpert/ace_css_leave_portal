@@ -7,10 +7,11 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Pencil } from 'lucide-react';
 import { StudentFormDialog, StudentFormValues } from '@/components/StudentFormDialog';
-import { showSuccess } from '@/utils/toast';
+import { useBatchContext } from '@/context/BatchContext';
 
 const TutorStudentManagementPage = () => {
   const { students, currentTutor, updateStudent, staff } = useAppContext();
+  const { getAvailableBatches } = useBatchContext();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
 
@@ -103,7 +104,7 @@ const TutorStudentManagementPage = () => {
         onSubmit={onSubmit}
         editingStudent={editingStudent}
         staffMembers={staff} // Pass full staff array
-        batches={['2024', '2025', '2026', '2027']}
+        batches={getAvailableBatches().map(b => b.id)}
         isTutorView={true}
       />
     </TutorLayout>

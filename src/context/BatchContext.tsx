@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { addDays, isAfter, isSameDay } from 'date-fns';
 
 export interface SemesterDates {
@@ -76,7 +76,9 @@ export const BatchProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       // Initialize with default batches if none are saved
       const currentYear = new Date().getFullYear();
       const defaultBatches: Batch[] = [];
-      for (let year = 2024; year <= currentYear -1; year++) {
+      // Create batches for the current year and the 3 previous years
+      for (let i = 0; i < 4; i++) {
+        const year = currentYear - i;
         defaultBatches.push({
           id: year.toString(),
           startYear: year,
@@ -123,9 +125,9 @@ export const BatchProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     await saveBatches(updatedBatches);
   };
 
-  const getAvailableBatches = () => {
+  const getAvailableBatches = useCallback(() => {
     return batches.filter(b => b.isActive);
-  };
+  }, [batches]);
 
 
   const getSemesterDateRange = (batch: string, semester: number) => {

@@ -9,16 +9,17 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { BulkAddStudentsDialog } from '@/components/BulkAddStudentsDialog';
 import { useAppContext, Student, NewStudentData } from '@/context/AppContext';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { useBatchContext } from '@/context/BatchContext';
 import { StudentFormDialog, StudentFormValues } from '@/components/StudentFormDialog';
 
 const AdminStudentManagementPage = () => {
   const { students, addStudent, updateStudent, deleteStudent, bulkAddStudents, staff } = useAppContext();
+  const { getAvailableBatches } = useBatchContext();
   const [studentToDelete, setStudentToDelete] = useState<string | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [isBulkAddOpen, setIsBulkAddOpen] = useState(false);
 
-  const batches = ['2024', '2025', '2026', '2027'];
 
   const handleAddNew = () => {
     setEditingStudent(null);
@@ -141,7 +142,7 @@ const AdminStudentManagementPage = () => {
         onSubmit={onSubmit}
         editingStudent={editingStudent}
         staffMembers={staff} // Pass full staff array
-        batches={batches}
+        batches={getAvailableBatches().map(b => b.id)}
       />
 
       <AlertDialog open={!!studentToDelete} onOpenChange={() => setStudentToDelete(null)}>
