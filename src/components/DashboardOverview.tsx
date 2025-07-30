@@ -1,16 +1,33 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { CalendarCheck, CalendarDays } from 'lucide-react';
 import { useAppContext } from '@/context/AppContext';
+import { useBatchContext } from '@/context/BatchContext';
+import { calculateWorkingDaysFromSemesterStart } from '@/utils/dateUtils';
 
 const DashboardOverview = () => {
   const { leaveRequests, currentUser } = useAppContext();
+  const { getSemesterDateRange, getCurrentActiveSemester } = useBatchContext();
   
   const leavesTaken = currentUser.leave_taken;
   
   const leavesApplied = leaveRequests.filter(r => 
     r.student_id === currentUser.id && (r.status === 'Pending' || r.status === 'Forwarded')
   ).length;
+
+  // Calculate total working days from semester start to current date
+  const totalWorkingDays = useMemo(() => {
+    if (!currentUser?.batch || !currentUser?.semester) {
+      return 0;
+    }
+
+    const semesterRange = getSemesterDateRange(currentUser.batch, currentUser.semester);
+    if (!semesterRange?.start) {
+      return 0;
+    }
+
+    return calculateWorkingDaysFromSemesterStart(semesterRange.start);
+  }, [currentUser?.batch, currentUser?.semester, getSemesterDateRange]);
 
   return (
     <div className="grid gap-6 md:grid-cols-2">
@@ -21,7 +38,9 @@ const DashboardOverview = () => {
         </CardHeader>
         <CardContent>
           <div className="text-2xl font-bold">{leavesTaken}</div>
-          <p className="text-xs text-muted-foreground">out of 20 allowed</p>
+          <p className="text-xs text-muted-foreground">
+            out of {totalWorkingDays > 0 ? totalWorkingDays : '0'} days
+          </p>
         </CardContent>
       </Card>
 

@@ -81,7 +81,7 @@ const LoginPage = () => {
                   <FormItem>
                     <FormLabel>Email or Username</FormLabel>
                     <FormControl>
-                      <Input placeholder="john.doe or john@example.com" {...field} />
+                      <Input placeholder="Email Address or Username" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -97,7 +97,7 @@ const LoginPage = () => {
                       <FormControl>
                         <Input
                           type={showPassword ? 'text' : 'password'}
-                          placeholder="••••••••"
+                          placeholder="Password"
                           {...field}
                         />
                       </FormControl>

@@ -71,23 +71,28 @@ const WeeklyLeaveChart = ({
             </CardTitle>
             <CardDescription>
               Weekly breakdown for {format(currentMonth, 'MMMM yyyy')} - 
-              {selectedBatch === 'all' ? 'All Batches' : `Batch ${selectedBatch}-${parseInt(selectedBatch) + 4}`}
+              {batchOptions.length > 0 ? 
+                (selectedBatch === 'all' ? 'All Batches' : `Batch ${selectedBatch}-${parseInt(selectedBatch) + 4}`) : 
+                `Batch ${selectedBatch}-${parseInt(selectedBatch) + 4}`
+              }
             </CardDescription>
           </div>
           <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-            {/* Batch Selector */}
-            <Select value={selectedBatch} onValueChange={onBatchChange}>
-              <SelectTrigger className="w-full sm:w-[180px]">
-                <SelectValue placeholder="Select Batch" />
-              </SelectTrigger>
-              <SelectContent>
-                {batchOptions.map(batch => (
-                  <SelectItem key={batch} value={batch}>
-                    {batch === 'all' ? 'All Batches' : `Batch ${batch}-${parseInt(batch) + 4}`}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {/* Batch Selector - only show if there are batch options */}
+            {batchOptions.length > 0 && (
+              <Select value={selectedBatch} onValueChange={onBatchChange}>
+                <SelectTrigger className="w-full sm:w-[180px]">
+                  <SelectValue placeholder="Select Batch" />
+                </SelectTrigger>
+                <SelectContent>
+                  {batchOptions.map(batch => (
+                    <SelectItem key={batch} value={batch}>
+                      {batch === 'all' ? 'All Batches' : `Batch ${batch}-${parseInt(batch) + 4}`}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
             
             {/* Month Navigation */}
             <div className="flex items-center gap-1">

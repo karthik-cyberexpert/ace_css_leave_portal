@@ -63,8 +63,8 @@ export const DailyLeaveChart = ({ data, title }: DailyLeaveChartProps) => {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <ScrollArea className="w-full whitespace-nowrap rounded-md border">
-          <div style={{ width: `${chartWidth}px`, padding: '10px' }}>
+        <div className="w-full overflow-x-auto rounded-md border">
+          <div style={{ width: `${chartWidth}px`, padding: '10px', minWidth: '100%' }}>
             <ResponsiveContainer width="100%" height={450}>
               <BarChart 
                 data={safeData} 
@@ -163,7 +163,7 @@ export const DailyLeaveChart = ({ data, title }: DailyLeaveChartProps) => {
               </BarChart>
             </ResponsiveContainer>
           </div>
-        </ScrollArea>
+        </div>
         {safeData.length === 0 && (
           <div className="text-center py-8 text-muted-foreground">
             No data available for the selected period.

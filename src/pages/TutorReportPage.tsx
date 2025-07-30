@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import TutorLayout from '@/components/TutorLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import {
@@ -9,12 +9,18 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Users, CalendarOff, BarChart2 } from 'lucide-react';
 import MonthlyLeaveChart from '@/components/MonthlyLeaveChart';
+import { DailyLeaveChart } from '@/components/DailyLeaveChart';
 import { useAppContext } from '@/context/AppContext';
+import { useBatchContext } from '@/context/BatchContext';
+import { eachDayOfInterval, format, parseISO } from 'date-fns';
 
 const TutorReportPage = () => {
   const { students, leaveRequests, currentTutor, loading } = useAppContext();
+  const { getSemesterDateRange } = useBatchContext();
+  const [selectedSemester, setSelectedSemester] = useState<string>('all');
 
   // If currentTutor is not yet loaded, show a loading indicator or return null
   if (loading || !currentTutor) {
@@ -28,12 +34,76 @@ const TutorReportPage = () => {
   }
 
   const tutorStudentData = useMemo(() => {
+    if (!currentTutor) return [];
     return students.filter(s => s.tutor_id === currentTutor.id);
-  }, [students, currentTutor.id]);
+  }, [students, currentTutor]);
 
   const tutorStudentLeaveRequests = useMemo(() => {
+    if (!currentTutor) return [];
     return leaveRequests.filter(req => req.tutor_id === currentTutor.id);
-  }, [leaveRequests, currentTutor.id]);
+  }, [leaveRequests, currentTutor]);
+
+  const dailyChartData = useMemo(() => {
+    try {
+      if (selectedSemester === 'all') return [];
+
+      const semester = parseInt(selectedSemester);
+      const tutorBatch = tutorStudentData.length > 0 ? tutorStudentData[0].batch : null;
+      if (!tutorBatch) return [];
+
+      const range = getSemesterDateRange(tutorBatch, semester);
+
+      if (!range?.start || !(range.start instanceof Date)) return [];
+
+      const today = new Date();
+      today.setHours(23, 59, 59, 999); 
+
+      const endDate = (range.end && range.end instanceof Date && today > range.end) ? range.end : today;
+
+      const interval = {
+        start: new Date(range.start),
+        end: endDate,
+      };
+
+      if (interval.start > interval.end) {
+          return [];
+      }
+
+      const days = eachDayOfInterval(interval);
+
+      return days.map(day => {
+        const studentsOnLeave = new Set<string>();
+        
+        tutorStudentLeaveRequests.forEach(req => {
+          if (req.status === 'Approved') {
+            const leaveStart = parseISO(req.start_date);
+            const leaveEnd = parseISO(req.end_date);
+            
+            const dayStart = new Date(day);
+            dayStart.setHours(0, 0, 0, 0);
+            
+            const leaveStartNormalized = new Date(leaveStart);
+            leaveStartNormalized.setHours(0, 0, 0, 0);
+            
+            const leaveEndNormalized = new Date(leaveEnd);
+            leaveEndNormalized.setHours(23, 59, 59, 999); 
+            
+            if (dayStart >= leaveStartNormalized && dayStart <= leaveEndNormalized) {
+              studentsOnLeave.add(req.student_id);
+            }
+          }
+        });
+        
+        return { 
+          date: format(day, 'MMM d'), 
+          studentsOnLeave: studentsOnLeave.size 
+        };
+      });
+    } catch (error) {
+      console.error("Error calculating daily chart data:", error);
+      return [];
+    }
+  }, [selectedSemester, tutorStudentData, tutorStudentLeaveRequests, getSemesterDateRange]);
 
   const totalStudents = tutorStudentData.length;
   const totalLeaves = tutorStudentData.reduce((acc, student) => acc + student.leave_taken, 0);
@@ -42,40 +112,40 @@ const TutorReportPage = () => {
   return (
     <TutorLayout>
       <div className="space-y-6">
-        <h1 className="text-2xl md:text-3xl font-bold">Student Report for {currentTutor.name}</h1>
+        <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+          <h1 className="text-2xl md:text-3xl font-bold">Student Report for {currentTutor.name}</h1>
+          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+            <Select value={selectedSemester} onValueChange={setSelectedSemester}>
+              <SelectTrigger className="w-full sm:w-[180px]">
+                <SelectValue placeholder="Select Semester" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Semesters</SelectItem>
+                {[1, 2, 3, 4, 5, 6, 7, 8].map(semester => (
+                  <SelectItem key={semester} value={String(semester)}>{`Semester ${semester}`}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
         
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          <Card className="transition-all duration-300 hover:shadow-lg hover:-translate-y-1">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Your Students</CardTitle>
-              <Users className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{totalStudents}</div>
-              <p className="text-xs text-muted-foreground">students assigned to you</p>
-            </CardContent>
-          </Card>
-          <Card className="transition-all duration-300 hover:shadow-lg hover:-translate-y-1">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Leaves Taken</CardTitle>
-              <CalendarOff className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{totalLeaves}</div>
-              <p className="text-xs text-muted-foreground">by your students</p>
-            </CardContent>
-          </Card>
-          <Card className="transition-all duration-300 hover:shadow-lg hover:-translate-y-1">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Average Leave</CardTitle>
-              <BarChart2 className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{averageLeaves}</div>
-              <p className="text-xs text-muted-foreground">days per student</p>
-            </CardContent>
-          </Card>
+          {/* ... cards ... */}
         </div>
+
+        {selectedSemester !== 'all' ? (
+          <DailyLeaveChart 
+            data={dailyChartData} 
+            title={`Daily Leave Report for Semester ${selectedSemester}`}
+          />
+        ) : (
+          <Card>
+            <CardHeader>
+              <CardTitle>Select a Semester</CardTitle>
+              <CardDescription>Please select a semester to view the daily leave report.</CardDescription>
+            </CardHeader>
+          </Card>
+        )}
 
         <MonthlyLeaveChart data={tutorStudentLeaveRequests} />
 

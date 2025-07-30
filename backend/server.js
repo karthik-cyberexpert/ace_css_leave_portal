@@ -747,6 +747,60 @@ app.post('/admin/process-od-certificates', authenticateToken, async (req, res) =
   }
 });
 
+// Admin utility to audit and fix student leave counts (Admin only)
+app.post('/admin/audit-leave-counts', authenticateToken, async (req, res) => {
+  try {
+    // Check if user is admin
+    const [user] = await query(
+      'SELECT is_admin FROM users WHERE id = ?',
+      [req.user.id]
+    );
+    
+    if (!user || !user.is_admin) {
+      return res.status(403).json({ error: 'Access denied. Admin privileges required.' });
+    }
+    
+    // Find students with incorrect leave counts
+    const studentsWithIssues = await query(`
+      SELECT 
+        s.id,
+        s.name,
+        s.leave_taken as current_count,
+        COALESCE(SUM(CASE WHEN lr.status = 'Approved' THEN lr.total_days ELSE 0 END), 0) as correct_count
+      FROM students s 
+      LEFT JOIN leave_requests lr ON s.id = lr.student_id 
+      GROUP BY s.id, s.name, s.leave_taken 
+      HAVING s.leave_taken != correct_count
+    `);
+    
+    const fixedStudents = [];
+    
+    // Fix each student's leave count
+    for (const student of studentsWithIssues) {
+      await query(
+        'UPDATE students SET leave_taken = ? WHERE id = ?',
+        [student.correct_count, student.id]
+      );
+      
+      fixedStudents.push({
+        name: student.name,
+        old_count: student.current_count,
+        new_count: student.correct_count,
+        difference: student.current_count - student.correct_count
+      });
+    }
+    
+    res.json({
+      message: `Leave count audit completed. Fixed ${fixedStudents.length} students.`,
+      fixed_students: fixedStudents,
+      total_fixed: fixedStudents.length
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to audit leave counts' });
+  }
+});
+
 
 // Test database connection
 app.get('/test-db', async (req, res) => {

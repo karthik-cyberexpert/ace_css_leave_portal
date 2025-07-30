@@ -131,6 +131,7 @@ export const BatchProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const getSemesterDateRange = (batch: string, semester: number) => {
     const semesterData = semesterDates.find(s => s.batch === batch && s.semester === semester);
     if (semesterData?.startDate) {
+      console.log('Using custom semester date:', { batch, semester, startDate: semesterData.startDate, endDate: semesterData.endDate });
       return {
         start: semesterData.startDate,
         end: semesterData.endDate || new Date(8640000000000000) // Far future date if no end date
@@ -145,17 +146,39 @@ export const BatchProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     const isOddSemester = semester % 2 === 1;
     const year = batchYear + semesterIndex;
     
+    let fallbackResult;
+    
     if (isOddSemester) {
-      return {
-        start: new Date(year, 5, 1), // June 1st
-        end: new Date(year, 11, 31) // December 31st
-      };
+      // For semester 3, start from July 21st instead of June 1st
+      if (semester === 3) {
+        fallbackResult = {
+          start: new Date(year, 6, 21), // July 21st
+          end: new Date(year, 11, 31) // December 31st
+        };
+      } else {
+        fallbackResult = {
+          start: new Date(year, 5, 1), // June 1st for semester 1
+          end: new Date(year, 11, 31) // December 31st
+        };
+      }
     } else {
-      return {
+      fallbackResult = {
         start: new Date(year + 1, 0, 1), // January 1st
         end: new Date(year + 1, 4, 31) // May 31st
       };
     }
+    
+    console.log('Using fallback calculation:', { 
+      batch, 
+      semester, 
+      batchYear, 
+      semesterIndex, 
+      isOddSemester, 
+      calculatedYear: year, 
+      result: fallbackResult 
+    });
+    
+    return fallbackResult;
   };
 
   // Function to determine the current active semester for a batch based on dates

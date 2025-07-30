@@ -1,15 +1,33 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 import { useAppContext } from '@/context/AppContext';
+import { useBatchContext } from '@/context/BatchContext';
+import { calculateWorkingDaysFromSemesterStart } from '@/utils/dateUtils';
 
 const COLORS = ['#0088FE', '#00C49F']; // Colors for the pie chart segments
 
 const LeaveSummaryChart = () => {
   const { currentUser } = useAppContext();
+  const { getSemesterDateRange } = useBatchContext();
   
   const leavesTaken = currentUser.leave_taken;
-  const allowedLeaves = 20;
+  
+  // Calculate total working days from semester start to current date
+  const totalWorkingDays = useMemo(() => {
+    if (!currentUser?.batch || !currentUser?.semester) {
+      return 0;
+    }
+
+    const semesterRange = getSemesterDateRange(currentUser.batch, currentUser.semester);
+    if (!semesterRange?.start) {
+      return 0;
+    }
+
+    return calculateWorkingDaysFromSemesterStart(semesterRange.start);
+  }, [currentUser?.batch, currentUser?.semester, getSemesterDateRange]);
+  
+  const allowedLeaves = totalWorkingDays > 0 ? totalWorkingDays : 0;
   const leavesRemaining = Math.max(0, allowedLeaves - leavesTaken);
 
   const leaveData = [

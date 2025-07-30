@@ -1,16 +1,17 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import TutorLayout from '@/components/TutorLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import WeeklyLeaveChart from '@/components/WeeklyLeaveChart';
 import MonthlyLeaveChart from '@/components/MonthlyLeaveChart';
 import { useAppContext } from '@/context/AppContext';
-import { subWeeks, startOfWeek, endOfWeek, isWithinInterval, parseISO } from 'date-fns';
+import { subWeeks, startOfWeek, endOfWeek, isWithinInterval, parseISO, startOfMonth, endOfMonth, subMonths, eachWeekOfInterval } from 'date-fns';
 
 const TutorDashboardPage = () => {
   const { students, leaveRequests, odRequests, currentTutor } = useAppContext();
+  const [currentMonth, setCurrentMonth] = useState(new Date());
   
   const tutorData = useMemo(() => {
-    if (!currentTutor) return { pendingLeaves: 0, pendingODs: 0, totalStudents: 0, allMyLeaveRequests: [] };
+    if (!currentTutor) return { pendingLeaves: 0, pendingODs: 0, totalStudents: 0, allMyLeaveRequests: [], myStudents: [] };
     
     const myStudents = students.filter(s => s.tutor_id === currentTutor.id);
     const myStudentIds = new Set(myStudents.map(s => s.id));
@@ -23,30 +24,50 @@ const TutorDashboardPage = () => {
       pendingODs: myODRequests.filter(r => r.status === 'Pending').length,
       totalStudents: myStudents.length,
       allMyLeaveRequests: myLeaveRequests,
+      myStudents,
     };
   }, [students, leaveRequests, odRequests, currentTutor]);
+  
+  const handlePrevMonth = () => {
+    setCurrentMonth(prev => subMonths(prev, 1));
+  };
+
+  const handleNextMonth = () => {
+    setCurrentMonth(prev => subMonths(prev, -1));
+  };
+  
+  const isNextMonthDisabled = () => {
+    const today = new Date();
+    return currentMonth.getFullYear() === today.getFullYear() && currentMonth.getMonth() === today.getMonth();
+  };
 
   const weeklyLeaveData = useMemo(() => {
     const approvedLeaves = tutorData.allMyLeaveRequests.filter(r => r.status === 'Approved');
-    const now = new Date();
-    const last4Weeks = Array.from({ length: 4 }, (_, i) => {
-      const weekStart = startOfWeek(subWeeks(now, i));
-      const weekEnd = endOfWeek(subWeeks(now, i));
-      return { start: weekStart, end: weekEnd };
-    }).reverse();
+    const monthStart = startOfMonth(currentMonth);
+    const monthEnd = endOfMonth(currentMonth);
+    const weeksInMonth = eachWeekOfInterval({ start: monthStart, end: monthEnd });
+    
+    // Get the unique batch of tutor's students (should be only one batch)
+    const tutorBatch = tutorData.myStudents.length > 0 ? tutorData.myStudents[0].batch : null;
+    const myStudentIds = new Set(tutorData.myStudents.map(s => s.id));
 
-    return last4Weeks.map((week, index) => {
+    return weeksInMonth.map((weekStart, index) => {
+      const weekEnd = endOfWeek(weekStart);
       const studentsOnLeave = new Set<string>();
+      
       approvedLeaves.forEach(leave => {
-        const leaveStart = parseISO(leave.start_date);
-        const leaveEnd = parseISO(leave.end_date);
-        if (isWithinInterval(leaveStart, { start: week.start, end: week.end }) || isWithinInterval(leaveEnd, { start: week.start, end: week.end })) {
-          studentsOnLeave.add(leave.student_id);
+        if (myStudentIds.has(leave.student_id)) {
+          const leaveStart = parseISO(leave.start_date);
+          const leaveEnd = parseISO(leave.end_date);
+          if (isWithinInterval(leaveStart, { start: weekStart, end: weekEnd }) || isWithinInterval(leaveEnd, { start: weekStart, end: weekEnd })) {
+            studentsOnLeave.add(leave.student_id);
+          }
         }
       });
-      return { week: `W${index + 1}`, students: studentsOnLeave.size };
+      
+      return { week: `Week ${index + 1}`, students: studentsOnLeave.size };
     });
-  }, [tutorData.allMyLeaveRequests]);
+  }, [tutorData.allMyLeaveRequests, tutorData.myStudents, currentMonth]);
 
   return (
     <TutorLayout>
@@ -82,7 +103,16 @@ const TutorDashboardPage = () => {
             <p className="text-xs text-muted-foreground">under your guidance</p>
           </CardContent>
         </Card>
-        <WeeklyLeaveChart data={weeklyLeaveData} />
+        <WeeklyLeaveChart 
+          data={weeklyLeaveData}
+          currentMonth={currentMonth}
+          selectedBatch={tutorData.myStudents.length > 0 ? tutorData.myStudents[0].batch : 'none'}
+          batchOptions={[]} // No batch selection for tutors
+          onPrevMonth={handlePrevMonth}
+          onNextMonth={handleNextMonth}
+          onBatchChange={() => {}} // No batch change for tutors
+          isNextMonthDisabled={isNextMonthDisabled()}
+        />
         <MonthlyLeaveChart data={tutorData.allMyLeaveRequests} />
       </div>
     </TutorLayout>
