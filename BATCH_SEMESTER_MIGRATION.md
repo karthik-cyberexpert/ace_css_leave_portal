@@ -20,9 +20,13 @@ This document outlines the changes made to migrate from a single "year" field to
 ### 1. TypeScript Interfaces (`src/context/AppContext.tsx`)
 - Updated `Student` interface to use `batch: string` and `semester: number` instead of `year: string`
 - Updated `NewStudentData` interface accordingly
-- Modified API payload in `addStudent` function to send `batch` and `semester`
+- Modified API payload in `addStudent` and `bulkAddStudents` functions to send `batch` and `semester`
 
 ### 2. Frontend Components
+
+#### AdminStudentManagementPage (`src/pages/AdminStudentManagementPage.tsx`)
+- Updated to pass `batches` instead of `years` to the `StudentFormDialog`
+- Table now displays both `batch` and `semester`
 
 #### AdminReportPage (`src/pages/AdminReportPage.tsx`)
 - Updated filtering logic to use `student.batch` instead of `student.year`
@@ -40,6 +44,12 @@ This document outlines the changes made to migrate from a single "year" field to
 - Updated form schema to include `batch` and `semester` fields
 - Changed interface props from `years: string[]` to `batches: string[]`
 - Form now validates semester as number between 1-8
+
+#### BulkAddStudentsDialog (`src/components/BulkAddStudentsDialog.tsx`)
+- Updated validation schema to handle `batch` and `semester` fields
+- Data processing now correctly parses and validates the new fields
+- Table display now shows imported `batch` and `semester` data
+- Template download now includes `batch` and `semester` columns
 
 ### 3. Chart Components (`src/components/DailyLeaveChart.tsx`)
 - Fixed tooltip crash issue that caused blank screen when hovering over charts

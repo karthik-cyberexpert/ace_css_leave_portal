@@ -555,27 +555,43 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         profilePhoto: studentData.profilePhoto,
       };
 
-      await apiClient.post('/students', payload);
+      console.log('Adding student with payload:', payload);
+      const response = await apiClient.post('/students', payload);
+      console.log('Add student API response:', response.data);
       showSuccess('Student added successfully!');
       
       // Refresh data
       if (profile) await fetchDataForProfile(profile);
     } catch (error: any) {
-      console.error('Failed to add student:', error);
-      showError(`Failed to add student: ${error.response?.data?.error || error.message}`);
+      console.error('Failed to add student - Full error object:', error);
+      console.error('Error response:', error.response);
+      console.error('Error response data:', error.response?.data);
+      console.error('Error status:', error.response?.status);
+      const errorMessage = error.response?.data?.error || error.response?.data?.message || error.message || 'Unknown error';
+      showError(`Failed to add student: ${errorMessage}`);
+      throw error;
     }
   };
 
   const updateStudent = async (id: string, data: Partial<Student>) => {
     try {
+      console.log('Updating student with ID:', id);
+      console.log('Update payload:', data);
       const response = await apiClient.put(`/students/${id}`, data);
+      console.log('Update student API response:', response.data);
       showSuccess('Student updated!');
       setStudents(prev => prev.map(s => s.id === id ? response.data : s));
       if (currentUser?.id === id) {
         setCurrentUser(response.data);
       }
     } catch (error: any) {
-      showError(`Failed to update student: ${error.response?.data?.error || error.message}`);
+      console.error('Failed to update student - Full error object:', error);
+      console.error('Error response:', error.response);
+      console.error('Error response data:', error.response?.data);
+      console.error('Error status:', error.response?.status);
+      const errorMessage = error.response?.data?.error || error.response?.data?.message || error.message || 'Unknown error';
+      showError(`Failed to update student: ${errorMessage}`);
+      throw error;
     }
   };
 
@@ -617,14 +633,15 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
         try {
           // Validate required fields
-          if (!student.name || !student.username || !student.password || !student.registerNumber || !student.tutorName || !student.year) {
+          if (!student.name || !student.username || !student.password || !student.registerNumber || !student.tutorName || !student.batch || !student.semester) {
             const missingFields = [];
             if (!student.name) missingFields.push('name');
             if (!student.username) missingFields.push('username');
             if (!student.password) missingFields.push('password');
             if (!student.registerNumber) missingFields.push('registerNumber');
             if (!student.tutorName) missingFields.push('tutorName');
-            if (!student.year) missingFields.push('year');
+            if (!student.batch) missingFields.push('batch');
+            if (!student.semester) missingFields.push('semester');
             
             const error = `Student ${student.name || 'Unknown'}: Missing required fields: ${missingFields.join(', ')}`;
             errors.push(error);
@@ -667,7 +684,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             name: student.name,
             registerNumber: student.registerNumber,
             tutorId: tutor.id,
-            year: student.year,
+            batch: student.batch,
+            semester: student.semester,
             username: student.username,
             profilePhoto: student.profilePhoto || '',
           };

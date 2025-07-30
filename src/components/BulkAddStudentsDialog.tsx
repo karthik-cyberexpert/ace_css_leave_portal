@@ -13,13 +13,15 @@ import { Alert, AlertDescription, AlertTitle } from './ui/alert';
 import { FileWarning, CheckCircle, Upload } from 'lucide-react';
 import { showError, showSuccess } from '@/utils/toast';
 import { DownloadFormatDialog } from './DownloadFormatDialog';
+import { useBatchContext } from '@/context/BatchContext';
 
 // Schema for validating each row from the uploaded file
 const bulkStudentSchema = z.object({
   name: z.string().min(2, "Name is too short"),
   registerNumber: z.string().min(1, "Register number is required"),
   tutorName: z.string().min(2, "Tutor name is required"),
-  year: z.string().refine(val => ['1', '2', '3', '4'].includes(val), "Year must be 1, 2, 3, or 4"),
+  batch: z.string().min(4, "Batch is required"),
+  semester: z.preprocess((val) => parseInt(String(val), 10), z.number().min(1).max(8, "Semester must be between 1-8")),
   username: z.string().min(3, "Username is too short"),
   password: z.string().min(6, "Password must be at least 6 characters"),
   profilePhoto: z.string().optional().refine(val => !val || val === '' || z.string().url().safeParse(val).success, "Must be a valid URL or empty"),
@@ -42,6 +44,7 @@ export const BulkAddStudentsDialog: React.FC<BulkAddStudentsDialogProps> = ({ op
   const [errors, setErrors] = useState<string[]>([]);
   const [isDownloadDialogOpen, setIsDownloadDialogOpen] = useState(false);
   const [processingStatus, setProcessingStatus] = useState<string>('');
+  const { getCurrentActiveSemester } = useBatchContext();
 
   const resetState = useCallback(() => {
     console.log('Resetting component state');
@@ -133,7 +136,7 @@ export const BulkAddStudentsDialog: React.FC<BulkAddStudentsDialogProps> = ({ op
       console.log(`Processing row ${index + 1}:`, row);
 
       // Check for required fields
-      const requiredFields = ['name', 'registerNumber', 'tutorName', 'year', 'username', 'password'];
+      const requiredFields = ['name', 'registerNumber', 'tutorName', 'batch', 'semester', 'username', 'password'];
       const missingFields = requiredFields.filter(field => !row[field] || (typeof row[field] === 'string' && row[field].trim() === ''));
       
       if (missingFields.length > 0) {
@@ -146,7 +149,8 @@ export const BulkAddStudentsDialog: React.FC<BulkAddStudentsDialogProps> = ({ op
         name: String(row.name).trim(),
         registerNumber: String(row.registerNumber).trim(),
         tutorName: String(row.tutorName).trim(),
-        year: String(row.year).trim(),
+        batch: String(row.batch).trim(),
+        semester: parseInt(String(row.semester), 10),
         username: String(row.username).trim(),
         password: String(row.password).trim(),
         profilePhoto: row.profilePhoto ? String(row.profilePhoto).trim() : ''
@@ -301,9 +305,12 @@ export const BulkAddStudentsDialog: React.FC<BulkAddStudentsDialogProps> = ({ op
   };
 
   const handleDownloadFormat = (format: 'xlsx' | 'csv' | 'json') => {
-    const headers = ['name', 'registerNumber', 'tutorName', 'year', 'username', 'password', 'profilePhoto'];
-    const exampleRow1 = ['John Doe', 'S101', 'Dr. Smith', '1', 'john.d', 'password123', 'https://github.com/shadcn.png'];
-    const exampleRow2 = ['Jane Smith', 'S102', 'Dr. Brown', '2', 'jane.s', 'password456', ''];
+    const headers = ['name', 'registerNumber', 'tutorName', 'batch', 'semester', 'username', 'password', 'profilePhoto'];
+    // Use current active semesters for the example data
+    const batch2024Semester = getCurrentActiveSemester('2024');
+    const batch2025Semester = getCurrentActiveSemester('2025');
+    const exampleRow1 = ['John Doe', 'S101', 'Dr. Smith', '2024', String(batch2024Semester), 'john.d', 'password123', 'https://github.com/shadcn.png'];
+    const exampleRow2 = ['Jane Smith', 'S102', 'Dr. Brown', '2025', String(batch2025Semester), 'jane.s', 'password456', ''];
     const dataRows = [headers].concat([exampleRow1, exampleRow2]);
 
     if (format === 'xlsx') {
@@ -325,11 +332,11 @@ export const BulkAddStudentsDialog: React.FC<BulkAddStudentsDialogProps> = ({ op
       const jsonObject = [
         {
           name: 'John Doe', registerNumber: 'S101', tutorName: 'Dr. Smith',
-          year: '1', username: 'john.d', password: 'password123', profilePhoto: 'https://github.com/shadcn.png'
+          batch: '2024', semester: batch2024Semester, username: 'john.d', password: 'password123', profilePhoto: 'https://github.com/shadcn.png'
         },
         {
           name: 'Jane Smith', registerNumber: 'S102', tutorName: 'Dr. Brown',
-          year: '2', username: 'jane.s', password: 'password456', profilePhoto: ''
+          batch: '2025', semester: batch2025Semester, username: 'jane.s', password: 'password456', profilePhoto: ''
         }
       ];
       const jsonString = `data:text/json;charset=utf-8,${encodeURIComponent(JSON.stringify(jsonObject, null, 2))}`;
@@ -419,7 +426,8 @@ export const BulkAddStudentsDialog: React.FC<BulkAddStudentsDialogProps> = ({ op
                       <TableHead>Name</TableHead>
                       <TableHead>Register No.</TableHead>
                       <TableHead>Tutor</TableHead>
-                      <TableHead>Year</TableHead>
+                      <TableHead>Batch</TableHead>
+                      <TableHead>Semester</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -428,7 +436,8 @@ export const BulkAddStudentsDialog: React.FC<BulkAddStudentsDialogProps> = ({ op
                         <TableCell>{student.name}</TableCell>
                         <TableCell>{student.registerNumber}</TableCell>
                         <TableCell>{student.tutorName}</TableCell>
-                        <TableCell>{student.year}</TableCell>
+                        <TableCell>{student.batch}</TableCell>
+                        <TableCell>{student.semester}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

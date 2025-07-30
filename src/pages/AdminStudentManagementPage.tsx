@@ -18,7 +18,7 @@ const AdminStudentManagementPage = () => {
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [isBulkAddOpen, setIsBulkAddOpen] = useState(false);
 
-  const years = ['1', '2', '3', '4'];
+  const batches = ['2024', '2025', '2026', '2027'];
 
   const handleAddNew = () => {
     setEditingStudent(null);
@@ -38,29 +38,35 @@ const AdminStudentManagementPage = () => {
     }
   };
 
-  const onSubmit = (data: StudentFormValues) => {
+  const onSubmit = async (data: StudentFormValues) => {
     const tutor = staff.find(s => s.name === data.tutorName);
     if (!tutor) {
       showError("Selected tutor not found.");
       return;
     }
 
-    if (editingStudent) {
-      const { password, tutorName, ...restOfData } = data;
-      const studentData: Partial<Student> = { 
-        ...restOfData, 
-        tutor_id: tutor.id,
-        profile_photo: data.profilePhoto // Ensure profile_photo is passed
-      };
-      // Password update logic is not handled by updateStudent in AppContext
-      updateStudent(editingStudent.id, studentData);
-      showSuccess('Student details updated successfully!');
-    } else {
-      // addStudent expects NewStudentData which has tutorName, it handles finding tutorId internally
-      addStudent(data as NewStudentData); 
-      showSuccess('Student added successfully!');
+    try {
+      if (editingStudent) {
+        const { password, tutorName, ...restOfData } = data;
+        const studentData: Partial<Student> = {
+          name: data.name,
+          register_number: data.registerNumber,
+          tutor_id: tutor.id,
+          batch: data.batch,
+          semester: data.semester,
+          username: data.username,
+          profile_photo: data.profilePhoto,
+        };
+        await updateStudent(editingStudent.id, studentData);
+      } else {
+        // addStudent expects NewStudentData which has tutorName, it handles finding tutorId internally
+        await addStudent(data as NewStudentData);
+      }
+      setIsDialogOpen(false);
+    } catch (error) {
+      // Error handling is done in the AppContext functions
+      console.error('Error submitting student form:', error);
     }
-    setIsDialogOpen(false);
   };
 
   return (
@@ -89,7 +95,8 @@ const AdminStudentManagementPage = () => {
                   <TableHead>Name</TableHead>
                   <TableHead>Register Number</TableHead>
                   <TableHead>Tutor Name</TableHead>
-                  <TableHead className="text-center">Year</TableHead>
+                  <TableHead className="text-center">Batch</TableHead>
+                  <TableHead className="text-center">Semester</TableHead>
                   <TableHead className="text-center">Leave Taken</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -108,7 +115,8 @@ const AdminStudentManagementPage = () => {
                       <TableCell className="font-medium">{student.name}</TableCell>
                       <TableCell>{student.register_number}</TableCell>
                       <TableCell>{tutor ? tutor.name : 'N/A'}</TableCell>
-                      <TableCell className="text-center">{student.year}</TableCell>
+                      <TableCell className="text-center">{student.batch}-{parseInt(student.batch) + 4}</TableCell>
+                      <TableCell className="text-center">{student.semester}</TableCell>
                       <TableCell className="text-center">{student.leave_taken}</TableCell>
                       <TableCell className="text-right space-x-2">
                         <Button variant="outline" size="icon" onClick={() => handleEdit(student)} className="transition-transform hover:scale-110 hover:bg-accent">
@@ -133,7 +141,7 @@ const AdminStudentManagementPage = () => {
         onSubmit={onSubmit}
         editingStudent={editingStudent}
         staffMembers={staff} // Pass full staff array
-        years={years}
+        batches={batches}
       />
 
       <AlertDialog open={!!studentToDelete} onOpenChange={() => setStudentToDelete(null)}>

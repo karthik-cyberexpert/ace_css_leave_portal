@@ -11,6 +11,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Eye, EyeOff, UserPlus } from 'lucide-react';
 import { Student, Staff } from '@/context/AppContext'; // Import Staff type
+import { useBatchContext } from '@/context/BatchContext';
 
 const studentFormSchema = (isEditing: boolean) => z.object({
   name: z.string().min(2, "Name must be at least 2 characters."),
@@ -49,11 +50,22 @@ export const StudentFormDialog: React.FC<StudentFormDialogProps> = ({
 }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [photoInputMode, setPhotoInputMode] = useState<'url' | 'upload'>('url');
+  const { getCurrentActiveSemester } = useBatchContext();
 
   const form = useForm<StudentFormValues>({
     resolver: zodResolver(studentFormSchema(!!editingStudent)),
-    defaultValues: { name: '', registerNumber: '', tutorName: '', year: '', username: '', password: '', profilePhoto: '' },
+    defaultValues: { name: '', registerNumber: '', tutorName: '', batch: '', semester: 1, username: '', password: '', profilePhoto: '' },
   });
+
+  // Function to handle batch change and auto-set semester
+  const handleBatchChange = (selectedBatch: string) => {
+    form.setValue('batch', selectedBatch);
+    // Auto-fetch the current active semester for the selected batch
+    if (selectedBatch && !editingStudent) {
+      const defaultSemester = getCurrentActiveSemester(selectedBatch);
+      form.setValue('semester', defaultSemester);
+    }
+  };
 
   useEffect(() => {
     if (open) {
@@ -75,7 +87,8 @@ export const StudentFormDialog: React.FC<StudentFormDialogProps> = ({
           name: '', 
           registerNumber: '', 
           tutorName: defaultTutorName, 
-          year: '', 
+          batch: '', 
+          semester: 1, 
           username: '', 
           password: '', 
           profilePhoto: '' 
@@ -184,18 +197,32 @@ export const StudentFormDialog: React.FC<StudentFormDialogProps> = ({
                 </FormItem>
               )} />
             )}
-            <FormField control={form.control} name="year" render={({ field }) => (
-              <FormItem>
-                <FormLabel>Year</FormLabel>
-                <Select onValueChange={field.onChange} defaultValue={field.value}>
-                  <FormControl><SelectTrigger><SelectValue placeholder="Select a year" /></SelectTrigger></FormControl>
-                  <SelectContent>
-                    {years.map(year => <SelectItem key={year} value={year}>{year}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )} />
+            <div className="grid grid-cols-2 gap-4">
+              <FormField control={form.control} name="batch" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Batch</FormLabel>
+                  <Select onValueChange={handleBatchChange} value={field.value}>
+                    <FormControl><SelectTrigger><SelectValue placeholder="Select a batch" /></SelectTrigger></FormControl>
+                    <SelectContent>
+                      {batches.map(batch => <SelectItem key={batch} value={batch}>{batch}-{parseInt(batch) + 4}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="semester" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Semester</FormLabel>
+                  <Select onValueChange={(value) => field.onChange(parseInt(value))} value={String(field.value)}>
+                    <FormControl><SelectTrigger><SelectValue placeholder="Select semester" /></SelectTrigger></FormControl>
+                    <SelectContent>
+                      {[1, 2, 3, 4, 5, 6, 7, 8].map(sem => <SelectItem key={sem} value={String(sem)}>Semester {sem}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )} />
+            </div>
             <FormField control={form.control} name="username" render={({ field }) => (
               <FormItem>
                 <FormLabel>Username</FormLabel>
