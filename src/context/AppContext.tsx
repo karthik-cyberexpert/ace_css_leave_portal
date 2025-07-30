@@ -180,7 +180,6 @@ interface IAppContext {
   uploadODCertificate: (id: string, certificateUrl: string) => Promise<void>;
   verifyODCertificate: (id: string, isApproved: boolean) => Promise<void>;
   handleOverdueCertificates: () => Promise<void>;
-  clearAllRequests: () => Promise<void>;
   refreshData: () => Promise<void>;
 }
 
@@ -975,23 +974,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   const getTutors = () => staff.filter(s => s.is_tutor);
 
-  const clearAllRequests = async () => {
-    try {
-      const response = await apiClient.delete('/admin/clear-all-requests');
-      
-      // Clear local state
-      setLeaveRequests([]);
-      setODRequests([]);
-      
-      // Reset student leave counts locally
-      setStudents(prev => prev.map(student => ({ ...student, leave_taken: 0 })));
-      
-      showSuccess(`All requests cleared successfully! ${response.data.clearedLeaveRequests} leave requests and ${response.data.clearedODRequests} OD requests were deleted.`);
-    } catch (error: any) {
-      showError(`Failed to clear all requests: ${error.response?.data?.error || error.message}`);
-      throw error;
-    }
-  };
 
   // Manual refresh function for user-triggered updates
   const refreshData = useCallback(async () => {
@@ -1010,7 +992,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     addLeaveRequest, updateLeaveRequestStatus, requestLeaveCancellation, approveRejectLeaveCancellation,
     addODRequest, updateODRequestStatus, requestODCancellation, approveRejectODCancellation,
     getTutors, uploadODCertificate, verifyODCertificate, handleOverdueCertificates,
-    clearAllRequests, refreshData,
+    refreshData,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

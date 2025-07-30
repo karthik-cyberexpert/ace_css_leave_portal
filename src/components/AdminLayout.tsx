@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, CheckCircle, Briefcase, ClipboardList, Shield, Users, UserCog, Menu, LogOut } from 'lucide-react';
+import { LayoutDashboard, CheckCircle, Briefcase, ClipboardList, Shield, Users, UserCog, Menu, LogOut, Calendar } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -14,6 +14,7 @@ const sidebarNavItems = [
   { title: "Dashboard", href: "/admin-dashboard", icon: LayoutDashboard },
   { title: "Leave Requests", href: "/admin-leave-requests", icon: CheckCircle },
   { title: "OD Requests", href: "/admin-od-requests", icon: Briefcase },
+  { title: "Batch Management", href: "/admin-batch-management", icon: Calendar },
   { title: "Reports", href: "/admin-reports", icon: ClipboardList },
   { title: "Students", href: "/admin-students", icon: Users },
   { title: "Staff", href: "/admin-staff", icon: UserCog },

@@ -18,9 +18,11 @@ import AdminDashboardPage from "./pages/AdminDashboardPage";
 import AdminLeaveApprovePage from "./pages/AdminLeaveApprovePage";
 import AdminODApprovePage from "./pages/AdminODApprovePage";
 import AdminReportPage from "./pages/AdminReportPage";
+import AdminBatchManagementPage from "./pages/AdminBatchManagementPage";
 import AdminStudentManagementPage from "./pages/AdminStudentManagementPage";
 import AdminStaffManagementPage from "./pages/AdminStaffManagementPage";
 import { AppProvider } from "./context/AppContext";
+import { BatchProvider } from "./context/BatchContext";
 import TutorStudentManagementPage from "./pages/TutorStudentManagementPage";
 import ProtectedRoute from "./components/ProtectedRoute";
 import ProfilePage from "./pages/ProfilePage";
@@ -32,11 +34,12 @@ const queryClient = new QueryClient();
 const App = () => (
   <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
     <AppProvider>
-      <QueryClientProvider client={queryClient}>
-        <TooltipProvider>
-          <Toaster />
-          <Sonner />
-          <BrowserRouter>
+      <BatchProvider>
+        <QueryClientProvider client={queryClient}>
+          <TooltipProvider>
+            <Toaster />
+            <Sonner />
+            <BrowserRouter>
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/login" element={<LoginPage />} />
@@ -60,6 +63,7 @@ const App = () => (
             <Route path="/admin-dashboard" element={<ProtectedRoute allowedRoles={['Admin']}><AdminDashboardPage /></ProtectedRoute>} />
             <Route path="/admin-leave-requests" element={<ProtectedRoute allowedRoles={['Admin']}><AdminLeaveApprovePage /></ProtectedRoute>} />
             <Route path="/admin-od-requests" element={<ProtectedRoute allowedRoles={['Admin']}><AdminODApprovePage /></ProtectedRoute>} />
+            <Route path="/admin-batch-management" element={<ProtectedRoute allowedRoles={['Admin']}><AdminBatchManagementPage /></ProtectedRoute>} />
             <Route path="/admin-reports" element={<ProtectedRoute allowedRoles={['Admin']}><AdminReportPage /></ProtectedRoute>} />
             <Route path="/admin-students" element={<ProtectedRoute allowedRoles={['Admin']}><AdminStudentManagementPage /></ProtectedRoute>} />
             <Route path="/admin-staff" element={<ProtectedRoute allowedRoles={['Admin']}><AdminStaffManagementPage /></ProtectedRoute>} />
@@ -70,6 +74,7 @@ const App = () => (
           </BrowserRouter>
         </TooltipProvider>
       </QueryClientProvider>
+      </BatchProvider>
     </AppProvider>
   </ThemeProvider>
 );

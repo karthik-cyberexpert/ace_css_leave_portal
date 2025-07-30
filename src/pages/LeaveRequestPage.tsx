@@ -14,6 +14,7 @@ import { DatePicker } from '@/components/ui/datepicker';
 import { showSuccess } from '@/utils/toast';
 import Layout from '@/components/Layout';
 import { useAppContext } from '@/context/AppContext';
+import { useBatchContext } from '@/context/BatchContext';
 
 const leaveRequestSchema = z.object({
   startDate: z.date({
@@ -41,9 +42,11 @@ const leaveRequestSchema = z.object({
 type LeaveRequestFormValues = z.infer<typeof leaveRequestSchema>;
 
 const LeaveRequestPage = () => {
-  const { addLeaveRequest } = useAppContext();
+  const { addLeaveRequest, userProfile } = useAppContext();
+  const { getCurrentActiveSemester, isDateWithinSemester, getSemesterDateRange } = useBatchContext();
   const [totalDays, setTotalDays] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [currentSemester, setCurrentSemester] = useState<number | null>(null);
   const form = useForm<LeaveRequestFormValues>({
     resolver: zodResolver(leaveRequestSchema),
     defaultValues: {
@@ -54,6 +57,14 @@ const LeaveRequestPage = () => {
 
   const startDate = form.watch('startDate');
   const endDate = form.watch('endDate');
+
+  // Get current semester when user profile loads
+  useEffect(() => {
+    if (userProfile?.student?.year) {
+      const activeSemester = getCurrentActiveSemester(userProfile.student.year);
+      setCurrentSemester(activeSemester);
+    }
+  }, [userProfile, getCurrentActiveSemester]);
 
   useEffect(() => {
     if (startDate && endDate && endDate >= startDate) {
@@ -113,7 +124,34 @@ const LeaveRequestPage = () => {
                       <DatePicker
                         date={field.value}
                         setDate={field.onChange}
-                        disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
+                        disabled={(date) => {
+                          const today = new Date();
+                          today.setHours(0, 0, 0, 0);
+                          
+                          // Disable past dates
+                          if (date < today) return true;
+                          
+                          // If we have a current semester and student batch, validate against semester dates
+                          if (currentSemester && userProfile?.student?.year) {
+                            const semesterRange = getSemesterDateRange(userProfile.student.year, currentSemester);
+                            if (semesterRange) {
+                              const semesterStart = new Date(semesterRange.start);
+                              semesterStart.setHours(0, 0, 0, 0);
+                              
+                              // Date must be on or after semester start
+                              if (date < semesterStart) return true;
+                              
+                              // If semester has an end date, date must be before or on end date
+                              if (semesterRange.end && semesterRange.end.getTime() !== 8640000000000000) {
+                                const semesterEnd = new Date(semesterRange.end);
+                                semesterEnd.setHours(23, 59, 59, 999);
+                                if (date > semesterEnd) return true;
+                              }
+                            }
+                          }
+                          
+                          return false;
+                        }}
                       />
                       <FormMessage />
                     </FormItem>
@@ -128,7 +166,29 @@ const LeaveRequestPage = () => {
                       <DatePicker
                         date={field.value}
                         setDate={field.onChange}
-                        disabled={(date) => startDate ? date < startDate : date < new Date(new Date().setHours(0, 0, 0, 0))}
+                        disabled={(date) => {
+                          const today = new Date();
+                          today.setHours(0, 0, 0, 0);
+                          
+                          // Disable dates before start date or before today
+                          const minDate = startDate || today;
+                          if (date < minDate) return true;
+                          
+                          // If we have a current semester and student batch, validate against semester dates
+                          if (currentSemester && userProfile?.student?.year) {
+                            const semesterRange = getSemesterDateRange(userProfile.student.year, currentSemester);
+                            if (semesterRange) {
+                              // If semester has an end date, date must be before or on end date
+                              if (semesterRange.end && semesterRange.end.getTime() !== 8640000000000000) {
+                                const semesterEnd = new Date(semesterRange.end);
+                                semesterEnd.setHours(23, 59, 59, 999);
+                                if (date > semesterEnd) return true;
+                              }
+                            }
+                          }
+                          
+                          return false;
+                        }}
                       />
                       <FormMessage />
                     </FormItem>

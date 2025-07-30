@@ -1,171 +1,150 @@
 import React, { useState, useMemo } from 'react';
+import { useBatchContext } from '@/context/BatchContext';
 import AdminLayout from '@/components/AdminLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { format, getMonth, getYear } from 'date-fns';
-import TutorLeaveSummaryChart from '@/components/TutorLeaveSummaryChart';
+import { eachDayOfInterval, format, isWithinInterval, parseISO } from 'date-fns';
+import { DailyLeaveChart } from '@/components/DailyLeaveChart';
 import { useAppContext } from '@/context/AppContext';
-import { Button } from '@/components/ui/button';
-import { Trash2 } from 'lucide-react';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { showSuccess } from '@/utils/toast';
 
 const AdminReportPage = () => {
-  const { students, leaveRequests, getTutors, clearAllRequests } = useAppContext();
-  const [selectedMonth, setSelectedMonth] = useState<string>(String(new Date().getMonth()));
-  const [selectedYear, setSelectedYear] = useState<string>(String(new Date().getFullYear()));
-  const [isConfirmDialogOpen, setIsConfirmDialogOpen] = useState(false);
-  const currentYear = new Date().getFullYear();
+  const { students, leaveRequests, getTutors } = useAppContext();
+  const [selectedBatch, setSelectedBatch] = useState<string>('all');
+  const [selectedSemester, setSelectedSemester] = useState<string>('all');
+
+  const { getSemesterDateRange } = useBatchContext();
 
   const tutors = getTutors();
-  const selectedYearInt = parseInt(selectedYear);
-  const monthName = format(new Date(selectedYearInt, parseInt(selectedMonth)), 'MMMM');
 
-  const chartData = useMemo(() => {
-    const monthlyRequests = leaveRequests.filter(req => {
-      const reqDate = new Date(req.start_date);
-      return getMonth(reqDate) === parseInt(selectedMonth) && getYear(reqDate) === selectedYearInt && req.status === 'Approved';
+  const batches = useMemo(() => {
+    const currentYear = new Date().getFullYear();
+    // New batches are added based on the previous year.
+    // e.g., in 2027, the newest batch available for selection is 2026-2030.
+    const latestBatchYear = currentYear - 1;
+    
+    const batchYears = [];
+    // Generate batches from 2024 up to the latest batch year
+    for (let year = 2024; year <= latestBatchYear; year++) {
+      batchYears.push(year);
+    }
+    
+    // Sort in descending order (newest first)
+    batchYears.sort((a, b) => b - a);
+    
+    return ['all', ...batchYears];
+  }, []);
+
+  const semesters = useMemo(() => {
+    if (selectedBatch === 'all') return ['all'];
+    // Show all 8 semesters for any selected batch
+    const availableSemesters = [1, 2, 3, 4, 5, 6, 7, 8];
+    return ['all', ...availableSemesters];
+  }, [selectedBatch]);
+
+  const semesterDateRanges = useMemo(() => {
+    if (selectedBatch === 'all') return {};
+    const semestersToUse = semesters.filter(s => s !== 'all') as number[];
+    const ranges: { [key: number]: { start: Date; end: Date } | null } = {};
+    semestersToUse.forEach(semester => {
+      ranges[semester] = getSemesterDateRange(selectedBatch, semester);
     });
+    return ranges;
+  }, [selectedBatch, semesters, getSemesterDateRange]);
 
-    const leavesByTutor = new Map<string, number>();
-    monthlyRequests.forEach(req => {
-      leavesByTutor.set(req.tutor_name, (leavesByTutor.get(req.tutor_name) || 0) + req.total_days);
-    });
+  const dailyChartData = useMemo(() => {
+    if (selectedBatch === 'all' || selectedSemester === 'all') return [];
 
-    return tutors.map(tutor => ({
-      name: tutor.name,
-      totalLeaves: leavesByTutor.get(tutor.name) || 0,
-    }));
-  }, [selectedMonth, selectedYearInt, leaveRequests, tutors]);
+    const semester = parseInt(selectedSemester);
+    const range = semesterDateRanges[semester];
+    if (!range?.start) return [];
 
-  const reportTableData = useMemo(() => {
-    return tutors.map(tutor => {
-      const tutorStudents = students.filter(s => s.tutor_id === tutor.id);
-      const monthlyApprovedRequests = leaveRequests
-        .filter(req => 
-            req.tutor_id === tutor.id && 
-            req.status === 'Approved' && 
-            getYear(new Date(req.start_date)) === selectedYearInt &&
-            getMonth(new Date(req.start_date)) === parseInt(selectedMonth)
-        );
+    // Get students in the selected batch
+    const studentsInBatch = students.filter(s => s.year === selectedBatch);
+    const batchStudentIds = new Set(studentsInBatch.map(s => s.id));
+
+    const today = new Date();
+    today.setHours(23, 59, 59, 999); // End of today
+    
+    // Use the earlier of today or semester end date
+    const endDate = range.end && today > range.end ? range.end : today;
+
+    const interval = {
+      start: new Date(range.start),
+      end: endDate,
+    };
+
+    const days = eachDayOfInterval(interval);
+
+    return days.map(day => {
+      const studentsOnLeave = new Set<string>();
       
-      const totalLeaveDays = monthlyApprovedRequests.reduce((acc, req) => acc + req.total_days, 0);
+      // Filter leave requests to only approved ones from students in the selected batch
+      leaveRequests.forEach(req => {
+        if (req.status === 'Approved' && batchStudentIds.has(req.student_id)) {
+          const leaveStart = parseISO(req.start_date);
+          const leaveEnd = parseISO(req.end_date);
+          
+          // Check if the day falls within the leave period
+          if (isWithinInterval(day, { start: leaveStart, end: leaveEnd })) {
+            studentsOnLeave.add(req.student_id);
+          }
+        }
+      });
       
-      const studentsWhoTookLeave = new Set(monthlyApprovedRequests.map(req => req.student_name));
-      const numberOfStudentsWithLeave = studentsWhoTookLeave.size;
-
-      const averageLeavePercentage = tutorStudents.length > 0
-        ? ((numberOfStudentsWithLeave / tutorStudents.length) * 100).toFixed(1)
-        : '0.0';
-
-      return {
-        tutorName: tutor.name,
-        totalStudents: tutorStudents.length,
-        totalLeaveApproved: totalLeaveDays,
-        averageLeavePercentage: `${averageLeavePercentage}%`,
+      return { 
+        date: format(day, 'MMM d'), 
+        studentsOnLeave: studentsOnLeave.size 
       };
     });
-  }, [selectedMonth, selectedYearInt, students, leaveRequests, tutors]);
+  }, [selectedBatch, selectedSemester, semesterDateRanges, leaveRequests, students]);
 
-  const monthOptions = Array.from({ length: 12 }, (_, i) => ({
-    value: String(i),
-    label: format(new Date(currentYear, i), 'MMMM'),
-  }));
 
-  const yearOptions = Array.from({ length: 10 }, (_, i) => ({
-    value: String(currentYear - i),
-    label: String(currentYear - i),
-  }));
-
-  const handleClearAllRequests = async () => {
-    await clearAllRequests();
-    showSuccess('All leave and OD requests have been cleared!');
-    setIsConfirmDialogOpen(false);
-  };
 
   return (
     <AdminLayout>
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
-          <h1 className="text-2xl md:text-3xl font-bold">Tutor Performance Report</h1>
+          <h1 className="text-2xl md:text-3xl font-bold">Students Leave Report</h1>
           <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-            <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+            <Select value={selectedBatch} onValueChange={setSelectedBatch}>
               <SelectTrigger className="w-full sm:w-[180px]">
-                <SelectValue placeholder="Select Month" />
+                <SelectValue placeholder="Select Batch" />
               </SelectTrigger>
               <SelectContent>
-                {monthOptions.map(option => (
-                  <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                {batches.map(batch => (
+                  <SelectItem key={batch} value={batch}>{batch === 'all' ? 'All Batches' : `${batch}-${parseInt(batch) + 4}`}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            <Select value={selectedYear} onValueChange={setSelectedYear}>
-              <SelectTrigger className="w-full sm:w-[120px]">
-                <SelectValue placeholder="Select Year" />
+            <Select value={selectedSemester} onValueChange={setSelectedSemester} disabled={selectedBatch === 'all'}>
+              <SelectTrigger className="w-full sm:w-[180px]">
+                <SelectValue placeholder="Select Semester" />
               </SelectTrigger>
               <SelectContent>
-                {yearOptions.map(option => (
-                  <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                {semesters.map(semester => (
+                  <SelectItem key={semester} value={String(semester)}>{semester === 'all' ? 'All Semesters' : `Semester ${semester}`}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            <Button variant="destructive" onClick={() => setIsConfirmDialogOpen(true)} className="w-full sm:w-auto">
-              <Trash2 className="mr-2 h-4 w-4" /> Clear All Requests
-            </Button>
           </div>
         </div>
         
-        <TutorLeaveSummaryChart data={chartData} month={`${monthName} ${selectedYear}`} />
-
-        <Card className="transition-all duration-300 hover:shadow-lg">
-          <CardHeader>
-            <CardTitle>Monthly Summary Report for {monthName} {selectedYear}</CardTitle>
-            <CardDescription>An overview of each tutor's student leave management for the selected month.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Tutor Name</TableHead>
-                    <TableHead className="text-center">Total Students</TableHead>
-                    <TableHead className="text-center">Total Leave Approved (Days)</TableHead>
-                    <TableHead className="text-right">Average Leave Usage</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {reportTableData.map((row) => (
-                    <TableRow key={row.tutorName} className="transition-colors hover:bg-muted/50">
-                      <TableCell className="font-medium">{row.tutorName}</TableCell>
-                      <TableCell className="text-center">{row.totalStudents}</TableCell>
-                      <TableCell className="text-center">{row.totalLeaveApproved}</TableCell>
-                      <TableCell className="text-right font-semibold">{row.averageLeavePercentage}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          </CardContent>
-        </Card>
+        {selectedBatch !== 'all' && selectedSemester !== 'all' ? (
+          <DailyLeaveChart 
+            data={dailyChartData} 
+            title={`Daily Leave Report for Batch ${selectedBatch}-${parseInt(selectedBatch) + 4}, Semester ${selectedSemester}`}
+          />
+        ) : (
+          <Card>
+            <CardHeader>
+              <CardTitle>Select a Batch and Semester</CardTitle>
+              <CardDescription>Please select a batch and semester to view the daily leave report.</CardDescription>
+            </CardHeader>
+          </Card>
+        )}
       </div>
 
-      <AlertDialog open={isConfirmDialogOpen} onOpenChange={setIsConfirmDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete ALL leave and OD request records from the database.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleClearAllRequests} className="bg-destructive hover:bg-destructive/90">
-              Delete All Records
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </AdminLayout>
   );
 };

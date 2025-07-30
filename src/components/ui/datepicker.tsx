@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { format } from "date-fns"
+import { format, isSameDay } from "date-fns"
 import { Calendar as CalendarIcon } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -16,14 +16,20 @@ import {
 interface DatePickerProps {
   date: Date | undefined;
   setDate: (date: Date | undefined) => void;
-  disabled?: (date: Date) => boolean;
+  disabled?: (date: Date) => boolean | boolean;
+  fullDisabled?: boolean;
 }
 
-export function DatePicker({ date, setDate, disabled }: DatePickerProps) {
+export function DatePicker({ date, setDate, disabled, fullDisabled = false }: DatePickerProps) {
   const [open, setOpen] = React.useState(false)
 
   const handleDateSelect = (selectedDate: Date | undefined) => {
-    setDate(selectedDate);
+    // If the same date is clicked again, unselect it
+    if (selectedDate && date && isSameDay(selectedDate, date)) {
+      setDate(undefined);
+    } else {
+      setDate(selectedDate);
+    }
     setOpen(false);
   }
 
@@ -32,9 +38,11 @@ export function DatePicker({ date, setDate, disabled }: DatePickerProps) {
       <PopoverTrigger asChild>
         <Button
           variant={"outline"}
+          disabled={fullDisabled}
           className={cn(
             "w-full justify-start text-left font-normal",
-            !date && "text-muted-foreground"
+            !date && "text-muted-foreground",
+            fullDisabled && "opacity-50 cursor-not-allowed"
           )}
         >
           <CalendarIcon className="mr-2 h-4 w-4" />
