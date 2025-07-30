@@ -14,7 +14,16 @@ interface DailyLeaveChartProps {
 }
 
 export const DailyLeaveChart = ({ data, title }: DailyLeaveChartProps) => {
-  const chartWidth = Math.max(data.length * 80, 800); // Increased width per bar
+  // Safety check: ensure data is valid array
+  const safeData = Array.isArray(data) ? data.filter(item => 
+    item && 
+    typeof item === 'object' && 
+    typeof item.date === 'string' && 
+    typeof item.studentsOnLeave === 'number' &&
+    !isNaN(item.studentsOnLeave)
+  ) : [];
+  
+  const chartWidth = Math.max(safeData.length * 80, 800); // Increased width per bar
 
   return (
     <Card>
@@ -22,7 +31,7 @@ export const DailyLeaveChart = ({ data, title }: DailyLeaveChartProps) => {
         <CardTitle>{title}</CardTitle>
         <CardDescription>
           Daily breakdown of students on leave from semester start date to current date.
-          {data.length > 0 && ` (${data.length} days)`}
+          {safeData.length > 0 && ` (${safeData.length} days)`}
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -30,7 +39,7 @@ export const DailyLeaveChart = ({ data, title }: DailyLeaveChartProps) => {
           <div style={{ width: `${chartWidth}px`, padding: '10px' }}>
             <ResponsiveContainer width="100%" height={450}>
               <BarChart 
-                data={data} 
+                data={safeData} 
                 margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
               >
                 <CartesianGrid strokeDasharray="3 3" />
@@ -46,8 +55,18 @@ export const DailyLeaveChart = ({ data, title }: DailyLeaveChartProps) => {
                   label={{ value: 'Students on Leave', angle: -90, position: 'insideLeft' }}
                 />
                 <Tooltip 
-                  formatter={[(value: number) => [value, 'Students on Leave']]}
-                  labelFormatter={(label: string) => `Date: ${label}`}
+                  formatter={(value: any, name: any) => {
+                    if (typeof value === 'number') {
+                      return [value, 'Students on Leave'];
+                    }
+                    return [String(value || 0), 'Students on Leave'];
+                  }}
+                  labelFormatter={(label: any) => {
+                    if (typeof label === 'string') {
+                      return `Date: ${label}`;
+                    }
+                    return `Date: ${String(label || '')}`;
+                  }}
                   contentStyle={{
                     backgroundColor: '#f8f9fa',
                     border: '1px solid #dee2e6',
@@ -64,7 +83,7 @@ export const DailyLeaveChart = ({ data, title }: DailyLeaveChartProps) => {
             </ResponsiveContainer>
           </div>
         </ScrollArea>
-        {data.length === 0 && (
+        {safeData.length === 0 && (
           <div className="text-center py-8 text-muted-foreground">
             No data available for the selected period.
           </div>

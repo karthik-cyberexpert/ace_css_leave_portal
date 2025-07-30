@@ -71,7 +71,8 @@ export interface Student {
   name: string;
   register_number: string;
   tutor_id: string;
-  year: string;
+  batch: string;
+  semester: number;
   leave_taken: number;
   username: string;
   profile_photo?: string;
@@ -141,7 +142,8 @@ export type NewStudentData = {
   name: string;
   registerNumber: string;
   tutorName: string;
-  year: string;
+  batch: string;
+  semester: number;
   username: string;
   password?: string;
   profilePhoto?: string;
@@ -547,7 +549,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         name: studentData.name,
         registerNumber: studentData.registerNumber,
         tutorId: tutor.id,
-        year: studentData.year,
+        batch: studentData.batch,
+        semester: studentData.semester,
         username: studentData.username,
         profilePhoto: studentData.profilePhoto,
       };

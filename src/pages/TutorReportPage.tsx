@@ -91,7 +91,8 @@ const TutorReportPage = () => {
                   <TableRow>
                     <TableHead>Student Name</TableHead>
                     <TableHead>Register Number</TableHead>
-                    <TableHead className="text-center">Year</TableHead>
+                    <TableHead className="text-center">Batch</TableHead>
+                    <TableHead className="text-center">Semester</TableHead>
                     <TableHead className="text-right">Total Leave Taken</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -100,7 +101,8 @@ const TutorReportPage = () => {
                     <TableRow key={student.id} className="transition-colors hover:bg-muted/50">
                       <TableCell className="font-medium">{student.name}</TableCell>
                       <TableCell>{student.register_number}</TableCell>
-                      <TableCell className="text-center">{student.year}</TableCell>
+                      <TableCell className="text-center">{student.batch}-{parseInt(student.batch) + 4}</TableCell>
+                      <TableCell className="text-center">{student.semester}</TableCell>
                       <TableCell className="text-right font-semibold">{student.leave_taken}</TableCell>
                     </TableRow>
                   ))}

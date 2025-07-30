@@ -16,7 +16,8 @@ const studentFormSchema = (isEditing: boolean) => z.object({
   name: z.string().min(2, "Name must be at least 2 characters."),
   registerNumber: z.string().min(3, "Register number is required."),
   tutorName: z.string({ required_error: "Please select a tutor." }),
-  year: z.string({ required_error: "Please select a year." }),
+  batch: z.string({ required_error: "Please select a batch." }),
+  semester: z.number({ required_error: "Please select a semester." }).min(1).max(8),
   username: z.string().min(3, "Username must be at least 3 characters."),
   password: z.string().min(6, "Password must be at least 6 characters.").optional().or(z.literal('')),
   profilePhoto: z.string().url("Please enter a valid URL.").optional().or(z.literal('')),
@@ -33,7 +34,7 @@ interface StudentFormDialogProps {
   onSubmit: (data: StudentFormValues) => void;
   editingStudent: Student | null;
   staffMembers: Staff[]; // Changed from tutors: string[]
-  years: string[];
+  batches: string[];
   isTutorView?: boolean;
 }
 
@@ -43,7 +44,7 @@ export const StudentFormDialog: React.FC<StudentFormDialogProps> = ({
   onSubmit,
   editingStudent,
   staffMembers, // Use staffMembers
-  years,
+  batches,
   isTutorView = false,
 }) => {
   const [showPassword, setShowPassword] = useState(false);

@@ -39,7 +39,8 @@ CREATE TABLE IF NOT EXISTS `students` (
   `name` VARCHAR(255) NOT NULL,
   `register_number` VARCHAR(50) NOT NULL UNIQUE,
   `tutor_id` VARCHAR(36),
-  `year` VARCHAR(4) NOT NULL,
+  `batch` VARCHAR(4) NOT NULL,
+  `semester` TINYINT(1) NOT NULL DEFAULT 1,
   `leave_taken` INT NOT NULL DEFAULT 0,
   `username` VARCHAR(50) NOT NULL UNIQUE,
   `profile_photo` TEXT,
@@ -47,7 +48,8 @@ CREATE TABLE IF NOT EXISTS `students` (
   `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   FOREIGN KEY (`id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
-  FOREIGN KEY (`tutor_id`) REFERENCES `staff` (`id`) ON DELETE SET NULL
+  FOREIGN KEY (`tutor_id`) REFERENCES `staff` (`id`) ON DELETE SET NULL,
+  INDEX `idx_students_batch_semester` (`batch`, `semester`)
 );
 
 -- Leave requests table

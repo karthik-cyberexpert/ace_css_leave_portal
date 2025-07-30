@@ -60,8 +60,8 @@ const LeaveRequestPage = () => {
 
   // Get current semester when user profile loads
   useEffect(() => {
-    if (userProfile?.student?.year) {
-      const activeSemester = getCurrentActiveSemester(userProfile.student.year);
+    if (userProfile?.student?.batch) {
+      const activeSemester = getCurrentActiveSemester(userProfile.student.batch);
       setCurrentSemester(activeSemester);
     }
   }, [userProfile, getCurrentActiveSemester]);
@@ -132,8 +132,8 @@ const LeaveRequestPage = () => {
                           if (date < today) return true;
                           
                           // If we have a current semester and student batch, validate against semester dates
-                          if (currentSemester && userProfile?.student?.year) {
-                            const semesterRange = getSemesterDateRange(userProfile.student.year, currentSemester);
+                          if (currentSemester && userProfile?.student?.batch) {
+                            const semesterRange = getSemesterDateRange(userProfile.student.batch, currentSemester);
                             if (semesterRange) {
                               const semesterStart = new Date(semesterRange.start);
                               semesterStart.setHours(0, 0, 0, 0);
@@ -175,8 +175,8 @@ const LeaveRequestPage = () => {
                           if (date < minDate) return true;
                           
                           // If we have a current semester and student batch, validate against semester dates
-                          if (currentSemester && userProfile?.student?.year) {
-                            const semesterRange = getSemesterDateRange(userProfile.student.year, currentSemester);
+                          if (currentSemester && userProfile?.student?.batch) {
+                            const semesterRange = getSemesterDateRange(userProfile.student.batch, currentSemester);
                             if (semesterRange) {
                               // If semester has an end date, date must be before or on end date
                               if (semesterRange.end && semesterRange.end.getTime() !== 8640000000000000) {

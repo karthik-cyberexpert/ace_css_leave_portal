@@ -53,50 +53,60 @@ const AdminReportPage = () => {
   }, [selectedBatch, semesters, getSemesterDateRange]);
 
   const dailyChartData = useMemo(() => {
-    if (selectedBatch === 'all' || selectedSemester === 'all') return [];
+    try {
+      if (selectedBatch === 'all' || selectedSemester === 'all') return [];
 
-    const semester = parseInt(selectedSemester);
-    const range = semesterDateRanges[semester];
-    if (!range?.start) return [];
+      const semester = parseInt(selectedSemester);
+      const range = semesterDateRanges[semester];
 
-    // Get students in the selected batch
-    const studentsInBatch = students.filter(s => s.year === selectedBatch);
-    const batchStudentIds = new Set(studentsInBatch.map(s => s.id));
+      // Ensure the range and its start date are valid
+      if (!range?.start || !(range.start instanceof Date)) return [];
 
-    const today = new Date();
-    today.setHours(23, 59, 59, 999); // End of today
-    
-    // Use the earlier of today or semester end date
-    const endDate = range.end && today > range.end ? range.end : today;
+      // Get students in the selected batch
+      const studentsInBatch = students.filter(s => s.batch === selectedBatch);
+      const batchStudentIds = new Set(studentsInBatch.map(s => s.id));
 
-    const interval = {
-      start: new Date(range.start),
-      end: endDate,
-    };
-
-    const days = eachDayOfInterval(interval);
-
-    return days.map(day => {
-      const studentsOnLeave = new Set<string>();
+      const today = new Date();
+      today.setHours(23, 59, 59, 999); // End of today
       
-      // Filter leave requests to only approved ones from students in the selected batch
-      leaveRequests.forEach(req => {
-        if (req.status === 'Approved' && batchStudentIds.has(req.student_id)) {
-          const leaveStart = parseISO(req.start_date);
-          const leaveEnd = parseISO(req.end_date);
-          
-          // Check if the day falls within the leave period
-          if (isWithinInterval(day, { start: leaveStart, end: leaveEnd })) {
-            studentsOnLeave.add(req.student_id);
-          }
-        }
-      });
-      
-      return { 
-        date: format(day, 'MMM d'), 
-        studentsOnLeave: studentsOnLeave.size 
+      // Use the earlier of today or semester end date, ensuring end date is valid
+      const endDate = (range.end && range.end instanceof Date && today > range.end) ? range.end : today;
+
+      const interval = {
+        start: new Date(range.start),
+        end: endDate,
       };
-    });
+      
+      // Final check to prevent invalid interval
+      if (interval.start > interval.end) {
+          return [];
+      }
+
+      const days = eachDayOfInterval(interval);
+
+      return days.map(day => {
+        const studentsOnLeave = new Set<string>();
+        
+        leaveRequests.forEach(req => {
+          if (req.status === 'Approved' && batchStudentIds.has(req.student_id)) {
+            const leaveStart = parseISO(req.start_date);
+            const leaveEnd = parseISO(req.end_date);
+            
+            if (isWithinInterval(day, { start: leaveStart, end: leaveEnd })) {
+              studentsOnLeave.add(req.student_id);
+            }
+          }
+        });
+        
+        return { 
+          date: format(day, 'MMM d'), 
+          studentsOnLeave: studentsOnLeave.size 
+        };
+      });
+    } catch (error) {
+      console.error("Error calculating daily chart data:", error);
+      return []; // Return an empty array on error to prevent crash
+    }
   }, [selectedBatch, selectedSemester, semesterDateRanges, leaveRequests, students]);
 
 
@@ -113,7 +123,7 @@ const AdminReportPage = () => {
               </SelectTrigger>
               <SelectContent>
                 {batches.map(batch => (
-                  <SelectItem key={batch} value={batch}>{batch === 'all' ? 'All Batches' : `${batch}-${parseInt(batch) + 4}`}</SelectItem>
+                  <SelectItem key={batch} value={String(batch)}>{batch === 'all' ? 'All Batches' : `${batch}-${parseInt(String(batch)) + 4}`}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
