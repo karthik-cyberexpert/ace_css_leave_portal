@@ -108,14 +108,14 @@ export const StudentFormDialog: React.FC<StudentFormDialogProps> = ({
             <FormField control={form.control} name="name" render={({ field }) => (
               <FormItem>
                 <FormLabel>Full Name</FormLabel>
-                <FormControl><Input placeholder="John Doe" {...field} /></FormControl>
+                <FormControl><Input placeholder="Full Name" {...field} /></FormControl>
                 <FormMessage />
               </FormItem>
             )} />
             <FormField control={form.control} name="registerNumber" render={({ field }) => (
               <FormItem>
                 <FormLabel>Register Number</FormLabel>
-                <FormControl><Input placeholder="S005" {...field} /></FormControl>
+                <FormControl><Input placeholder="Register Number" {...field} /></FormControl>
                 <FormMessage />
               </FormItem>
             )} />
@@ -124,7 +124,7 @@ export const StudentFormDialog: React.FC<StudentFormDialogProps> = ({
                 <FormItem>
                   <FormLabel>Tutor</FormLabel>
                   <Select onValueChange={field.onChange} value={field.value}> {/* Use value for controlled component */}
-                    <FormControl><SelectTrigger><SelectValue placeholder="Select a tutor" /></SelectTrigger></FormControl>
+                    <FormControl><SelectTrigger><SelectValue placeholder="Select Tutor" /></SelectTrigger></FormControl>
                     <SelectContent>
                       {staffMembers.filter(s => s.is_tutor).map(tutor => <SelectItem key={tutor.id} value={tutor.name}>{tutor.name}</SelectItem>)}
                     </SelectContent>
@@ -138,7 +138,7 @@ export const StudentFormDialog: React.FC<StudentFormDialogProps> = ({
                 <FormItem>
                   <FormLabel>Batch</FormLabel>
                   <Select onValueChange={handleBatchChange} value={field.value}>
-                    <FormControl><SelectTrigger><SelectValue placeholder="Select a batch" /></SelectTrigger></FormControl>
+                    <FormControl><SelectTrigger><SelectValue placeholder="Select Batch" /></SelectTrigger></FormControl>
                     <SelectContent>
                       {batches.map(batch => <SelectItem key={batch} value={batch}>{batch}-{parseInt(batch) + 4}</SelectItem>)}
                     </SelectContent>
@@ -150,7 +150,7 @@ export const StudentFormDialog: React.FC<StudentFormDialogProps> = ({
                 <FormItem>
                   <FormLabel>Semester</FormLabel>
                   <Select onValueChange={(value) => field.onChange(parseInt(value))} value={String(field.value)}>
-                    <FormControl><SelectTrigger><SelectValue placeholder="Select semester" /></SelectTrigger></FormControl>
+                    <FormControl><SelectTrigger><SelectValue placeholder="Select Semester" /></SelectTrigger></FormControl>
                     <SelectContent>
                       {[1, 2, 3, 4, 5, 6, 7, 8].map(sem => <SelectItem key={sem} value={String(sem)}>Semester {sem}</SelectItem>)}
                     </SelectContent>
@@ -163,14 +163,14 @@ export const StudentFormDialog: React.FC<StudentFormDialogProps> = ({
               <FormField control={form.control} name="email" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Email</FormLabel>
-                  <FormControl><Input placeholder="john.doe@example.com" type="email" {...field} /></FormControl>
+                  <FormControl><Input placeholder="Email Address" type="email" {...field} /></FormControl>
                   <FormMessage />
                 </FormItem>
               )} />
               <FormField control={form.control} name="mobile" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Mobile Number</FormLabel>
-                  <FormControl><Input placeholder="9876543210" {...field} /></FormControl>
+                  <FormControl><Input placeholder="Mobile Number" {...field} /></FormControl>
                   <FormMessage />
                 </FormItem>
               )} />
@@ -182,7 +182,7 @@ export const StudentFormDialog: React.FC<StudentFormDialogProps> = ({
                   <FormControl>
                     <Input 
                       type={showPassword ? 'text' : 'password'} 
-                      placeholder={editingStudent ? 'Leave blank to keep current password' : '••••••••'} 
+                      placeholder={editingStudent ? 'Leave blank to keep current password' : 'Password'} 
                       {...field} 
                     />
                   </FormControl>

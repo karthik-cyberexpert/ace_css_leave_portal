@@ -100,7 +100,7 @@ export const BulkAddStudentsDialog: React.FC<BulkAddStudentsDialogProps> = ({ op
       if (fileExtension && ['csv', 'xlsx', 'json'].includes(fileExtension)) {
         console.log('File accepted, setting file state');
         setFile(selectedFile);
-        setProcessingStatus(`File "${selectedFile.name}" selected successfully. Click "Process File" to continue.`);
+        setProcessingStatus(`File "${selectedFile.name}" selected successfully. Click "Upload File" to continue.`);
       } else {
         console.log('File rejected - invalid extension');
         showError("Invalid File Type. Please upload a CSV, XLSX, or JSON file.");
@@ -377,7 +377,7 @@ export const BulkAddStudentsDialog: React.FC<BulkAddStudentsDialogProps> = ({ op
               </div>
             </div>
             <Button onClick={handleProcessFile} disabled={!file || isProcessing}>
-              {isProcessing ? 'Processing...' : 'Process File'}
+              {isProcessing ? 'Processing...' : 'Upload File'}
             </Button>
           </div>
           {file ? (
