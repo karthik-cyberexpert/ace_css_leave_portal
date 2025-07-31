@@ -27,6 +27,8 @@ import TutorStudentManagementPage from "./pages/TutorStudentManagementPage";
 import ProtectedRoute from "./components/ProtectedRoute";
 import ProfilePage from "./pages/ProfilePage";
 import StaffProfilePage from "./pages/StaffProfilePage";
+import TutorProfileRequestsPage from "./pages/TutorProfileRequestsPage";
+import AdminProfileRequestsPage from "./pages/AdminProfileRequestsPage";
 import { ThemeProvider } from "./components/theme-provider";
 
 const queryClient = new QueryClient();
@@ -58,6 +60,7 @@ const App = () => (
             <Route path="/tutor-report" element={<ProtectedRoute allowedRoles={['Tutor']}><TutorReportPage /></ProtectedRoute>} />
             <Route path="/tutor-students" element={<ProtectedRoute allowedRoles={['Tutor']}><TutorStudentManagementPage /></ProtectedRoute>} />
             <Route path="/tutor-profile" element={<ProtectedRoute allowedRoles={['Tutor']}><StaffProfilePage /></ProtectedRoute>} />
+            <Route path="/tutor-profile-requests" element={<ProtectedRoute allowedRoles={['Tutor']}><TutorProfileRequestsPage /></ProtectedRoute>} />
 
             {/* Admin Routes */}
             <Route path="/admin-dashboard" element={<ProtectedRoute allowedRoles={['Admin']}><AdminDashboardPage /></ProtectedRoute>} />
@@ -68,6 +71,7 @@ const App = () => (
             <Route path="/admin-students" element={<ProtectedRoute allowedRoles={['Admin']}><AdminStudentManagementPage /></ProtectedRoute>} />
             <Route path="/admin-staff" element={<ProtectedRoute allowedRoles={['Admin']}><AdminStaffManagementPage /></ProtectedRoute>} />
             <Route path="/admin-profile" element={<ProtectedRoute allowedRoles={['Admin']}><StaffProfilePage /></ProtectedRoute>} />
+            <Route path="/admin-profile-requests" element={<ProtectedRoute allowedRoles={['Admin']}><AdminProfileRequestsPage /></ProtectedRoute>} />
 
             <Route path="*" element={<NotFound />} />
           </Routes>
