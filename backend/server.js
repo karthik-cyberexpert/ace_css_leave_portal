@@ -16,14 +16,18 @@ import { dbConfig, jwtSecret } from './config/database.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Create uploads directory if it doesn't exist
+// Create uploads directories if they don't exist
 const uploadsDir = path.join(__dirname, 'uploads', 'profile-photos');
+const certificatesDir = path.join(__dirname, 'uploads', 'certificates');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
+if (!fs.existsSync(certificatesDir)) {
+  fs.mkdirSync(certificatesDir, { recursive: true });
+}
 
-// Configure multer for file uploads
-const storage = multer.diskStorage({
+// Configure multer for profile photo uploads
+const profilePhotoStorage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, uploadsDir);
   },
@@ -31,6 +35,20 @@ const storage = multer.diskStorage({
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
     const fileExtension = path.extname(file.originalname);
     cb(null, file.fieldname + '-' + uniqueSuffix + fileExtension);
+  }
+});
+
+// Simple certificate storage - we'll handle directory creation in the route
+const certificateStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    // Use a temporary directory, we'll move the file later
+    cb(null, certificatesDir);
+  },
+  filename: (req, file, cb) => {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const fileExtension = path.extname(file.originalname);
+    const originalName = path.basename(file.originalname, fileExtension);
+    cb(null, `certificate-${timestamp}-${originalName}${fileExtension}`);
   }
 });
 
@@ -43,11 +61,20 @@ const fileFilter = (req, file, cb) => {
   }
 };
 
-const upload = multer({ 
-  storage: storage,
+// Create separate multer instances for different upload types
+const profileUpload = multer({ 
+  storage: profilePhotoStorage,
   fileFilter: fileFilter,
   limits: {
     fileSize: 5 * 1024 * 1024 // 5MB limit
+  }
+});
+
+const certificateUpload = multer({ 
+  storage: certificateStorage,
+  fileFilter: fileFilter,
+  limits: {
+    fileSize: 10 * 1024 * 1024 // 10MB limit for certificates
   }
 });
 
@@ -274,7 +301,7 @@ app.get('/staff', authenticateToken, async (req, res) => {
 });
 
 // Upload profile photo
-app.post('/upload/profile-photo', authenticateToken, upload.single('profilePhoto'), async (req, res) => {
+app.post('/upload/profile-photo', authenticateToken, profileUpload.single('profilePhoto'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });
@@ -755,7 +782,16 @@ app.post('/od-requests', authenticateToken, async (req, res) => {
     
     // Get student and tutor info
     const [student] = await query('SELECT * FROM students WHERE id = ?', [req.user.id]);
+    if (!student || !student.tutor_id) {
+      console.error('No student or tutor ID found');
+      return res.status(500).json({ error: 'Student or tutor information is missing' });
+    }
+    
     const [tutor] = await query('SELECT * FROM staff WHERE id = ?', [student.tutor_id]);
+    if (!tutor) {
+      console.error('Tutor not found for ID:', student.tutor_id);
+      return res.status(500).json({ error: 'Tutor not found' });
+    }
     
     await query(
       'INSERT INTO od_requests (id, student_id, student_name, student_register_number, tutor_id, tutor_name, start_date, end_date, total_days, purpose, destination, description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
@@ -764,8 +800,8 @@ app.post('/od-requests', authenticateToken, async (req, res) => {
     
     res.status(201).json({ message: 'OD request created successfully', id });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Failed to create OD request' });
+    console.error('OD request creation error:', error);
+    res.status(500).json({ error: 'Failed to create OD request', details: error.message });
   }
 });
 
@@ -943,15 +979,67 @@ app.put('/profile-change-requests/:id/status', authenticateToken, async (req, re
 });
 
 // Upload OD certificate (file upload)
-app.post('/od-requests/:id/certificate/upload', authenticateToken, upload.single('certificate'), async (req, res) => {
+app.post('/od-requests/:id/certificate/upload', authenticateToken, certificateUpload.single('certificate'), async (req, res) => {
   try {
     const { id } = req.params;
     
+    console.log('Certificate upload request received for OD ID:', id);
+    console.log('User ID:', req.user.id);
+    console.log('File info:', req.file);
+    
     if (!req.file) {
+      console.log('No file uploaded');
       return res.status(400).json({ error: 'No certificate file uploaded' });
     }
     
-    const certificateUrl = `/uploads/profile-photos/${req.file.filename}`;
+    // Get student register number for the directory structure
+    const [student] = await query('SELECT register_number FROM students WHERE id = ?', [req.user.id]);
+    if (!student) {
+      console.log('Student not found for user ID:', req.user.id);
+      return res.status(404).json({ error: 'Student not found' });
+    }
+    
+    console.log('Student register number:', student.register_number);
+    
+    // Create student-specific directory
+    const studentCertDir = path.join(certificatesDir, student.register_number);
+    console.log('Target directory:', studentCertDir);
+    
+    if (!fs.existsSync(studentCertDir)) {
+      fs.mkdirSync(studentCertDir, { recursive: true });
+      console.log('Created directory:', studentCertDir);
+    }
+    
+    // Move file from temp location to student directory
+    const tempFilePath = req.file.path;
+    const finalFilePath = path.join(studentCertDir, req.file.filename);
+    
+    console.log('Moving file from:', tempFilePath);
+    console.log('Moving file to:', finalFilePath);
+    
+    try {
+      // Check if temp file exists
+      if (!fs.existsSync(tempFilePath)) {
+        console.error('Temp file does not exist:', tempFilePath);
+        return res.status(500).json({ error: 'Uploaded file not found' });
+      }
+      
+      fs.renameSync(tempFilePath, finalFilePath);
+      console.log(`Certificate successfully moved to: ${finalFilePath}`);
+      
+      // Verify the file was moved
+      if (!fs.existsSync(finalFilePath)) {
+        console.error('File was not successfully moved to:', finalFilePath);
+        return res.status(500).json({ error: 'Failed to save certificate file' });
+      }
+      
+    } catch (moveError) {
+      console.error('Failed to move certificate file:', moveError);
+      return res.status(500).json({ error: 'Failed to save certificate file', details: moveError.message });
+    }
+    
+    const certificateUrl = `/uploads/certificates/${student.register_number}/${req.file.filename}`;
+    console.log('Certificate URL:', certificateUrl);
     
     await query(
       'UPDATE od_requests SET certificate_url = ?, certificate_status = ? WHERE id = ?',
@@ -959,10 +1047,16 @@ app.post('/od-requests/:id/certificate/upload', authenticateToken, upload.single
     );
     
     const [updatedRequest] = await query('SELECT * FROM od_requests WHERE id = ?', [id]);
-    res.json({ ...updatedRequest, certificateUrl });
+    console.log('Certificate upload completed successfully');
+    
+    res.json({ 
+      ...updatedRequest, 
+      certificateUrl,
+      message: 'Certificate uploaded successfully and is now pending verification'
+    });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Failed to upload certificate' });
+    console.error('Certificate upload error:', error);
+    res.status(500).json({ error: 'Failed to upload certificate', details: error.message });
   }
 });
 
@@ -1215,6 +1309,207 @@ app.get('/test-db', async (req, res) => {
     res.json({ success: true, userCount: result.count, message: 'Database connection successful' });
   } catch (error) {
     console.error('Database test failed:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Temporary test endpoint to get sample users
+app.get('/test-users', async (req, res) => {
+  try {
+    const users = await query('SELECT id, email, first_name, last_name, is_admin, is_tutor FROM users LIMIT 5');
+    const students = await query('SELECT id, register_number, name, email FROM students LIMIT 3');
+    res.json({ 
+      success: true,
+      users: users,
+      students: students
+    });
+  } catch (error) {
+    console.error('Failed to fetch test users:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to fetch test users',
+      details: error.message 
+    });
+  }
+});
+
+// Temporary endpoint to create test user
+app.post('/create-test-user', async (req, res) => {
+  try {
+    const testEmail = 'testupload@college.portal';
+    const testPassword = 'testpassword123';
+    const testRegNumber = '9999';
+    const testName = 'Test Upload User';
+    
+    // Check if user already exists
+    const [existingUser] = await query('SELECT id FROM users WHERE email = ?', [testEmail]);
+    if (existingUser) {
+      return res.json({ 
+        success: true, 
+        message: 'Test user already exists',
+        email: testEmail,
+        password: testPassword,
+        register_number: testRegNumber
+      });
+    }
+    
+    const id = uuidv4();
+    const passwordHash = await bcrypt.hash(testPassword, 10);
+    
+    // Insert into users table
+    await query(
+      'INSERT INTO users (id, email, password_hash, first_name, last_name) VALUES (?, ?, ?, ?, ?)',
+      [id, testEmail, passwordHash, 'Test Upload', 'User']
+    );
+    
+    // Insert into students table
+    await query(
+      'INSERT INTO students (id, name, register_number, email, tutor_id, batch, semester, mobile) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [id, testName, testRegNumber, testEmail, '2ef0a367-4cb8-4865-b65f-1def7b8161d2', 'Test', 1, '1234567890']
+    );
+    
+    res.json({ 
+      success: true, 
+      message: 'Test user created successfully',
+      email: testEmail,
+      password: testPassword,
+      register_number: testRegNumber
+    });
+  } catch (error) {
+    console.error('Failed to create test user:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to create test user',
+      details: error.message 
+    });
+  }
+});
+
+// Temporary endpoint to create staff record for tutor
+app.post('/create-staff-for-tutor', async (req, res) => {
+  try {
+    const tutorId = '2ef0a367-4cb8-4865-b65f-1def7b8161d2';
+    
+    // Check if staff record already exists
+    const [existingStaff] = await query('SELECT id FROM staff WHERE id = ?', [tutorId]);
+    if (existingStaff) {
+      return res.json({ 
+        success: true, 
+        message: 'Staff record already exists for tutor'
+      });
+    }
+    
+    // Get user info for the tutor
+    const [tutorUser] = await query('SELECT * FROM users WHERE id = ?', [tutorId]);
+    if (!tutorUser) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Tutor user not found'
+      });
+    }
+    
+    // Insert into staff table
+    await query(
+      'INSERT INTO staff (id, name, email, username, is_admin, is_tutor) VALUES (?, ?, ?, ?, ?, ?)',
+      [tutorId, `${tutorUser.first_name} ${tutorUser.last_name}`, tutorUser.email, 'tutor1', tutorUser.is_admin, tutorUser.is_tutor]
+    );
+    
+    res.json({ 
+      success: true, 
+      message: 'Staff record created for tutor successfully'
+    });
+  } catch (error) {
+    console.error('Failed to create staff record:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to create staff record',
+      details: error.message 
+    });
+  }
+});
+
+// Temporary endpoint to get test user details
+app.get('/test-student-details', async (req, res) => {
+  try {
+    const testEmail = 'testupload@college.portal';
+    
+    // Get user info
+    const [user] = await query('SELECT * FROM users WHERE email = ?', [testEmail]);
+    if (!user) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Test user not found'
+      });
+    }
+    
+    // Get student info
+    const [student] = await query('SELECT * FROM students WHERE id = ?', [user.id]);
+    
+    // Get tutor info if exists
+    let tutor = null;
+    if (student && student.tutor_id) {
+      [tutor] = await query('SELECT * FROM staff WHERE id = ?', [student.tutor_id]);
+    }
+    
+    res.json({ 
+      success: true,
+      user: user,
+      student: student,
+      tutor: tutor
+    });
+  } catch (error) {
+    console.error('Failed to get test student details:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to get test student details',
+      details: error.message 
+    });
+  }
+});
+
+// Temporary endpoint to assign tutor to test student
+app.post('/assign-tutor-to-test-student', async (req, res) => {
+  try {
+    console.log('Assigning tutor to test student...');
+    
+    const tutorEmail = 'test@ace.com';
+    const testEmail = 'testupload@college.portal';
+    
+    // Find the tutor by email in users table
+    const [tutorUser] = await query('SELECT id FROM users WHERE email = ?', [tutorEmail]);
+    
+    if (!tutorUser) {
+      return res.json({ success: false, error: `Tutor user not found with email ${tutorEmail}` });
+    }
+    
+    const tutorId = tutorUser.id;
+    console.log('Found tutor ID:', tutorId);
+    
+    // Check if student record exists
+    const [existingStudent] = await query('SELECT * FROM students WHERE email = ?', [testEmail]);
+    
+    if (!existingStudent) {
+      // Get test user info to create student record
+      const [testUser] = await query('SELECT * FROM users WHERE email = ?', [testEmail]);
+      if (!testUser) {
+        return res.json({ success: false, error: 'Test user not found' });
+      }
+      
+      // Create student record if it doesn't exist
+      await query(
+        'INSERT INTO students (id, name, register_number, email, tutor_id, batch, semester, mobile) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        [testUser.id, `${testUser.first_name} ${testUser.last_name}`, 'TEST001', testEmail, tutorId, 'Test', 1, '1234567890']
+      );
+      console.log('Created new student record with tutor assigned');
+    } else {
+      // Update existing student record
+      await query('UPDATE students SET tutor_id = ? WHERE email = ?', [tutorId, testEmail]);
+      console.log('Updated existing student record with tutor');
+    }
+    
+    res.json({ success: true, message: 'Tutor assigned successfully', tutorId: tutorId });
+  } catch (error) {
+    console.error('Error assigning tutor to test student:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
