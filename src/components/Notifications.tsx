@@ -128,17 +128,26 @@ export const Notifications = ({ role }: { role: 'student' | 'tutor' | 'admin' })
       
       // Direct profile change notifications for tutors (students updating profiles automatically)
       if (Array.isArray(students)) {
+        const recentProfileChanges = JSON.parse(localStorage.getItem('recent_profile_changes') || '[]');
+        console.log('Recent profile changes from localStorage:', recentProfileChanges);
+        console.log('Tutor students IDs:', Array.from(myStudentIds));
+        
         students.filter(s => myStudentIds.has(s.id)).forEach(student => {
-          // Check for recent profile updates (this would need to be stored in database with timestamps)
-          // For now, we'll use a different approach with localStorage to track recent notifications
-          const recentProfileChanges = JSON.parse(localStorage.getItem('recent_profile_changes') || '[]');
-          const studentChanges = recentProfileChanges.filter((change: any) => 
-            change.studentId === student.id && 
-            change.notifiedRole === 'tutor' &&
-            differenceInDays(now, parseISO(change.timestamp)) <= 1
-          );
+          const studentChanges = recentProfileChanges.filter((change: any) => {
+            console.log(`Checking change for student ${student.id}:`, change);
+            console.log(`Change studentId: ${change.studentId}, Current student id: ${student.id}`);
+            console.log(`Change notifiedRole: ${change.notifiedRole}`);
+            console.log(`Days difference: ${differenceInDays(now, parseISO(change.timestamp))}`);
+            
+            return change.studentId === student.id && 
+                   change.notifiedRole === 'tutor' &&
+                   differenceInDays(now, parseISO(change.timestamp)) <= 1;
+          });
+          
+          console.log(`Student ${student.name} changes for tutor:`, studentChanges);
           
           studentChanges.forEach((change: any) => {
+            console.log('Adding tutor notification for change:', change);
             generatedNotifications.push({
               id: `profile-update-${change.id}`,
               title: `Profile Updated`,
@@ -211,12 +220,12 @@ export const Notifications = ({ role }: { role: 'student' | 'tutor' | 'admin' })
     }
     
     return generatedNotifications.sort((a, b) => b.id.localeCompare(a.id));
-  };
+  }, [leaveRequests, odRequests, profileChangeRequests, role, currentUser, currentTutor, students]);
 
   useEffect(() => {
     const newNotifications = generateNotifications();
     setNotifications(newNotifications);
-  }, [leaveRequests, odRequests, profileChangeRequests, role, currentUser, currentTutor, students]);
+  }, [generateNotifications]);
 
   // Listen for profile change events to update notifications in real-time
   useEffect(() => {
