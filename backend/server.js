@@ -26,10 +26,12 @@ if (!fs.existsSync(certificatesDir)) {
   fs.mkdirSync(certificatesDir, { recursive: true });
 }
 
+// Import Sharp for image processing (ES module)
+import sharp from 'sharp';
+
 // Configure multer for profile photo uploads
 const profilePhotoStorage = multer.diskStorage({
   destination: (req, file, cb) => {
-    // Use temp directory first, move to user folder later
     cb(null, uploadsDir);
   },
   filename: (req, file, cb) => {
@@ -38,6 +40,16 @@ const profilePhotoStorage = multer.diskStorage({
     cb(null, file.fieldname + '-' + uniqueSuffix + fileExtension);
   }
 });
+
+// Utility function to convert images to JPG and save as profile.jpg
+async function processAndSaveProfileImage(tempFilePath, userProfileDir) {
+  const finalFilePath = path.join(userProfileDir, 'profile.jpg');
+  await sharp(tempFilePath)
+    .jpeg({ quality: 90 })
+    .toFile(finalFilePath);
+  fs.unlinkSync(tempFilePath); // Remove the temp file
+  return finalFilePath;
+}
 
 // Simple certificate storage - we'll handle directory creation in the route
 const certificateStorage = multer.diskStorage({
@@ -317,11 +329,10 @@ app.post('/upload/profile-photo', authenticateToken, profileUpload.single('profi
 
     // Move file to user directory
     const tempFilePath = path.join(uploadsDir, req.file.filename);
-    const finalFilePath = path.join(userProfileDir, req.file.filename);
-    fs.renameSync(tempFilePath, finalFilePath);
+    const finalFilePath = await processAndSaveProfileImage(tempFilePath, userProfileDir);
 
     // Create URL path for the database (not file system path)
-    const profilePhotoUrl = `/uploads/profile-photos/${userId}/${req.file.filename}`;
+    const profilePhotoUrl = `/uploads/profile-photos/${userId}/profile.jpg`;
 
     // Update the user's profile photo in the database
     try {
