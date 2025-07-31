@@ -35,11 +35,11 @@ const storage = multer.diskStorage({
 });
 
 const fileFilter = (req, file, cb) => {
-  // Accept only image files
-  if (file.mimetype.startsWith('image/')) {
+  // Accept image files and PDFs for certificates
+  if (file.mimetype.startsWith('image/') || file.mimetype === 'application/pdf') {
     cb(null, true);
   } else {
-    cb(new Error('Only image files are allowed!'), false);
+    cb(new Error('Only image files and PDFs are allowed!'), false);
   }
 };
 
@@ -942,7 +942,31 @@ app.put('/profile-change-requests/:id/status', authenticateToken, async (req, re
   }
 });
 
-// Upload OD certificate
+// Upload OD certificate (file upload)
+app.post('/od-requests/:id/certificate/upload', authenticateToken, upload.single('certificate'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    if (!req.file) {
+      return res.status(400).json({ error: 'No certificate file uploaded' });
+    }
+    
+    const certificateUrl = `/uploads/profile-photos/${req.file.filename}`;
+    
+    await query(
+      'UPDATE od_requests SET certificate_url = ?, certificate_status = ? WHERE id = ?',
+      [certificateUrl, 'Pending Verification', id]
+    );
+    
+    const [updatedRequest] = await query('SELECT * FROM od_requests WHERE id = ?', [id]);
+    res.json({ ...updatedRequest, certificateUrl });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to upload certificate' });
+  }
+});
+
+// Upload OD certificate (URL)
 app.put('/od-requests/:id/certificate', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;

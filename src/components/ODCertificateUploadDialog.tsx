@@ -14,27 +14,58 @@ interface ODCertificateUploadDialogProps {
 }
 
 export const ODCertificateUploadDialog = ({ open, onOpenChange, odRequest }: ODCertificateUploadDialogProps) => {
-  const { uploadODCertificate } = useAppContext();
+  const { uploadODCertificate, refreshData } = useAppContext();
   const [uploadMode, setUploadMode] = useState<'url' | 'file'>('url');
   const [certificateUrl, setCertificateUrl] = useState('');
   const [isUploading, setIsUploading] = useState(false);
 
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      // Create a blob URL for the file
-      const fileUrl = URL.createObjectURL(file);
-      setCertificateUrl(fileUrl);
+      setSelectedFile(file);
+      setCertificateUrl(file.name); // Show filename
     }
   };
 
   const handleSubmit = async () => {
-    if (!odRequest || !certificateUrl) return;
+    if (!odRequest) return;
 
     setIsUploading(true);
     try {
-      await uploadODCertificate(odRequest.id, certificateUrl);
+      if (uploadMode === 'file' && selectedFile) {
+        // Upload file
+        const formData = new FormData();
+        formData.append('certificate', selectedFile);
+        
+        const response = await fetch(`http://localhost:3002/od-requests/${odRequest.id}/certificate/upload`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+          },
+          body: formData
+        });
+        
+        if (!response.ok) {
+          throw new Error('Failed to upload certificate');
+        }
+        
+        const result = await response.json();
+        console.log('Certificate uploaded successfully:', result);
+      } else if (uploadMode === 'url' && certificateUrl) {
+        // Upload URL
+        await uploadODCertificate(odRequest.id, certificateUrl);
+      } else {
+        throw new Error('No certificate provided');
+      }
+      
       setCertificateUrl('');
+      setSelectedFile(null);
+      
+      // Refresh the data to show updated certificate status
+      await refreshData();
+      
       onOpenChange(false);
     } catch (error) {
       console.error('Failed to upload certificate:', error);

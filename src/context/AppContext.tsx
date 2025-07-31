@@ -544,30 +544,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         },
       });
       
-      // Get updated profile from backend to reflect the change
-      try {
-        const profileResponse = await apiClient.get('/profile');
-        const updatedProfile = profileResponse.data;
-        setProfile(updatedProfile);
-        
-        // Manually update currentUser or currentTutor to reflect the new profile photo immediately
-        const updatedRole = updatedProfile.is_admin ? 'Admin' : updatedProfile.is_tutor ? 'Tutor' : 'Student';
-        if (updatedRole === 'Student' && currentUser) {
-          setCurrentUser(prev => prev ? { ...prev, profile_photo: updatedProfile.profile_photo } : null);
-        } else if ((updatedRole === 'Admin' || updatedRole === 'Tutor') && currentTutor) {
-          setCurrentTutor(prev => prev ? { ...prev, profile_photo: updatedProfile.profile_photo } : null);
-        }
-        
-        // Use silent polling to refresh data without clearing existing data
-        await pollData(updatedProfile, true);
-      } catch (profileError) {
-        console.error('Failed to refresh profile after upload:', profileError);
-        // Still try to refresh with current profile if available
-        if (profile) {
-          await pollData(profile, true);
-        }
-      }
-      
       return response.data.filePath;
     } catch (error: any) {
       throw new Error(error.response?.data?.error || 'Failed to upload photo');

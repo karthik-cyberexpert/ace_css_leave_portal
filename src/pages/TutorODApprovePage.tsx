@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import TutorLayout from '@/components/TutorLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { CertificateViewer } from '@/components/CertificateViewer';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { showSuccess } from '@/utils/toast';
@@ -9,11 +10,13 @@ import { cn } from '@/lib/utils';
 import { useAppContext, ODRequest, RequestStatus, CertificateStatus } from '@/context/AppContext';
 import { Badge } from '@/components/ui/badge';
 import { format, parseISO } from 'date-fns';
+import { Eye } from 'lucide-react';
 
 const TutorODApprovePage = () => {
   const { odRequests, updateODRequestStatus, currentTutor, verifyODCertificate, approveRejectODCancellation, students } = useAppContext();
   const [selectedRequest, setSelectedRequest] = useState<ODRequest | null>(null);
   const [verifyRequest, setVerifyRequest] = useState<ODRequest | null>(null);
+  const [viewCertificate, setViewCertificate] = useState<string | null>(null);
 
   const tutorODRequests = useMemo(() => {
     return odRequests.filter(req => req.tutor_id === currentTutor.id);
@@ -90,7 +93,23 @@ const TutorODApprovePage = () => {
                       <TableCell className="text-center">{studentInfo.semester}</TableCell>
                       <TableCell>{request.purpose}</TableCell>
                     <TableCell>{getStatusBadge(request.status, request.certificate_status)}</TableCell>
-                    <TableCell><Badge variant={request.certificate_status === 'Approved' ? 'default' : 'outline'}>{request.certificate_status || 'N/A'}</Badge></TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <Badge variant={request.certificate_status === 'Approved' ? 'default' : 'outline'}>
+                          {request.certificate_status || 'N/A'}
+                        </Badge>
+                        {request.certificate_url && (
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            onClick={() => setViewCertificate(request.certificate_url!)}
+                            className="h-6 w-6 p-0"
+                          >
+                            <Eye size={14} />
+                          </Button>
+                        )}
+                      </div>
+                    </TableCell>
                     <TableCell className="text-center space-x-2">
                       {request.status === 'Approved' && (
                         <Button 
@@ -177,8 +196,48 @@ const TutorODApprovePage = () => {
 
       {/* Verification Dialog */}
       <Dialog open={!!verifyRequest} onOpenChange={(isOpen) => !isOpen && setVerifyRequest(null)}>
-        <DialogContent>{verifyRequest && (<><DialogHeader><DialogTitle>Verify Certificate</DialogTitle><DialogDescription>For: <strong>{verifyRequest.purpose}</strong> by {verifyRequest.student_name} [{verifyRequest.student_register_number}]</DialogDescription></DialogHeader><div className="py-4"><a href={verifyRequest.certificate_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">View Uploaded Certificate</a></div><DialogFooter><Button variant="destructive" onClick={() => handleVerification(false)}>Reject</Button><Button onClick={() => handleVerification(true)}>Approve</Button></DialogFooter></>)}</DialogContent>
+        <DialogContent>
+          {verifyRequest && (
+            <>
+              <DialogHeader>
+                <DialogTitle>Verify Certificate</DialogTitle>
+                <DialogDescription>
+                  For: <strong>{verifyRequest.purpose}</strong> by {verifyRequest.student_name} [{verifyRequest.student_register_number}]
+                </DialogDescription>
+              </DialogHeader>
+              <div className="py-4 space-y-4">
+                {verifyRequest.certificate_url ? (
+                  <>
+                    <p className="text-sm text-gray-600">Click the button below to view the uploaded certificate:</p>
+                    <Button 
+                      onClick={() => setViewCertificate(verifyRequest.certificate_url!)}
+                      className="flex items-center gap-2"
+                    >
+                      <Eye size={16} />
+                      View Certificate
+                    </Button>
+                  </>
+                ) : (
+                  <p className="text-sm text-red-600">No certificate uploaded yet.</p>
+                )}
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setVerifyRequest(null)}>Cancel</Button>
+                <Button variant="destructive" onClick={() => handleVerification(false)}>Reject</Button>
+                <Button onClick={() => handleVerification(true)}>Approve</Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
       </Dialog>
+
+      {/* Certificate Viewer Dialog */}
+      <CertificateViewer
+        open={!!viewCertificate}
+        onOpenChange={() => setViewCertificate(null)}
+        certificateUrl={viewCertificate}
+        title="OD Certificate"
+      />
     </TutorLayout>
   );
 };
