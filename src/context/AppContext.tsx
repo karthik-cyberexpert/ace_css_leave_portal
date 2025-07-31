@@ -544,6 +544,26 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         },
       });
       
+      // Refresh profile data after successful upload
+      try {
+        const profileResponse = await apiClient.get('/profile');
+        const updatedProfile = profileResponse.data;
+        setProfile(updatedProfile);
+        
+        // Update the current user or tutor data
+        const updatedRole = updatedProfile.is_admin ? 'Admin' : updatedProfile.is_tutor ? 'Tutor' : 'Student';
+        if (updatedRole === 'Student' && currentUser) {
+          setCurrentUser(prev => prev ? { ...prev, profile_photo: updatedProfile.profile_photo } : null);
+        } else if ((updatedRole === 'Admin' || updatedRole === 'Tutor') && currentTutor) {
+          setCurrentTutor(prev => prev ? { ...prev, profile_photo: updatedProfile.profile_photo } : null);
+        }
+        
+        // Use silent polling to refresh other data
+        await pollData(updatedProfile, true);
+      } catch (profileError) {
+        console.error('Failed to refresh profile after upload:', profileError);
+      }
+      
       return response.data.filePath;
     } catch (error: any) {
       throw new Error(error.response?.data?.error || 'Failed to upload photo');

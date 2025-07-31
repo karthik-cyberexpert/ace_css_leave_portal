@@ -29,6 +29,7 @@ if (!fs.existsSync(certificatesDir)) {
 // Configure multer for profile photo uploads
 const profilePhotoStorage = multer.diskStorage({
   destination: (req, file, cb) => {
+    // Use temp directory first, move to user folder later
     cb(null, uploadsDir);
   },
   filename: (req, file, cb) => {
@@ -306,49 +307,61 @@ app.post('/upload/profile-photo', authenticateToken, profileUpload.single('profi
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });
     }
-    
-    const filePath = `/uploads/profile-photos/${req.file.filename}`;
+
     const userId = req.user.id;
-    
+    // Create user-specific directory
+    const userProfileDir = path.join(uploadsDir, userId.toString());
+    if (!fs.existsSync(userProfileDir)) {
+      fs.mkdirSync(userProfileDir, { recursive: true });
+    }
+
+    // Move file to user directory
+    const tempFilePath = path.join(uploadsDir, req.file.filename);
+    const finalFilePath = path.join(userProfileDir, req.file.filename);
+    fs.renameSync(tempFilePath, finalFilePath);
+
+    // Create URL path for the database (not file system path)
+    const profilePhotoUrl = `/uploads/profile-photos/${userId}/${req.file.filename}`;
+
     // Update the user's profile photo in the database
     try {
       // First, check what type of user this is
       const [user] = await query('SELECT is_admin, is_tutor FROM users WHERE id = ?', [userId]);
-      
+
       if (!user) {
         return res.status(404).json({ error: 'User not found' });
       }
-      
+
       // Update the users table with the new profile photo
-      await query('UPDATE users SET profile_photo = ? WHERE id = ?', [filePath, userId]);
-      
+      await query('UPDATE users SET profile_photo = ? WHERE id = ?', [profilePhotoUrl, userId]);
+
       // Also update the appropriate table (students or staff)
       if (user.is_admin || user.is_tutor) {
         // Update staff table
-        await query('UPDATE staff SET profile_photo = ? WHERE id = ?', [filePath, userId]);
+        await query('UPDATE staff SET profile_photo = ? WHERE id = ?', [profilePhotoUrl, userId]);
       } else {
         // Update students table
-        await query('UPDATE students SET profile_photo = ? WHERE id = ?', [filePath, userId]);
+        await query('UPDATE students SET profile_photo = ? WHERE id = ?', [profilePhotoUrl, userId]);
       }
-      
-      console.log(`Profile photo updated for user ${userId}: ${filePath}`);
-      
+
+      console.log(`Profile photo updated for user ${userId}: ${profilePhotoUrl}`);
+
     } catch (dbError) {
       console.error('Database update error:', dbError);
       // If database update fails, we should delete the uploaded file
       try {
-        fs.unlinkSync(path.join(__dirname, 'uploads', 'profile-photos', req.file.filename));
+        fs.unlinkSync(finalFilePath);
       } catch (deleteError) {
         console.error('Failed to delete uploaded file after database error:', deleteError);
       }
       return res.status(500).json({ error: 'Failed to update profile photo in database' });
     }
-    
+
     res.json({ 
       message: 'Profile photo uploaded and updated successfully', 
-      filePath: filePath 
+      filePath: profilePhotoUrl 
     });
-    
+
   } catch (error) {
     console.error('Upload error:', error);
     res.status(500).json({ error: 'Failed to upload photo' });
@@ -398,14 +411,31 @@ app.delete('/upload/profile-photo', authenticateToken, async (req, res) => {
     }
     
     // Delete the physical file if it exists and is a custom upload (not a Gravatar URL)
-    if (currentPhotoPath && currentPhotoPath.startsWith('/uploads/')) {
+    if (currentPhotoPath && currentPhotoPath.startsWith('/uploads/profile-photos/')) {
       try {
-        const filename = path.basename(currentPhotoPath);
-        const fullPath = path.join(__dirname, 'uploads', 'profile-photos', filename);
-        
-        if (fs.existsSync(fullPath)) {
-          fs.unlinkSync(fullPath);
-          console.log(`Deleted profile photo file: ${fullPath}`);
+        // Parse the URL path to get the file system path
+        const urlParts = currentPhotoPath.split('/');
+        if (urlParts.length >= 4) {
+          const userIdFromPath = urlParts[3]; // /uploads/profile-photos/{userId}/{filename}
+          const filename = urlParts[4];
+          const fullPath = path.join(__dirname, 'uploads', 'profile-photos', userIdFromPath, filename);
+          
+          if (fs.existsSync(fullPath)) {
+            fs.unlinkSync(fullPath);
+            console.log(`Deleted profile photo file: ${fullPath}`);
+            
+            // Try to remove the user directory if it's empty
+            try {
+              const userDir = path.join(__dirname, 'uploads', 'profile-photos', userIdFromPath);
+              const files = fs.readdirSync(userDir);
+              if (files.length === 0) {
+                fs.rmdirSync(userDir);
+                console.log(`Removed empty user directory: ${userDir}`);
+              }
+            } catch (dirError) {
+              console.warn('Could not remove user directory:', dirError);
+            }
+          }
         }
       } catch (fileError) {
         console.warn('Failed to delete profile photo file:', fileError);
@@ -437,10 +467,23 @@ app.post('/students', authenticateToken, async (req, res) => {
     );
 
     // Insert into students table
-    await query(
-      'INSERT INTO students (id, name, register_number, tutor_id, batch, semester, email, mobile) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [id, name, registerNumber, tutorId, batch, semester, email, mobile]
-    );
+    const username = email.split('@')[0]; // Generate username from email
+    try {
+      await query(
+        'INSERT INTO students (id, name, register_number, tutor_id, batch, semester, email, mobile, username) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [id, name, registerNumber, tutorId, batch, semester, email, mobile, username]
+      );
+    } catch (error) {
+      // If username column doesn't exist, try without it
+      if (error.message.includes('Unknown column') && error.message.includes('username')) {
+        await query(
+          'INSERT INTO students (id, name, register_number, tutor_id, batch, semester, email, mobile) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+          [id, name, registerNumber, tutorId, batch, semester, email, mobile]
+        );
+      } else {
+        throw error;
+      }
+    }
 
     res.status(201).json({ message: 'Student created successfully', id });
   } catch (error) {

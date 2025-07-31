@@ -1,4 +1,4 @@
-import React, { useRef, useState, useMemo } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
@@ -28,8 +28,23 @@ const ProfilePictureUpload: React.FC<ProfilePictureUploadProps> = ({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isRemoving, setIsRemoving] = useState(false);
+  const [displayImageSrc, setDisplayImageSrc] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { uploadProfilePhoto, removeProfilePhoto } = useAppContext();
+
+  // Update display image source when currentImageSrc changes
+  useEffect(() => {
+    if (currentImageSrc) {
+      // If it's a relative URL, prepend the server base URL
+      if (currentImageSrc.startsWith('/uploads/')) {
+        setDisplayImageSrc(`http://localhost:3002${currentImageSrc}`);
+      } else {
+        setDisplayImageSrc(currentImageSrc);
+      }
+    } else {
+      setDisplayImageSrc(null);
+    }
+  }, [currentImageSrc]);
 
   const handleAvatarClick = () => {
     setIsDialogOpen(true);
@@ -108,7 +123,7 @@ const ProfilePictureUpload: React.FC<ProfilePictureUploadProps> = ({
     <>
       <div className="relative group cursor-pointer" onClick={handleAvatarClick}>
         <Avatar className={className}>
-          <AvatarImage src={currentImageSrc} alt={altText} />
+          <AvatarImage src={displayImageSrc} alt={altText} />
           <AvatarFallback className="text-3xl">
             {fallbackIcon}
           </AvatarFallback>
@@ -133,7 +148,7 @@ const ProfilePictureUpload: React.FC<ProfilePictureUploadProps> = ({
             {/* Current/Preview Image */}
             <Avatar className="h-32 w-32 border-2 border-primary">
               <AvatarImage 
-                src={previewUrl || currentImageSrc} 
+                src={previewUrl || displayImageSrc} 
                 alt="Profile preview" 
               />
               <AvatarFallback className="text-4xl">
@@ -163,7 +178,7 @@ const ProfilePictureUpload: React.FC<ProfilePictureUploadProps> = ({
               </Button>
 
               {/* Remove button - only show if there's a current image */}
-              {currentImageSrc && (
+              {displayImageSrc && (
                 <Button 
                   onClick={handleRemove} 
                   variant="destructive" 

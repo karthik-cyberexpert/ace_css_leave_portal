@@ -241,6 +241,10 @@ export const getBestProfilePicture = (
 ): string | null => {
   // First priority: custom uploaded image
   if (customImageUrl) {
+    // If it's a relative URL starting with /uploads/, prepend the server base URL
+    if (customImageUrl.startsWith('/uploads/')) {
+      return `http://localhost:3002${customImageUrl}`;
+    }
     return customImageUrl;
   }
   
