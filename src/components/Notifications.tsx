@@ -33,11 +33,13 @@ export const Notifications = ({ role }: { role: 'student' | 'tutor' | 'admin' })
   const navigate = useNavigate();
   const { leaveRequests, odRequests, profileChangeRequests, currentUser, currentTutor, students } = useAppContext();
 
-  useEffect(() => {
-    if (!Array.isArray(leaveRequests) || !Array.isArray(odRequests)) return;
+  const generateNotifications = React.useCallback(() => {
+    if (!Array.isArray(leaveRequests) || !Array.isArray(odRequests)) return [];
 
     const generatedNotifications: Notification[] = [];
     const now = new Date();
+    
+    console.log('Generating notifications for role:', role);
 
     if (role === 'student' && currentUser) {
       const myLeaveRequests = leaveRequests.filter(r => r.student_id === currentUser.id);
@@ -123,6 +125,29 @@ export const Notifications = ({ role }: { role: 'student' | 'tutor' | 'admin' })
           }
         });
       }
+      
+      // Direct profile change notifications for tutors (students updating profiles automatically)
+      if (Array.isArray(students)) {
+        students.filter(s => myStudentIds.has(s.id)).forEach(student => {
+          // Check for recent profile updates (this would need to be stored in database with timestamps)
+          // For now, we'll use a different approach with localStorage to track recent notifications
+          const recentProfileChanges = JSON.parse(localStorage.getItem('recent_profile_changes') || '[]');
+          const studentChanges = recentProfileChanges.filter((change: any) => 
+            change.studentId === student.id && 
+            change.notifiedRole === 'tutor' &&
+            differenceInDays(now, parseISO(change.timestamp)) <= 1
+          );
+          
+          studentChanges.forEach((change: any) => {
+            generatedNotifications.push({
+              id: `profile-update-${change.id}`,
+              title: `Profile Updated`,
+              description: `${student.name} updated their ${change.changeType}: ${change.oldValue} → ${change.newValue}`,
+              read: false,
+            });
+          });
+        });
+      }
     } else if (role === 'admin') {
       leaveRequests.filter(r => r.status === 'Forwarded' || r.status === 'Pending').forEach(req => {
         if (differenceInDays(now, parseISO(req.created_at)) <= 7) {
@@ -166,11 +191,46 @@ export const Notifications = ({ role }: { role: 'student' | 'tutor' | 'admin' })
           }
         });
       }
+      
+      // Direct profile change notifications for admin (students and tutors updating profiles automatically)
+      const recentProfileChanges = JSON.parse(localStorage.getItem('recent_profile_changes') || '[]');
+      const adminChanges = recentProfileChanges.filter((change: any) => 
+        change.notifiedRole === 'admin' &&
+        differenceInDays(now, parseISO(change.timestamp)) <= 1
+      );
+      
+      adminChanges.forEach((change: any) => {
+        const userType = change.userType || 'User';
+        generatedNotifications.push({
+          id: `profile-update-${change.id}`,
+          title: `Profile Updated`,
+          description: `${userType} ${change.userName} updated their ${change.changeType}: ${change.oldValue} → ${change.newValue}`,
+          read: false,
+        });
+      });
     }
     
-    setNotifications(generatedNotifications.sort((a, b) => b.id.localeCompare(a.id)));
+    return generatedNotifications.sort((a, b) => b.id.localeCompare(a.id));
+  };
 
+  useEffect(() => {
+    const newNotifications = generateNotifications();
+    setNotifications(newNotifications);
   }, [leaveRequests, odRequests, profileChangeRequests, role, currentUser, currentTutor, students]);
+
+  // Listen for profile change events to update notifications in real-time
+  useEffect(() => {
+    const handleProfileChange = () => {
+      const newNotifications = generateNotifications();
+      setNotifications(newNotifications);
+    };
+
+    window.addEventListener('profileChanged', handleProfileChange);
+    
+    return () => {
+      window.removeEventListener('profileChanged', handleProfileChange);
+    };
+  }, [generateNotifications]);
 
   const unreadCount = notifications.filter(n => !n.read).length;
 

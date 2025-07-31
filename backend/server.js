@@ -333,6 +333,104 @@ app.put('/staff/:id', authenticateToken, async (req, res) => {
   }
 });
 
+// Update student profile (direct update)
+app.put('/students/:id/profile', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { email, mobile } = req.body;
+    
+    // Update students table
+    const studentUpdates = {};
+    if (email) studentUpdates.email = email;
+    if (mobile) studentUpdates.mobile = mobile;
+    
+    if (Object.keys(studentUpdates).length > 0) {
+      const setClause = Object.keys(studentUpdates).map(key => `${key} = ?`).join(', ');
+      const values = Object.values(studentUpdates);
+      values.push(id);
+      await query(`UPDATE students SET ${setClause} WHERE id = ?`, values);
+    }
+    
+    // Update users table if email is being changed
+    if (email) {
+      await query('UPDATE users SET email = ? WHERE id = ?', [email, id]);
+    }
+    
+    // Send notifications to tutor and admin
+    try {
+      const [student] = await query('SELECT * FROM students WHERE id = ?', [id]);
+      if (student) {
+        const [tutor] = await query('SELECT * FROM staff WHERE id = ?', [student.tutor_id]);
+        
+        // Create notification message
+        const changes = [];
+        if (email) changes.push(`Email to ${email}`);
+        if (mobile) changes.push(`Mobile to ${mobile}`);
+        const notificationMessage = `Student ${student.name} updated their profile: ${changes.join(', ')}`;
+        
+        console.log('Profile update notification:', notificationMessage);
+        // Here you could implement actual email/push notifications
+      }
+    } catch (notificationError) {
+      console.warn('Failed to send notification:', notificationError);
+    }
+    
+    const [updatedStudent] = await query('SELECT * FROM students WHERE id = ?', [id]);
+    res.json(updatedStudent);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to update student profile' });
+  }
+});
+
+// Update staff profile (direct update)
+app.put('/staff/:id/profile', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { email, mobile } = req.body;
+    
+    // Update staff table
+    const staffUpdates = {};
+    if (email) staffUpdates.email = email;
+    if (mobile) staffUpdates.mobile = mobile;
+    
+    if (Object.keys(staffUpdates).length > 0) {
+      const setClause = Object.keys(staffUpdates).map(key => `${key} = ?`).join(', ');
+      const values = Object.values(staffUpdates);
+      values.push(id);
+      await query(`UPDATE staff SET ${setClause} WHERE id = ?`, values);
+    }
+    
+    // Update users table if email is being changed
+    if (email) {
+      await query('UPDATE users SET email = ? WHERE id = ?', [email, id]);
+    }
+    
+    // Send notifications to admin (if user is tutor)
+    try {
+      const [staff] = await query('SELECT * FROM staff WHERE id = ?', [id]);
+      if (staff && staff.is_tutor && !staff.is_admin) {
+        // Create notification message for admin
+        const changes = [];
+        if (email) changes.push(`Email to ${email}`);
+        if (mobile) changes.push(`Mobile to ${mobile}`);
+        const notificationMessage = `Tutor ${staff.name} updated their profile: ${changes.join(', ')}`;
+        
+        console.log('Tutor profile update notification:', notificationMessage);
+        // Here you could implement actual email/push notifications to admin
+      }
+    } catch (notificationError) {
+      console.warn('Failed to send notification:', notificationError);
+    }
+    
+    const [updatedStaff] = await query('SELECT * FROM staff WHERE id = ?', [id]);
+    res.json(updatedStaff);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to update staff profile' });
+  }
+});
+
 // Delete student
 app.delete('/students/:id', authenticateToken, async (req, res) => {
   try {
@@ -1025,6 +1123,38 @@ app.post('/auth/logout', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Failed to logout' });
+  }
+});
+
+// Profile change notifications endpoint
+app.post('/notifications/profile-change', authenticateToken, async (req, res) => {
+  try {
+    const { changeType, oldValue, newValue, reason, message } = req.body;
+    
+    // Get current user info
+    const [currentUserProfile] = await query('SELECT is_admin, is_tutor FROM users WHERE id = ?', [req.user.id]);
+    const isStudent = !currentUserProfile.is_admin && !currentUserProfile.is_tutor;
+    
+    if (isStudent) {
+      // Student profile change - notify tutor and admin
+      const [student] = await query('SELECT * FROM students WHERE id = ?', [req.user.id]);
+      if (student) {
+        console.log(`NOTIFICATION: Student ${student.name} changed their ${changeType} from '${oldValue}' to '${newValue}'. Reason: ${reason}`);
+        // Here you would implement actual email/push notifications to tutor and admin
+      }
+    } else if (currentUserProfile.is_tutor && !currentUserProfile.is_admin) {
+      // Tutor profile change - notify admin
+      const [tutor] = await query('SELECT * FROM staff WHERE id = ?', [req.user.id]);
+      if (tutor) {
+        console.log(`NOTIFICATION: Tutor ${tutor.name} changed their ${changeType} from '${oldValue}' to '${newValue}'. Reason: ${reason}`);
+        // Here you would implement actual email/push notifications to admin
+      }
+    }
+    
+    res.json({ message: 'Notification sent successfully' });
+  } catch (error) {
+    console.error('Error sending profile change notification:', error);
+    res.status(500).json({ error: 'Failed to send notification' });
   }
 });
 

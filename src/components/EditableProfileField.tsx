@@ -32,7 +32,7 @@ userType,
   const [newValue, setNewValue] = useState(value);
   const [reason, setReason] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
-  const { updateCurrentUserProfile, createProfileChangeRequest } = useAppContext();
+  const { updateCurrentUserProfile, createProfileChangeRequest, profile, currentUser, currentTutor } = useAppContext();
 
   const handleEdit = () => {
     setNewValue(value);
@@ -92,9 +92,80 @@ userType,
       await updateCurrentUserProfile({ [fieldType]: newValue });
       showSuccess(`${label} updated successfully`);
       
-      // Notify tutor and admin of the change
+      // Store notification data for instant notifications
       try {
-        const notificationMessage = `${label} changed from '${value}' to '${newValue}' by the user. Reason: ${reason}`;
+        const notificationId = `${Date.now()}-${Math.random()}`;
+        const timestamp = new Date().toISOString();
+        
+        // Get user info for notification
+        let userName = 'Unknown User';
+        let userId = '';
+        let actualUserType = userType;
+        
+        if (userType === 'Student' && currentUser) {
+          userName = currentUser.name;
+          userId = currentUser.id;
+        } else if ((userType === 'Tutor' || userType === 'Admin') && currentTutor) {
+          userName = currentTutor.name;
+          userId = currentTutor.id;
+        }
+        
+        // Get existing notifications from localStorage
+        const existingNotifications = JSON.parse(localStorage.getItem('recent_profile_changes') || '[]');
+        
+        // Create notification entries for different roles
+        if (userType === 'Student') {
+          // Notify both tutor and admin
+          existingNotifications.push({
+            id: `${notificationId}-tutor`,
+            studentId: userId,
+            userName: userName,
+            userType: 'Student',
+            changeType: fieldType,
+            oldValue: value,
+            newValue: newValue,
+            reason: reason,
+            timestamp: timestamp,
+            notifiedRole: 'tutor'
+          });
+          
+          existingNotifications.push({
+            id: `${notificationId}-admin`,
+            studentId: userId,
+            userName: userName,
+            userType: 'Student',
+            changeType: fieldType,
+            oldValue: value,
+            newValue: newValue,
+            reason: reason,
+            timestamp: timestamp,
+            notifiedRole: 'admin'
+          });
+        } else if (userType === 'Tutor') {
+          // Notify admin only
+          existingNotifications.push({
+            id: `${notificationId}-admin`,
+            userId: userId,
+            userName: userName,
+            userType: 'Tutor',
+            changeType: fieldType,
+            oldValue: value,
+            newValue: newValue,
+            reason: reason,
+            timestamp: timestamp,
+            notifiedRole: 'admin'
+          });
+        }
+        
+        // Keep only recent notifications (last 24 hours)
+        const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+        const recentNotifications = existingNotifications.filter((notif: any) => notif.timestamp > oneDayAgo);
+        
+        // Store back to localStorage
+        localStorage.setItem('recent_profile_changes', JSON.stringify(recentNotifications));
+        
+        // Also send to backend for logging
+        const notificationMessage = `${label} changed from '${value}' to '${newValue}' by ${userName}. Reason: ${reason}`;
         const apiClient = axios.create({
           baseURL: 'http://localhost:3002',
           headers: {
@@ -109,6 +180,12 @@ userType,
           reason: reason,
           message: notificationMessage 
         });
+        
+        // Trigger a custom event to update notifications in real-time
+        window.dispatchEvent(new CustomEvent('profileChanged', {
+          detail: { userType, userName, changeType: fieldType, oldValue: value, newValue: newValue }
+        }));
+        
       } catch (notificationError) {
         console.warn('Failed to send notification:', notificationError);
         // Don't fail the entire operation if notification fails
@@ -179,7 +256,12 @@ userType,
           <DialogHeader>
             <DialogTitle>Edit {label}</DialogTitle>
             <DialogDescription>
-              Update your {label.toLowerCase()}. Tutors and admins will be automatically notified of this change.
+              {userType === 'Student' ? 
+                `Update your ${label.toLowerCase()}. Your tutor and admin will be automatically notified of this change.` :
+                userType === 'Tutor' ? 
+                  `Update your ${label.toLowerCase()}. Admin will be automatically notified of this change.` :
+                  `Update your ${label.toLowerCase()}.`
+              }
             </DialogDescription>
           </DialogHeader>
 
