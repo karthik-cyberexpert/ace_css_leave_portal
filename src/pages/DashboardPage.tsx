@@ -9,7 +9,7 @@ import { useAppContext } from '@/context/AppContext';
 
 const DashboardPage = () => {
   const { handleOverdueCertificates, currentUser, loading, profile, role } = useAppContext();
-  const warningMessage = "Students Below 80% of attendance cannot able to get hall tickets";
+  const warningMessage = "Students below 80% attendance are not eligible to appear for university examinations";
 
   useEffect(() => {
     handleOverdueCertificates();

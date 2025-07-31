@@ -203,13 +203,22 @@ export const Notifications = ({ role }: { role: 'student' | 'tutor' | 'admin' })
       
       // Direct profile change notifications for admin (students and tutors updating profiles automatically)
       const recentProfileChanges = JSON.parse(localStorage.getItem('recent_profile_changes') || '[]');
-      const adminChanges = recentProfileChanges.filter((change: any) => 
-        change.notifiedRole === 'admin' &&
-        differenceInDays(now, parseISO(change.timestamp)) <= 1
-      );
+      console.log('Admin - Recent profile changes from localStorage:', recentProfileChanges);
+      
+      const adminChanges = recentProfileChanges.filter((change: any) => {
+        console.log('Admin - Checking change:', change);
+        console.log(`Admin - Change notifiedRole: ${change.notifiedRole}`);
+        console.log(`Admin - Days difference: ${differenceInDays(now, parseISO(change.timestamp))}`);
+        
+        return change.notifiedRole === 'admin' &&
+               differenceInDays(now, parseISO(change.timestamp)) <= 1;
+      });
+      
+      console.log('Admin - Filtered changes:', adminChanges);
       
       adminChanges.forEach((change: any) => {
         const userType = change.userType || 'User';
+        console.log('Adding admin notification for change:', change);
         generatedNotifications.push({
           id: `profile-update-${change.id}`,
           title: `Profile Updated`,
