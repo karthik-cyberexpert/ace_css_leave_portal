@@ -141,12 +141,12 @@ const ODRequestPage = () => {
 
               <div className="space-y-2">
                 <FormLabel htmlFor="totalDays">Total Number of Days</FormLabel>
-                <Input
+<Input
                   id="totalDays"
                   type="number"
                   value={totalDays}
                   readOnly
-                  className="bg-gray-100 cursor-not-allowed"
+                  className="bg-gray-100 dark:bg-black text-white cursor-not-allowed"
                 />
               </div>
 
