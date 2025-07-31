@@ -7,6 +7,7 @@ import AdminLayout from '@/components/AdminLayout';
 import TutorLayout from '@/components/TutorLayout';
 import ProfilePictureUpload from '@/components/ProfilePictureUpload';
 import EditableProfileField from '@/components/EditableProfileField';
+import { getBestProfilePicture } from '@/utils/gravatar';
 
 const StaffProfilePage = () => {
   const { profile, user, role, currentTutor, students } = useAppContext();
@@ -30,7 +31,10 @@ const StaffProfilePage = () => {
   const displayUsername = currentTutor?.username || 'N/A';
   const displayEmail = user.email || 'N/A';
   const displayMobile = currentTutor?.mobile || 'N/A';
-  const avatarSrc = profile.profile_photo || currentTutor?.profile_photo;
+  
+  // Get the best profile picture (custom upload or Gravatar fallback)
+  const customProfilePhoto = profile.profile_photo || currentTutor?.profile_photo;
+  const avatarSrc = getBestProfilePicture(customProfilePhoto, displayEmail);
 
   const studentCount = role === 'Tutor' 
     ? students.filter(s => s.tutor_id === profile.id).length 

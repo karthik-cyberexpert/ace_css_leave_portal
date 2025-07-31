@@ -1,13 +1,15 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useMemo } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Camera, Upload, X, Loader2, Trash2 } from 'lucide-react';
 import { showError, showSuccess } from '@/utils/toast';
 import { useAppContext } from '@/context/AppContext';
+import { getBestProfilePicture } from '@/utils/gravatar';
 
 interface ProfilePictureUploadProps {
   currentImageSrc?: string;
+  email?: string; // Email for Gravatar lookup
   fallbackIcon: React.ReactNode;
   altText: string;
   className?: string;

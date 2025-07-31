@@ -9,6 +9,7 @@ import { Sheet, SheetContent, SheetTrigger, SheetClose } from '@/components/ui/s
 import { Notifications } from '@/components/Notifications';
 import { useAppContext } from '@/context/AppContext';
 import { ThemeToggle } from './theme-toggle';
+import { getBestProfilePicture } from '@/utils/gravatar';
 
 const sidebarNavItems = [
   { title: "Dashboard", href: "/admin-dashboard", icon: LayoutDashboard },
@@ -23,13 +24,15 @@ const sidebarNavItems = [
 
 const SidebarContent = ({ isMobile = false }: { isMobile?: boolean }) => {
   const location = useLocation();
-  const { profile } = useAppContext();
+  const { profile, user } = useAppContext();
   const LinkComponent = isMobile ? SheetClose : React.Fragment;
 
   const displayName = (profile?.first_name && profile?.last_name) 
     ? `${profile.first_name} ${profile.last_name}` 
     : 'Admin User';
-  const avatarSrc = profile?.profile_photo;
+  
+  // Use getBestProfilePicture to get either custom image or Gravatar fallback
+  const avatarSrc = getBestProfilePicture(profile?.profile_photo, user?.email);
 
   return (
     <>

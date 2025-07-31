@@ -55,6 +55,35 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
+// Gravatar utility functions
+function getGravatarUrl(email, size = 200) {
+  if (!email) return null;
+  
+  // Convert email to lowercase and trim whitespace
+  const normalizedEmail = email.toLowerCase().trim();
+  
+  // Create MD5 hash of the email
+  const hash = crypto.createHash('md5').update(normalizedEmail).digest('hex');
+  
+  // Build Gravatar URL with identicon as default
+  return `https://www.gravatar.com/avatar/${hash}?s=${size}&d=identicon&r=g`;
+}
+
+function getBestProfilePicture(customImageUrl, email, size = 200) {
+  // First priority: custom uploaded image
+  if (customImageUrl) {
+    return customImageUrl;
+  }
+  
+  // Second priority: Gravatar
+  if (email) {
+    return getGravatarUrl(email, size);
+  }
+  
+  // No profile picture available
+  return null;
+}
+
 // Serve uploaded files statically
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
@@ -198,6 +227,9 @@ app.get('/profile', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
     
+    // Add the best profile picture URL (custom or Gravatar)
+    user.profile_photo = getBestProfilePicture(user.profile_photo, user.email);
+    
     res.json(user);
   } catch (error) {
     console.error(error);
@@ -209,7 +241,14 @@ app.get('/profile', authenticateToken, async (req, res) => {
 app.get('/students', authenticateToken, async (req, res) => {
   try {
     const students = await query('SELECT * FROM students ORDER BY name');
-    res.json(students);
+    
+    // Add Gravatar profile pictures for students without custom photos
+    const studentsWithProfilePictures = students.map(student => ({
+      ...student,
+      profile_photo: getBestProfilePicture(student.profile_photo, student.email)
+    }));
+    
+    res.json(studentsWithProfilePictures);
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Failed to fetch students' });
@@ -220,7 +259,14 @@ app.get('/students', authenticateToken, async (req, res) => {
 app.get('/staff', authenticateToken, async (req, res) => {
   try {
     const staff = await query('SELECT * FROM staff ORDER BY name');
-    res.json(staff);
+    
+    // Add Gravatar profile pictures for staff without custom photos
+    const staffWithProfilePictures = staff.map(staffMember => ({
+      ...staffMember,
+      profile_photo: getBestProfilePicture(staffMember.profile_photo, staffMember.email)
+    }));
+    
+    res.json(staffWithProfilePictures);
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Failed to fetch staff' });
@@ -233,11 +279,120 @@ app.post('/upload/profile-photo', authenticateToken, upload.single('profilePhoto
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });
     }
+    
     const filePath = `/uploads/profile-photos/${req.file.filename}`;
-    res.json({ message: 'File uploaded successfully', filePath });
+    const userId = req.user.id;
+    
+    // Update the user's profile photo in the database
+    try {
+      // First, check what type of user this is
+      const [user] = await query('SELECT is_admin, is_tutor FROM users WHERE id = ?', [userId]);
+      
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+      
+      // Update the users table with the new profile photo
+      await query('UPDATE users SET profile_photo = ? WHERE id = ?', [filePath, userId]);
+      
+      // Also update the appropriate table (students or staff)
+      if (user.is_admin || user.is_tutor) {
+        // Update staff table
+        await query('UPDATE staff SET profile_photo = ? WHERE id = ?', [filePath, userId]);
+      } else {
+        // Update students table
+        await query('UPDATE students SET profile_photo = ? WHERE id = ?', [filePath, userId]);
+      }
+      
+      console.log(`Profile photo updated for user ${userId}: ${filePath}`);
+      
+    } catch (dbError) {
+      console.error('Database update error:', dbError);
+      // If database update fails, we should delete the uploaded file
+      try {
+        fs.unlinkSync(path.join(__dirname, 'uploads', 'profile-photos', req.file.filename));
+      } catch (deleteError) {
+        console.error('Failed to delete uploaded file after database error:', deleteError);
+      }
+      return res.status(500).json({ error: 'Failed to update profile photo in database' });
+    }
+    
+    res.json({ 
+      message: 'Profile photo uploaded and updated successfully', 
+      filePath: filePath 
+    });
+    
   } catch (error) {
-    console.error(error);
+    console.error('Upload error:', error);
     res.status(500).json({ error: 'Failed to upload photo' });
+  }
+});
+
+// Remove profile photo
+app.delete('/upload/profile-photo', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    
+    // Get current profile photo path
+    const [user] = await query('SELECT profile_photo FROM users WHERE id = ?', [userId]);
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    const currentPhotoPath = user.profile_photo;
+    
+    // Update database to remove profile photo
+    try {
+      // Check what type of user this is
+      const [userType] = await query('SELECT is_admin, is_tutor FROM users WHERE id = ?', [userId]);
+      
+      if (!userType) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+      
+      // Update the users table to remove profile photo
+      await query('UPDATE users SET profile_photo = NULL WHERE id = ?', [userId]);
+      
+      // Also update the appropriate table (students or staff)
+      if (userType.is_admin || userType.is_tutor) {
+        // Update staff table
+        await query('UPDATE staff SET profile_photo = NULL WHERE id = ?', [userId]);
+      } else {
+        // Update students table
+        await query('UPDATE students SET profile_photo = NULL WHERE id = ?', [userId]);
+      }
+      
+      console.log(`Profile photo removed for user ${userId}`);
+      
+    } catch (dbError) {
+      console.error('Database update error:', dbError);
+      return res.status(500).json({ error: 'Failed to remove profile photo from database' });
+    }
+    
+    // Delete the physical file if it exists and is a custom upload (not a Gravatar URL)
+    if (currentPhotoPath && currentPhotoPath.startsWith('/uploads/')) {
+      try {
+        const filename = path.basename(currentPhotoPath);
+        const fullPath = path.join(__dirname, 'uploads', 'profile-photos', filename);
+        
+        if (fs.existsSync(fullPath)) {
+          fs.unlinkSync(fullPath);
+          console.log(`Deleted profile photo file: ${fullPath}`);
+        }
+      } catch (fileError) {
+        console.warn('Failed to delete profile photo file:', fileError);
+        // Don't fail the request if file deletion fails
+      }
+    }
+    
+    res.json({ 
+      message: 'Profile photo removed successfully'
+    });
+    
+  } catch (error) {
+    console.error('Remove profile photo error:', error);
+    res.status(500).json({ error: 'Failed to remove profile photo' });
   }
 });
 

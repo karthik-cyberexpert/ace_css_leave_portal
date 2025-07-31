@@ -9,6 +9,7 @@ import { Sheet, SheetContent, SheetTrigger, SheetClose } from '@/components/ui/s
 import { Notifications } from '@/components/Notifications';
 import { useAppContext } from '@/context/AppContext';
 import { ThemeToggle } from './theme-toggle';
+import { getBestProfilePicture } from '@/utils/gravatar';
 
 const sidebarNavItems = [
   { title: "Dashboard", href: "/tutor-dashboard", icon: LayoutDashboard },
@@ -21,14 +22,17 @@ const sidebarNavItems = [
 
 const SidebarContent = ({ isMobile = false }: { isMobile?: boolean }) => {
   const location = useLocation();
-  const { currentTutor } = useAppContext();
+  const { currentTutor, user } = useAppContext();
   const LinkComponent = isMobile ? SheetClose : React.Fragment;
+
+  // Use getBestProfilePicture to get either custom image or Gravatar fallback
+  const avatarSrc = getBestProfilePicture(currentTutor?.profile_photo, currentTutor?.email || user?.email);
 
   return (
     <>
       <Link to="/tutor-profile" className="flex items-center space-x-3 p-4 mb-6 hover:bg-sidebar-accent rounded-lg transition-colors">
         <Avatar className="h-10 w-10">
-          <AvatarImage src={currentTutor?.profile_photo || ''} alt={currentTutor?.name} />
+          <AvatarImage src={avatarSrc} alt={currentTutor?.name} />
           <AvatarFallback><UserCircle className="h-10 w-10 text-sidebar-primary-foreground" /></AvatarFallback>
         </Avatar>
         <span className="font-semibold text-lg text-foreground">{currentTutor?.name || 'Tutor'}</span>
