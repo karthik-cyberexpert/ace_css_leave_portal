@@ -24,12 +24,17 @@ import { useAppContext, LeaveRequest, RequestStatus } from '@/context/AppContext
 import { format, parseISO } from 'date-fns';
 
 const TutorLeaveApprovePage = () => {
-  const { leaveRequests, updateLeaveRequestStatus, currentTutor, approveRejectLeaveCancellation } = useAppContext();
+  const { leaveRequests, updateLeaveRequestStatus, currentTutor, approveRejectLeaveCancellation, students } = useAppContext();
   const [selectedRequest, setSelectedRequest] = useState<LeaveRequest | null>(null);
 
   const tutorLeaveRequests = useMemo(() => {
     return leaveRequests.filter(req => req.tutor_id === currentTutor.id);
   }, [leaveRequests, currentTutor.id]);
+
+  const getStudentInfo = (studentId: string) => {
+    const student = students.find(s => s.id === studentId);
+    return student ? { batch: student.batch, semester: student.semester } : { batch: 'N/A', semester: 'N/A' };
+  };
 
   const handleRequestAction = async (id: string, newStatus: RequestStatus) => {
     await updateLeaveRequestStatus(id, newStatus);
@@ -72,6 +77,8 @@ const TutorLeaveApprovePage = () => {
               <TableHeader>
                 <TableRow>
                   <TableHead>Student Name</TableHead>
+                  <TableHead className="text-center">Batch</TableHead>
+                  <TableHead className="text-center">Semester</TableHead>
                   <TableHead>Start Date</TableHead>
                   <TableHead>End Date</TableHead>
                   <TableHead className="text-right">Total Days</TableHead>
@@ -80,14 +87,18 @@ const TutorLeaveApprovePage = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {tutorLeaveRequests.map((request) => (
-                  <TableRow key={request.id} className="transition-colors hover:bg-muted/50">
-                    <TableCell className="font-medium">
-                      <div>{request.student_name}</div>
-                      <div className="text-xs text-muted-foreground">[{request.student_register_number}]</div>
-                    </TableCell>
-                    <TableCell>{format(parseISO(request.start_date), 'MMMM d yyyy')}</TableCell>
-                    <TableCell>{format(parseISO(request.end_date), 'MMMM d yyyy')}</TableCell>
+                {tutorLeaveRequests.map((request) => {
+                  const studentInfo = getStudentInfo(request.student_id);
+                  return (
+                    <TableRow key={request.id} className="transition-colors hover:bg-muted/50">
+                      <TableCell className="font-medium">
+                        <div>{request.student_name}</div>
+                        <div className="text-xs text-muted-foreground">[{request.student_register_number}]</div>
+                      </TableCell>
+                      <TableCell className="text-center">{studentInfo.batch}-{studentInfo.batch !== 'N/A' ? parseInt(studentInfo.batch) + 4 : 'N/A'}</TableCell>
+                      <TableCell className="text-center">{studentInfo.semester}</TableCell>
+                      <TableCell>{format(parseISO(request.start_date), 'MMMM d yyyy')}</TableCell>
+                      <TableCell>{format(parseISO(request.end_date), 'MMMM d yyyy')}</TableCell>
                     <TableCell className="text-right">{request.total_days}</TableCell>
                     <TableCell className="text-center">
                       {getStatusBadge(request.status)}
@@ -109,8 +120,9 @@ const TutorLeaveApprovePage = () => {
                         <span className="text-xs text-muted-foreground">No actions</span>
                       )}
                     </TableCell>
-                  </TableRow>
-                ))}
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </div>

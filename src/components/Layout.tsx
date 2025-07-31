@@ -78,6 +78,12 @@ const SidebarContent = ({ isMobile = false }: { isMobile?: boolean }) => {
 
 const Layout = ({ children }: { children: React.ReactNode }) => {
   const navigate = useNavigate();
+  const { handleLogout } = useAppContext();
+
+  const onLogout = async () => {
+    await handleLogout();
+    navigate('/login');
+  };
 
   return (
     <div className="flex min-h-screen bg-background">
@@ -105,7 +111,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
           <div className="flex items-center gap-2">
             <ThemeToggle />
             <Notifications role="student" />
-            <Button variant="ghost" size="icon" aria-label="Logout" onClick={() => navigate('/login')}>
+            <Button variant="ghost" size="icon" aria-label="Logout" onClick={onLogout}>
               <LogOut className="h-5 w-5" />
             </Button>
           </div>

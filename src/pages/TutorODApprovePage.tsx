@@ -11,13 +11,18 @@ import { Badge } from '@/components/ui/badge';
 import { format, parseISO } from 'date-fns';
 
 const TutorODApprovePage = () => {
-  const { odRequests, updateODRequestStatus, currentTutor, verifyODCertificate, approveRejectODCancellation } = useAppContext();
+  const { odRequests, updateODRequestStatus, currentTutor, verifyODCertificate, approveRejectODCancellation, students } = useAppContext();
   const [selectedRequest, setSelectedRequest] = useState<ODRequest | null>(null);
   const [verifyRequest, setVerifyRequest] = useState<ODRequest | null>(null);
 
   const tutorODRequests = useMemo(() => {
     return odRequests.filter(req => req.tutor_id === currentTutor.id);
   }, [odRequests, currentTutor.id]);
+
+  const getStudentInfo = (studentId: string) => {
+    const student = students.find(s => s.id === studentId);
+    return student ? { batch: student.batch, semester: student.semester } : { batch: 'N/A', semester: 'N/A' };
+  };
 
   const handleRequestAction = async (id: string, newStatus: RequestStatus) => {
     await updateODRequestStatus(id, newStatus);
@@ -64,6 +69,8 @@ const TutorODApprovePage = () => {
               <TableHeader>
                 <TableRow>
                   <TableHead>Student</TableHead>
+                  <TableHead className="text-center">Batch</TableHead>
+                  <TableHead className="text-center">Semester</TableHead>
                   <TableHead>Purpose</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Certificate</TableHead>
@@ -71,13 +78,17 @@ const TutorODApprovePage = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {tutorODRequests.map((request) => (
-                  <TableRow key={request.id}>
-                    <TableCell className="font-medium">
-                      <div>{request.student_name}</div>
-                      <div className="text-xs text-muted-foreground">[{request.student_register_number}]</div>
-                    </TableCell>
-                    <TableCell>{request.purpose}</TableCell>
+                {tutorODRequests.map((request) => {
+                  const studentInfo = getStudentInfo(request.student_id);
+                  return (
+                    <TableRow key={request.id}>
+                      <TableCell className="font-medium">
+                        <div>{request.student_name}</div>
+                        <div className="text-xs text-muted-foreground">[{request.student_register_number}]</div>
+                      </TableCell>
+                      <TableCell className="text-center">{studentInfo.batch}-{studentInfo.batch !== 'N/A' ? parseInt(studentInfo.batch) + 4 : 'N/A'}</TableCell>
+                      <TableCell className="text-center">{studentInfo.semester}</TableCell>
+                      <TableCell>{request.purpose}</TableCell>
                     <TableCell>{getStatusBadge(request.status, request.certificate_status)}</TableCell>
                     <TableCell><Badge variant={request.certificate_status === 'Approved' ? 'default' : 'outline'}>{request.certificate_status || 'N/A'}</Badge></TableCell>
                     <TableCell className="text-center space-x-2">
@@ -93,8 +104,9 @@ const TutorODApprovePage = () => {
                       {(request.status === 'Pending' || request.status === 'Retried' || request.status === 'Cancellation Pending') && <Button variant="outline" size="sm" onClick={() => setSelectedRequest(request)}>Review</Button>}
                       {request.certificate_status === 'Pending Verification' && <Button variant="default" size="sm" onClick={() => setVerifyRequest(request)}>Verify Cert</Button>}
                     </TableCell>
-                  </TableRow>
-                ))}
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </div>

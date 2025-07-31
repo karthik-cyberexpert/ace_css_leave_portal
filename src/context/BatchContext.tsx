@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { addDays, isAfter, isSameDay } from 'date-fns';
+import { useAppContext } from './AppContext';
 
 export interface SemesterDates {
   id: string;
@@ -45,51 +46,66 @@ export const useBatchContext = () => {
 export const BatchProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [semesterDates, setSemesterDates] = useState<SemesterDates[]>([]);
   const [batches, setBatches] = useState<Batch[]>([]);
+  const [isInitialized, setIsInitialized] = useState(false);
 
   // Load data from localStorage on mount
+  const { profile } = useAppContext();
+  
   useEffect(() => {
-    // Load semester dates
-    const savedDates = localStorage.getItem('batchSemesterDates');
-    if (savedDates) {
-      try {
-        const parsed = JSON.parse(savedDates);
-        const datesWithDateObjects = parsed.map((item: any) => ({
-          ...item,
-          startDate: item.startDate ? new Date(item.startDate) : undefined,
-          endDate: item.endDate ? new Date(item.endDate) : undefined,
-        }));
-        setSemesterDates(datesWithDateObjects);
-      } catch (error) {
-        console.error('Error loading semester dates:', error);
+    // Only initialize once when admin profile is first available
+    if (profile?.is_admin && !isInitialized) {
+      console.log('Initializing batch context for admin user...');
+      
+      // Load semester dates
+      const savedDates = localStorage.getItem('batchSemesterDates');
+      if (savedDates) {
+        try {
+          const parsed = JSON.parse(savedDates);
+          const datesWithDateObjects = parsed.map((item: any) => ({
+            ...item,
+            startDate: item.startDate ? new Date(item.startDate) : undefined,
+            endDate: item.endDate ? new Date(item.endDate) : undefined,
+          }));
+          setSemesterDates(datesWithDateObjects);
+          console.log('Loaded semester dates from localStorage:', datesWithDateObjects);
+        } catch (error) {
+          console.error('Error loading semester dates:', error);
+        }
       }
-    }
 
-    // Load batches
-    const savedBatches = localStorage.getItem('batches');
-    if (savedBatches) {
-      try {
-        setBatches(JSON.parse(savedBatches));
-      } catch (error) {
-        console.error('Error loading batches:', error);
+      // Load batches
+      const savedBatches = localStorage.getItem('batches');
+      if (savedBatches) {
+        try {
+          const loadedBatches = JSON.parse(savedBatches);
+          setBatches(loadedBatches);
+          console.log('Loaded batches from localStorage:', loadedBatches);
+        } catch (error) {
+          console.error('Error loading batches:', error);
+        }
+      } else {
+        // Initialize with default batches if none are saved
+        const currentYear = new Date().getFullYear();
+        const defaultBatches: Batch[] = [];
+        // Create batches for the current year and the 3 previous years
+        for (let i = 0; i < 4; i++) {
+          const year = currentYear - i;
+          defaultBatches.push({
+            id: year.toString(),
+            startYear: year,
+            endYear: year + 4,
+            name: `${year}-${year + 4}`,
+            isActive: true,
+          });
+        }
+        const sortedBatches = defaultBatches.sort((a, b) => b.startYear - a.startYear);
+        setBatches(sortedBatches);
+        console.log('Created default batches:', sortedBatches);
       }
-    } else {
-      // Initialize with default batches if none are saved
-      const currentYear = new Date().getFullYear();
-      const defaultBatches: Batch[] = [];
-      // Create batches for the current year and the 3 previous years
-      for (let i = 0; i < 4; i++) {
-        const year = currentYear - i;
-        defaultBatches.push({
-          id: year.toString(),
-          startYear: year,
-          endYear: year + 4,
-          name: `${year}-${year + 4}`,
-          isActive: true,
-        });
-      }
-      setBatches(defaultBatches.sort((a, b) => b.startYear - a.startYear));
+      
+      setIsInitialized(true);
     }
-  }, []);
+  }, [profile?.is_admin, isInitialized]);
 
   // Function to save batches to localStorage
   const saveBatches = async (updatedBatches: Batch[]) => {
@@ -248,9 +264,36 @@ export const BatchProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   const saveSemesterDates = async () => {
     try {
-      localStorage.setItem('batchSemesterDates', JSON.stringify(semesterDates));
+      // Ensure we have valid data before saving
+      if (!semesterDates || semesterDates.length === 0) {
+        console.warn('No semester dates to save');
+        return;
+      }
+      
+      // Create a backup of current data
+      const currentData = localStorage.getItem('batchSemesterDates');
+      
+      try {
+        // Save the new data
+        const dataToSave = JSON.stringify(semesterDates);
+        localStorage.setItem('batchSemesterDates', dataToSave);
+        console.log('Semester dates saved successfully:', semesterDates);
+        
+        // Verify the save was successful
+        const savedData = localStorage.getItem('batchSemesterDates');
+        if (!savedData || savedData !== dataToSave) {
+          throw new Error('Data verification failed after save');
+        }
+      } catch (saveError) {
+        // Restore backup if save failed
+        if (currentData) {
+          localStorage.setItem('batchSemesterDates', currentData);
+          console.error('Save failed, restored backup data');
+        }
+        throw saveError;
+      }
+      
       // Here you would typically also save to your backend API
-      console.log('Semester dates saved:', semesterDates);
     } catch (error) {
       console.error('Error saving semester dates:', error);
       throw error; // Re-throw to allow the component to handle the error

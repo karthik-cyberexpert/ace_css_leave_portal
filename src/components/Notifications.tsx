@@ -31,7 +31,7 @@ export interface Notification {
 export const Notifications = ({ role }: { role: 'student' | 'tutor' | 'admin' }) => {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const navigate = useNavigate();
-  const { leaveRequests, odRequests, currentUser, currentTutor, students } = useAppContext();
+  const { leaveRequests, odRequests, profileChangeRequests, currentUser, currentTutor, students } = useAppContext();
 
   useEffect(() => {
     if (!Array.isArray(leaveRequests) || !Array.isArray(odRequests)) return;
@@ -65,6 +65,23 @@ export const Notifications = ({ role }: { role: 'student' | 'tutor' | 'admin' })
           });
         }
       });
+      
+      // Profile change request status notifications for students
+      if (Array.isArray(profileChangeRequests)) {
+        const myProfileChangeRequests = profileChangeRequests.filter(r => r.student_id === currentUser.id);
+        myProfileChangeRequests.forEach(req => {
+          if (req.reviewed_at && differenceInDays(now, parseISO(req.reviewed_at)) <= 7 && (req.status === 'Approved' || req.status === 'Rejected')) {
+            const changeTypeLabel = req.change_type === 'email' ? 'Email' : req.change_type === 'mobile' ? 'Mobile Number' : 'Password';
+            generatedNotifications.push({
+              id: `profile-${req.id}`,
+              title: `Profile Change ${req.status}`,
+              description: `Your ${changeTypeLabel.toLowerCase()} change request was ${req.status.toLowerCase()}.`,
+              read: false,
+              href: '/request-status',
+            });
+          }
+        });
+      }
     } else if (role === 'tutor' && currentTutor && Array.isArray(students)) {
       const myStudentIds = new Set(students.filter(s => s.tutor_id === currentTutor.id).map(s => s.id));
       
@@ -90,6 +107,22 @@ export const Notifications = ({ role }: { role: 'student' | 'tutor' | 'admin' })
           });
         }
       });
+      
+      // Profile change request notifications for tutors
+      if (Array.isArray(profileChangeRequests)) {
+        profileChangeRequests.filter(r => myStudentIds.has(r.student_id)).forEach(req => {
+          if (differenceInDays(now, parseISO(req.requested_at)) <= 7 && req.status === 'Pending') {
+            const changeTypeLabel = req.change_type === 'email' ? 'Email' : req.change_type === 'mobile' ? 'Mobile Number' : 'Password';
+            generatedNotifications.push({
+              id: `profile-${req.id}`,
+              title: `Profile Change Request`,
+              description: `${req.student_name} wants to change their ${changeTypeLabel.toLowerCase()}.`,
+              read: false,
+              href: '/tutor-profile-requests', // You'll need to create this route
+            });
+          }
+        });
+      }
     } else if (role === 'admin') {
       leaveRequests.filter(r => r.status === 'Forwarded' || r.status === 'Pending').forEach(req => {
         if (differenceInDays(now, parseISO(req.created_at)) <= 7) {
@@ -117,11 +150,27 @@ export const Notifications = ({ role }: { role: 'student' | 'tutor' | 'admin' })
           });
         }
       });
+      
+      // Profile change request notifications for admins
+      if (Array.isArray(profileChangeRequests)) {
+        profileChangeRequests.filter(r => r.status === 'Pending').forEach(req => {
+          if (differenceInDays(now, parseISO(req.requested_at)) <= 7) {
+            const changeTypeLabel = req.change_type === 'email' ? 'Email' : req.change_type === 'mobile' ? 'Mobile Number' : 'Password';
+            generatedNotifications.push({
+              id: `profile-${req.id}`,
+              title: `Profile Change Request`,
+              description: `${req.student_name} wants to change their ${changeTypeLabel.toLowerCase()}.`,
+              read: false,
+              href: '/admin-profile-requests', // You'll need to create this route
+            });
+          }
+        });
+      }
     }
     
     setNotifications(generatedNotifications.sort((a, b) => b.id.localeCompare(a.id)));
 
-  }, [leaveRequests, odRequests, role, currentUser, currentTutor, students]);
+  }, [leaveRequests, odRequests, profileChangeRequests, role, currentUser, currentTutor, students]);
 
   const unreadCount = notifications.filter(n => !n.read).length;
 

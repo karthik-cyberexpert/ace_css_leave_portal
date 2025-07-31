@@ -129,6 +129,28 @@ export interface ODRequest {
   created_at: string;
 }
 
+export type ProfileChangeType = 'email' | 'mobile' | 'password';
+export type ProfileChangeStatus = 'Pending' | 'Approved' | 'Rejected';
+
+export interface ProfileChangeRequest {
+  id: string;
+  student_id: string;
+  student_name: string;
+  student_register_number: string;
+  tutor_id: string;
+  tutor_name: string;
+  change_type: ProfileChangeType;
+  current_value?: string;
+  requested_value: string;
+  reason?: string;
+  status: ProfileChangeStatus;
+  admin_comments?: string;
+  requested_at: string;
+  reviewed_at?: string;
+  reviewed_by?: string;
+  reviewer_name?: string;
+}
+
 // --- FORM DATA TYPES ---
 export type NewStaffData = {
   name: string;
@@ -161,9 +183,11 @@ interface IAppContext {
   staff: Staff[];
   leaveRequests: LeaveRequest[];
   odRequests: ODRequest[];
+  profileChangeRequests: ProfileChangeRequest[];
   currentUser: Student | null;
   currentTutor: Staff | null;
   handleLogin: (identifier: string, password: string) => Promise<{ error: { message: string } | null }>;
+  handleLogout: () => Promise<void>;
   addStudent: (studentData: NewStudentData) => Promise<void>;
   updateStudent: (id: string, data: Partial<Student>) => Promise<void>;
   deleteStudent: (id: string) => Promise<void>;
@@ -179,6 +203,10 @@ interface IAppContext {
   updateODRequestStatus: (id: string, status: RequestStatus, reason?: string) => Promise<void>;
   requestODCancellation: (id: string, reason: string) => Promise<void>;
   approveRejectODCancellation: (id: string, approve: boolean) => Promise<void>;
+  createProfileChangeRequest: (changeType: ProfileChangeType, currentValue: string, requestedValue: string, reason?: string) => Promise<void>;
+  updateProfileChangeRequestStatus: (id: string, status: ProfileChangeStatus, adminComments?: string) => Promise<void>;
+  updateTutorProfile: (id: string, data: { email?: string; mobile?: string; password?: string }) => Promise<void>;
+  updateCurrentUserProfile: (data: { email?: string; mobile?: string; password?: string }) => Promise<void>;
   getTutors: () => Staff[];
   uploadODCertificate: (id: string, certificateUrl: string) => Promise<void>;
   verifyODCertificate: (id: string, isApproved: boolean) => Promise<void>;
@@ -201,6 +229,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [staff, setStaff] = useState<Staff[]>([]);
   const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
   const [odRequests, setODRequests] = useState<ODRequest[]>([]);
+  const [profileChangeRequests, setProfileChangeRequests] = useState<ProfileChangeRequest[]>([]);
   
   const [currentUser, setCurrentUser] = useState<Student | null>(null);
   const [currentTutor, setCurrentTutor] = useState<Staff | null>(null);
@@ -228,12 +257,13 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       setLastFetchTime(now);
 
       if (currentRole === 'Admin') {
-        // Get all students, staff, leave requests, and OD requests
-        const [studentsResponse, staffResponse, leaveResponse, odResponse] = await Promise.all([
+        // Get all students, staff, leave requests, OD requests, and profile change requests
+        const [studentsResponse, staffResponse, leaveResponse, odResponse, profileChangeResponse] = await Promise.all([
           apiClient.get('/students'),
           apiClient.get('/staff'),
           apiClient.get('/leave-requests'),
-          apiClient.get('/od-requests')
+          apiClient.get('/od-requests'),
+          apiClient.get('/profile-change-requests')
         ]);
 
         const adminRecord = staffResponse.data.find((staff: Staff) => staff.id === userProfile.id);
@@ -243,14 +273,16 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         setStaff(staffResponse.data || []);
         setLeaveRequests(leaveResponse.data || []);
         setODRequests(odResponse.data || []);
+        setProfileChangeRequests(profileChangeResponse.data || []);
 
       } else if (currentRole === 'Tutor') {
         // Get staff, students, and requests for tutor's students
-        const [studentsResponse, staffResponse, leaveResponse, odResponse] = await Promise.all([
+        const [studentsResponse, staffResponse, leaveResponse, odResponse, profileChangeResponse] = await Promise.all([
           apiClient.get('/students'),
           apiClient.get('/staff'),
           apiClient.get('/leave-requests'),
-          apiClient.get('/od-requests')
+          apiClient.get('/od-requests'),
+          apiClient.get('/profile-change-requests')
         ]);
 
         const tutorRecord = staffResponse.data.find((staff: Staff) => staff.id === userProfile.id);
@@ -263,6 +295,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
           setStudents(tutorStudents || []);
           setLeaveRequests(leaveResponse.data.filter((req: LeaveRequest) => studentIds.includes(req.student_id)) || []);
           setODRequests(odResponse.data.filter((req: ODRequest) => studentIds.includes(req.student_id)) || []);
+          setProfileChangeRequests(profileChangeResponse.data.filter((req: ProfileChangeRequest) => studentIds.includes(req.student_id)) || []);
         }
 
       } else if (currentRole === 'Student') {
@@ -304,6 +337,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     setStaff([]);
     setLeaveRequests([]);
     setODRequests([]);
+    setProfileChangeRequests([]);
     setCurrentUser(null);
     setCurrentTutor(null);
 
@@ -328,6 +362,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         // Get all OD requests
         const odResponse = await apiClient.get('/od-requests');
         setODRequests(odResponse.data || []);
+
+        // Get all profile change requests
+        const profileChangeResponse = await apiClient.get('/profile-change-requests');
+        setProfileChangeRequests(profileChangeResponse.data || []);
 
       } else if (currentRole === 'Tutor') {
         // Get tutor's staff record
@@ -355,6 +393,13 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
           studentIds.includes(req.student_id)
         );
         setODRequests(tutorODRequests || []);
+
+        // Get profile change requests for tutor's students
+        const profileChangeResponse = await apiClient.get('/profile-change-requests');
+        const tutorProfileChangeRequests = profileChangeResponse.data.filter((req: ProfileChangeRequest) => 
+          studentIds.includes(req.student_id)
+        );
+        setProfileChangeRequests(tutorProfileChangeRequests || []);
 
       } else if (currentRole === 'Student') {
         console.log('Fetching student data for profile:', userProfile);
@@ -592,6 +637,28 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     }
   };
   
+  const handleLogout = async () => {
+    try {
+      await apiClient.post('/auth/logout');
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('user_profile');
+      setSession(null);
+      setUser(null);
+      setProfile(null);
+      setStudents([]);
+      setStaff([]);
+      setLeaveRequests([]);
+      setODRequests([]);
+      setProfileChangeRequests([]);
+      setCurrentUser(null);
+      setCurrentTutor(null);
+      showSuccess('Logged out successfully!');
+    } catch (error: any) {
+      showError(`Failed to logout: ${error.response?.data?.error || error.message}`);
+    }
+  };
+
+
   const addStudent = async (studentData: NewStudentData) => {
     if (!studentData.password) {
       showError("Password is required for new students.");
@@ -1053,6 +1120,117 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [profile, fetchDataForProfile]);
 
+  const createProfileChangeRequest = async (changeType: ProfileChangeType, currentValue: string, requestedValue: string, reason?: string) => {
+    if (!currentUser) { 
+      const err = "Current user not found. Cannot submit profile change request.";
+      showError(err);
+      throw new Error(err);
+    }
+    const tutor = staff.find(s => s.id === currentUser.tutor_id);
+    if (!tutor) {
+      const err = "Tutor details not found. Cannot submit profile change request.";
+      showError(err);
+      throw new Error(err);
+    }
+
+    try {
+      const payload = {
+        changeType,
+        currentValue,
+        requestedValue,
+        reason
+      };
+
+      const response = await apiClient.post('/profile-change-requests', payload);
+      setProfileChangeRequests(prev => [...prev, response.data]);
+      showSuccess('Profile change request submitted successfully!');
+    } catch (error: any) {
+      showError(`Failed to submit profile change request: ${error.response?.data?.error || error.message}`);
+      throw error;
+    }
+  };
+
+  const updateProfileChangeRequestStatus = async (id: string, status: ProfileChangeStatus, adminComments?: string) => {
+    try {
+      const response = await apiClient.put(`/profile-change-requests/${id}/status`, { 
+        status, 
+        adminComments 
+      });
+      showSuccess(`Profile change request ${status.toLowerCase()}!`);
+      setProfileChangeRequests(prev => prev.map(req => req.id === id ? response.data : req));
+      
+      // If approved, refresh student data to reflect the changes
+      if (status === 'Approved' && profile) {
+        await fetchDataForProfile(profile);
+      }
+    } catch (error: any) {
+      showError(`Failed to update profile change request status: ${error.response?.data?.error || error.message}`);
+    }
+  };
+
+  const updateTutorProfile = async (id: string, data: { email?: string; mobile?: string; password?: string }) => {
+    try {
+      const response = await apiClient.put(`/staff/${id}/profile`, data);
+      showSuccess('Profile updated successfully!');
+      
+      // Update staff list with new data
+      setStaff(prev => prev.map(s => s.id === id ? { ...s, ...response.data } : s));
+      
+      // Update currentTutor if it's the current user's profile
+      if (currentTutor?.id === id) {
+        setCurrentTutor(prev => prev ? { ...prev, ...response.data } : null);
+      }
+      
+      // If updating current user's profile, also update the profile state
+      if (profile?.id === id) {
+        const profileResponse = await apiClient.get('/profile');
+        setProfile(profileResponse.data);
+      }
+    } catch (error: any) {
+      showError(`Failed to update profile: ${error.response?.data?.error || error.message}`);
+      throw error;
+    }
+  };
+
+  const updateCurrentUserProfile = async (data: { email?: string; mobile?: string; password?: string }) => {
+    if (!profile) {
+      const err = "Current profile not found. Cannot update profile.";
+      showError(err);
+      throw new Error(err);
+    }
+
+    try {
+      // Determine if current user is a staff member or student
+      const isStaff = profile.is_admin || profile.is_tutor;
+      
+      if (isStaff) {
+        // Update staff profile
+        await updateTutorProfile(profile.id, data);
+      } else {
+        // For students, we should still use the direct update (not request approval)
+        // This is a design decision - if students should also go through approval,
+        // this should use createProfileChangeRequest instead
+        const response = await apiClient.put(`/students/${profile.id}/profile`, data);
+        showSuccess('Profile updated successfully!');
+        
+        // Update student in students list
+        setStudents(prev => prev.map(s => s.id === profile.id ? { ...s, ...response.data } : s));
+        
+        // Update currentUser if it exists
+        if (currentUser?.id === profile.id) {
+          setCurrentUser(prev => prev ? { ...prev, ...response.data } : null);
+        }
+        
+        // Update profile state
+        const profileResponse = await apiClient.get('/profile');
+        setProfile(profileResponse.data);
+      }
+    } catch (error: any) {
+      showError(`Failed to update profile: ${error.response?.data?.error || error.message}`);
+      throw error;
+    }
+  };
+
   const getTutors = () => staff.filter(s => s.is_tutor);
 
 
@@ -1066,12 +1244,14 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   const value = {
     session, user, profile, role, loading: loadingInitial,
-    students, staff, leaveRequests, odRequests, currentUser, currentTutor,
-    handleLogin,
+    students, staff, leaveRequests, odRequests, profileChangeRequests, currentUser, currentTutor,
+    handleLogin, handleLogout,
     addStudent, updateStudent, deleteStudent, bulkAddStudents,
     addStaff, updateStaff, deleteStaff,
     addLeaveRequest, updateLeaveRequestStatus, requestLeaveCancellation, approveRejectLeaveCancellation,
     addODRequest, updateODRequestStatus, requestODCancellation, approveRejectODCancellation,
+    createProfileChangeRequest, updateProfileChangeRequestStatus,
+    updateTutorProfile, updateCurrentUserProfile,
     getTutors, uploadODCertificate, verifyODCertificate, handleOverdueCertificates,
     uploadProfilePhoto, removeProfilePhoto,
     refreshData,

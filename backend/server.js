@@ -540,7 +540,7 @@ app.put('/od-requests/:id/status', authenticateToken, async (req, res) => {
       updateQuery += ', certificate_status = NULL, upload_deadline = NULL';
     }
     
-    // Handle rejection of retried requests - ensure clean status
+// Handle rejection of retried requests - ensure clean status
     if (status === 'Rejected') {
       updateQuery += ', certificate_status = NULL, upload_deadline = NULL';
     }
@@ -557,6 +557,135 @@ app.put('/od-requests/:id/status', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Failed to update OD request status' });
+  }
+});
+
+// Profile Change Request endpoints
+
+// Get all profile change requests (Admin only)
+app.get('/profile-change-requests', authenticateToken, async (req, res) => {
+  try {
+    const profileChangeRequests = await query('SELECT * FROM profile_change_requests ORDER BY requested_at DESC');
+    res.json(profileChangeRequests);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to fetch profile change requests' });
+  }
+});
+
+// Create profile change request
+app.post('/profile-change-requests', authenticateToken, async (req, res) => {
+  try {
+    const { changeType, currentValue, requestedValue, reason } = req.body;
+    const id = uuidv4();
+    
+    // Get student and tutor info
+    const [student] = await query('SELECT * FROM students WHERE id = ?', [req.user.id]);
+    if (!student) {
+      return res.status(404).json({ error: 'Student not found' });
+    }
+    
+    const [tutor] = await query('SELECT * FROM staff WHERE id = ?', [student.tutor_id]);
+    if (!tutor) {
+      return res.status(404).json({ error: 'Tutor not found' });
+    }
+    
+    // Check if there's already a pending request for the same change type
+    const [existingRequest] = await query(
+      'SELECT * FROM profile_change_requests WHERE student_id = ? AND change_type = ? AND status = "Pending"',
+      [req.user.id, changeType]
+    );
+    
+    if (existingRequest) {
+      return res.status(400).json({ error: `You already have a pending ${changeType} change request` });
+    }
+    
+    await query(
+      `INSERT INTO profile_change_requests 
+       (id, student_id, student_name, student_register_number, tutor_id, tutor_name, 
+        change_type, current_value, requested_value, reason) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [id, req.user.id, student.name, student.register_number, student.tutor_id, tutor.name, 
+       changeType, currentValue, requestedValue, reason]
+    );
+    
+    const [newRequest] = await query('SELECT * FROM profile_change_requests WHERE id = ?', [id]);
+    res.status(201).json({ message: 'Profile change request created successfully', request: newRequest });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to create profile change request' });
+  }
+});
+
+// Update profile change request status (Tutor/Admin only)
+app.put('/profile-change-requests/:id/status', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, adminComments } = req.body;
+    
+    // Get current user info to check if they're tutor or admin
+    const [userProfile] = await query('SELECT is_admin, is_tutor FROM users WHERE id = ?', [req.user.id]);
+    if (!userProfile || (!userProfile.is_admin && !userProfile.is_tutor)) {
+      return res.status(403).json({ error: 'Access denied. Only tutors and admins can review profile change requests.' });
+    }
+    
+    // Get the request details
+    const [request] = await query('SELECT * FROM profile_change_requests WHERE id = ?', [id]);
+    if (!request) {
+      return res.status(404).json({ error: 'Profile change request not found' });
+    }
+    
+    // If tutor is trying to approve, check if it's their student
+    if (userProfile.is_tutor && !userProfile.is_admin) {
+      if (request.tutor_id !== req.user.id) {
+        return res.status(403).json({ error: 'You can only review requests from your own students' });
+      }
+    }
+    
+    // Get reviewer info
+    const [reviewer] = await query('SELECT * FROM staff WHERE id = ?', [req.user.id]);
+    const reviewerName = reviewer ? reviewer.name : 'Unknown';
+    
+    // Update the request status
+    await query(
+      `UPDATE profile_change_requests 
+       SET status = ?, admin_comments = ?, reviewed_at = NOW(), reviewed_by = ?, reviewer_name = ? 
+       WHERE id = ?`,
+      [status, adminComments || null, req.user.id, reviewerName, id]
+    );
+    
+    // If approved, update the student's actual profile
+    if (status === 'Approved') {
+      let updateQuery = '';
+      let updateValue = request.requested_value;
+      
+      switch (request.change_type) {
+        case 'email':
+          updateQuery = 'UPDATE students SET email = ? WHERE id = ?';
+          // Also update in users table
+          await query('UPDATE users SET email = ? WHERE id = ?', [updateValue, request.student_id]);
+          break;
+        case 'mobile':
+          updateQuery = 'UPDATE students SET mobile = ? WHERE id = ?';
+          break;
+        case 'password':
+          const bcrypt = require('bcryptjs');
+          const hashedPassword = await bcrypt.hash(updateValue, 10);
+          updateQuery = 'UPDATE users SET password_hash = ? WHERE id = ?';
+          updateValue = hashedPassword;
+          break;
+        default:
+          return res.status(400).json({ error: 'Invalid change type' });
+      }
+      
+      await query(updateQuery, [updateValue, request.student_id]);
+    }
+    
+    const [updatedRequest] = await query('SELECT * FROM profile_change_requests WHERE id = ?', [id]);
+    res.json({ message: 'Profile change request updated successfully', request: updatedRequest });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to update profile change request status' });
   }
 });
 
