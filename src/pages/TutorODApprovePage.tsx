@@ -124,7 +124,7 @@ const TutorODApprovePage = () => {
               </DialogHeader>
               <div className="grid gap-4 py-4">
                 <div className="flex flex-col space-y-1">
-                  <span className="text-sm font-medium text-muted-foreground">Dates</span>
+                  <span className="text-sm font-medium text-muted-foreground">Date</span>
 {format(parseISO(selectedRequest.start_date), 'MMMM d yyyy')} to {format(parseISO(selectedRequest.end_date), 'MMMM d yyyy')} ({selectedRequest.total_days} days)
                 </div>
                 <div className="flex flex-col space-y-1">

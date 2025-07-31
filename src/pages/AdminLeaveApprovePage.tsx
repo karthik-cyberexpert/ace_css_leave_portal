@@ -57,7 +57,8 @@ const AdminLeaveApprovePage = () => {
                   <TableHead>Student Name</TableHead>
                   <TableHead className="text-center">Batch</TableHead>
                   <TableHead className="text-center">Semester</TableHead>
-                  <TableHead>Dates</TableHead>
+                  <TableHead>Start Date</TableHead>
+                  <TableHead>End Date</TableHead>
                   <TableHead className="text-right">Days</TableHead>
                   <TableHead className="text-center">Status</TableHead>
                   <TableHead className="text-center">Actions</TableHead>
@@ -74,7 +75,8 @@ const AdminLeaveApprovePage = () => {
                       </TableCell>
                       <TableCell className="text-center">{studentInfo.batch}-{studentInfo.batch !== 'N/A' ? parseInt(studentInfo.batch) + 4 : 'N/A'}</TableCell>
                       <TableCell className="text-center">{studentInfo.semester}</TableCell>
-                      <TableCell>{format(parseISO(request.start_date), 'MMMM d yyyy')} to {format(parseISO(request.end_date), 'MMMM d yyyy')}</TableCell>
+                      <TableCell>{format(parseISO(request.start_date), 'MMMM d yyyy')}</TableCell>
+                      <TableCell>{format(parseISO(request.end_date), 'MMMM d yyyy')}</TableCell>
                       <TableCell className="text-right">{request.total_days}</TableCell>
                     <TableCell className="text-center">
                       {getStatusBadge(request.status)}
