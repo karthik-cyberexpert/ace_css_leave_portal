@@ -4,6 +4,7 @@ import { useAppContext } from '@/context/AppContext';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { UserCircle } from 'lucide-react';
 import ProfilePictureUpload from '@/components/ProfilePictureUpload';
+import EditableProfileField from '@/components/EditableProfileField';
 
 const ProfilePage = () => {
   const { currentUser, staff, user } = useAppContext();
@@ -56,14 +57,18 @@ const ProfilePage = () => {
               <span className="font-semibold text-muted-foreground">Semester</span>
               <p className="font-medium text-base">{currentUser.semester}</p>
             </div>
-            <div className="flex flex-col space-y-1">
-              <span className="font-semibold text-muted-foreground">Email</span>
-              <p className="font-medium text-base">{currentUser.email}</p>
-            </div>
-            <div className="flex flex-col space-y-1">
-              <span className="font-semibold text-muted-foreground">Mobile</span>
-              <p className="font-medium text-base">{currentUser.mobile}</p>
-            </div>
+            <EditableProfileField 
+              label="Email" 
+              value={currentUser.email} 
+              fieldType="email"
+              userType="Student"
+            />
+            <EditableProfileField 
+              label="Mobile" 
+              value={currentUser.mobile} 
+              fieldType="mobile"
+              userType="Student"
+            />
             <div className="flex flex-col space-y-1">
               <span className="font-semibold text-muted-foreground">Tutor</span>
               <p className="font-medium text-base">{tutor ? tutor.name : 'Not Assigned'}</p>

@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import AdminLayout from '@/components/AdminLayout';
 import TutorLayout from '@/components/TutorLayout';
 import ProfilePictureUpload from '@/components/ProfilePictureUpload';
+import EditableProfileField from '@/components/EditableProfileField';
 
 const StaffProfilePage = () => {
   const { profile, user, role, currentTutor, students } = useAppContext();
@@ -28,6 +29,7 @@ const StaffProfilePage = () => {
   
   const displayUsername = currentTutor?.username || 'N/A';
   const displayEmail = user.email || 'N/A';
+  const displayMobile = currentTutor?.mobile || 'N/A';
   const avatarSrc = profile.profile_photo || currentTutor?.profile_photo;
 
   const studentCount = role === 'Tutor' 
@@ -58,10 +60,19 @@ const StaffProfilePage = () => {
         </CardHeader>
         <CardContent className="mt-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6 text-sm">
-            <div className="flex flex-col space-y-1">
-              <span className="font-semibold text-muted-foreground">Email</span>
-              <p className="font-medium text-base">{displayEmail}</p>
-            </div>
+            <EditableProfileField 
+              label="Email" 
+              value={displayEmail} 
+              fieldType="email"
+              userType={role as 'Admin' | 'Tutor'}
+            />
+            <EditableProfileField 
+              label="Mobile" 
+              value={displayMobile} 
+              fieldType="mobile"
+              userType={role as 'Admin' | 'Tutor'}
+              isEditable={displayMobile !== 'N/A'}
+            />
             <div className="flex flex-col space-y-1">
               <span className="font-semibold text-muted-foreground">Username</span>
               <p className="font-medium text-base">{displayUsername}</p>

@@ -84,6 +84,7 @@ export interface Staff {
   name: string;
   email: string;
   username: string;
+  mobile?: string;
   profile_photo?: string;
   is_admin: boolean;
   is_tutor: boolean;
@@ -1120,7 +1121,58 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [profile, fetchDataForProfile]);
 
-  const createProfileChangeRequest = async (changeType: ProfileChangeType, currentValue: string, requestedValue: string, reason?: string) => {
+  const createProfileChangeRequest = async (changeType: ProfileChangeType, currentValue: string, requestedValue: string, reason?: string) =e {
+    if (!profile) {
+      const err = "Current profile not found. Cannot submit profile change request.";
+      showError(err);
+      throw new Error(err);
+    }
+
+    let approverId, approverName;
+    const isStudent = !profile.is_admin && !profile.is_tutor;
+    
+    if (isStudent) {
+      const tutor = staff.find(s =2e s.id === currentUser?.tutor_id);
+      if (!tutor) {
+        const err = "Tutor details not found. Cannot submit profile change request.";
+        showError(err);
+        throw new Error(err);
+      }
+      approverId = tutor.id;
+      approverName = tutor.name;
+    } else {
+      const admin = staff.find(s =2e s.is_admin);
+      if (!admin) {
+        const err = "Admin not found. Cannot submit profile change request.";
+        showError(err);
+        throw new Error(err);
+      }
+      approverId = admin.id;
+      approverName = admin.name;
+    }
+
+    try {
+      const payload = {
+        student_id: isStudent ? currentUser?.id : undefined,
+        student_name: isStudent ? currentUser?.name : undefined,
+        tutor_id: approverId,
+        tutor_name: approverName,
+        change_type: changeType,
+        current_value: currentValue,
+        requested_value: requestedValue,
+        reason,
+        status: 'Pending',
+        requested_at: new Date().toISOString()
+      };
+
+      const response = await apiClient.post('/profile-change-requests', payload);
+      setProfileChangeRequests(prev =2e [...prev, response.data]);
+      showSuccess('Profile change request submitted successfully!');
+    } catch (error: any) {
+      showError(`Failed to submit profile change request: ${error.response?.data?.error || error.message}`);
+      throw error;
+    }
+  };
     if (!currentUser) { 
       const err = "Current user not found. Cannot submit profile change request.";
       showError(err);
