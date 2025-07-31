@@ -50,12 +50,12 @@ const ProfilePage = () => {
               <p className="font-medium text-base">{currentUser.register_number}</p>
             </div>
             <div className="flex flex-col space-y-1">
-              <span className="font-semibold text-muted-foreground">Batch</span>
-              <p className="font-medium text-base">{currentUser.batch}</p>
+              <span className="font-semibold text-muted-foreground">Academic Year</span>
+              <p className="font-medium text-base">{currentUser.batch}-{parseInt(currentUser.batch) + 4}</p>
             </div>
             <div className="flex flex-col space-y-1">
-              <span className="font-semibold text-muted-foreground">Semester</span>
-              <p className="font-medium text-base">{currentUser.semester}</p>
+              <span className="font-semibold text-muted-foreground">Current Semester</span>
+              <p className="font-medium text-base">Semester {currentUser.semester}</p>
             </div>
             <EditableProfileField 
               label="Email" 

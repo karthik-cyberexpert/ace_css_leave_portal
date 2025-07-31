@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Edit, Check, X, Loader2 } from 'lucide-react';
 import { showError, showSuccess } from '@/utils/toast';
 import { useAppContext } from '@/context/AppContext';
+import axios from 'axios';
 
 interface EditableProfileFieldProps {
   label: string;
@@ -14,14 +15,18 @@ interface EditableProfileFieldProps {
   fieldType: 'email' | 'mobile';
   userType: 'Student' | 'Admin' | 'Tutor';
   isEditable?: boolean;
+  approverType?: string;
+  currentId?: string;
 }
 
 const EditableProfileField: React.FC<EditableProfileFieldProps> = ({
   label,
   value,
   fieldType,
-  userType,
-  isEditable = true
+userType,
+  isEditable = true,
+  approverType = 'Admin',
+  currentId
 }) => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [newValue, setNewValue] = useState(value);
@@ -78,18 +83,36 @@ const EditableProfileField: React.FC<EditableProfileFieldProps> = ({
     // All users need to provide a reason for profile changes
     if (!reason.trim()) {
       showError('Please provide a reason for the change');
-      setIsUpdating(false);
       return;
     }
 
     setIsUpdating(true);
     try {
-      // All profile changes now go through approval workflow
-      // Students => Tutor approval, Tutors => Admin approval
-      await createProfileChangeRequest(fieldType, value, newValue, reason);
+      // Directly update the user profile
+      await updateCurrentUserProfile({ [fieldType]: newValue });
+      showSuccess(`${label} updated successfully`);
       
-      const approverType = userType === 'Student' ? 'tutor' : 'admin';
-      showSuccess(`${label} change request submitted to ${approverType} for approval`);
+      // Notify tutor and admin of the change
+      try {
+        const notificationMessage = `${label} changed from '${value}' to '${newValue}' by the user. Reason: ${reason}`;
+        const apiClient = axios.create({
+          baseURL: 'http://localhost:3002',
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        await apiClient.post('/notifications/profile-change', { 
+          changeType: fieldType,
+          oldValue: value,
+          newValue: newValue,
+          reason: reason,
+          message: notificationMessage 
+        });
+      } catch (notificationError) {
+        console.warn('Failed to send notification:', notificationError);
+        // Don't fail the entire operation if notification fails
+      }
       
       setIsDialogOpen(false);
       setNewValue('');
@@ -156,10 +179,7 @@ const EditableProfileField: React.FC<EditableProfileFieldProps> = ({
           <DialogHeader>
             <DialogTitle>Edit {label}</DialogTitle>
             <DialogDescription>
-              {userType === 'Student' 
-                ? `Submit a request to change your ${label.toLowerCase()}. This will require tutor approval.`
-                : `Submit a request to change your ${label.toLowerCase()}. This will require admin approval.`
-              }
+              Update your {label.toLowerCase()}. Tutors and admins will be automatically notified of this change.
             </DialogDescription>
           </DialogHeader>
 
@@ -205,12 +225,12 @@ const EditableProfileField: React.FC<EditableProfileFieldProps> = ({
               {isUpdating ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Submitting...
+                  Updating...
                 </>
               ) : (
                 <>
                   <Check className="h-4 w-4 mr-2" />
-                  Submit Request
+                  Update Profile
                 </>
               )}
             </Button>
