@@ -21,6 +21,7 @@ interface DateRangePickerProps {
   minDate?: Date;
   maxDate?: Date;
   className?: string;
+  prevSemesterEndDate?: Date;
 }
 
 export function DateRangePicker({ 
@@ -30,7 +31,8 @@ export function DateRangePicker({
   disabled = false,
   minDate,
   maxDate,
-  className
+  className,
+  prevSemesterEndDate
 }: DateRangePickerProps) {
   const [open, setOpen] = React.useState(false)
 
@@ -40,7 +42,30 @@ export function DateRangePicker({
   }
 
   const isDateDisabled = (date: Date) => {
-    if (minDate && date < minDate) return true;
+    const july1 = new Date(date.getFullYear(), 6, 1); // July 1 of the year
+    const july29 = new Date(date.getFullYear(), 6, 29); // July 29 of the year
+
+    // For semester 3, special handling
+    if (minDate && minDate.getMonth() === 6 && minDate.getDate() === 1) { // July 1 minDate indicates semester 3
+      // If there's a previous semester end date and it's July 29, disable dates on or before July 29
+      if (prevSemesterEndDate && 
+          prevSemesterEndDate.getMonth() === 6 && 
+          prevSemesterEndDate.getDate() === 29) {
+        if (date <= july29) {
+          return true;
+        }
+      }
+      // Otherwise, allow selection from July 1 onward
+      if (date < july1) {
+        return true;
+      }
+    } else {
+      // Standard minDate check for other semesters
+      if (minDate && date < minDate) {
+        return true;
+      }
+    }
+
     if (maxDate && date > maxDate) return true;
     return false;
   }

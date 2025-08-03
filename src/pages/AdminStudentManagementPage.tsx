@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import AdminLayout from '@/components/AdminLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { Pencil, Trash2, UserPlus, Upload } from 'lucide-react';
+import { Pencil, Trash2, UserPlus, Upload, Filter } from 'lucide-react';
 import { showSuccess, showError } from '@/utils/toast';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { BulkAddStudentsDialog } from '@/components/BulkAddStudentsDialog';
@@ -11,14 +11,19 @@ import { useAppContext, Student, NewStudentData } from '@/context/AppContext';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useBatchContext } from '@/context/BatchContext';
 import { StudentFormDialog, StudentFormValues } from '@/components/StudentFormDialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 const AdminStudentManagementPage = () => {
-  const { students, addStudent, updateStudent, deleteStudent, bulkAddStudents, staff } = useAppContext();
+const { students, addStudent, updateStudent, deleteStudent, bulkAddStudents, staff } = useAppContext();
   const { getAvailableBatches } = useBatchContext();
   const [studentToDelete, setStudentToDelete] = useState<string | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [isBulkAddOpen, setIsBulkAddOpen] = useState(false);
+  const [selectedBatch, setSelectedBatch] = useState<string | null>(null);
+  const filteredStudents = useMemo(() => {
+    return selectedBatch ? students.filter(student => student.batch === selectedBatch) : [];
+  }, [students, selectedBatch]);
 
 
   const handleAddNew = () => {
@@ -79,6 +84,18 @@ const AdminStudentManagementPage = () => {
             <CardDescription>View, add, edit, or remove students from the portal.</CardDescription>
           </div>
           <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
+            <Select onValueChange={setSelectedBatch}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Select Batch" />
+              </SelectTrigger>
+              <SelectContent>
+                {getAvailableBatches().map(batch => (
+                  <SelectItem key={batch.id} value={batch.id}>
+                    {batch.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <Button variant="outline" className="w-full md:w-auto" onClick={() => setIsBulkAddOpen(true)}>
               <Upload className="mr-2 h-4 w-4" /> Bulk Add
             </Button>
@@ -103,33 +120,47 @@ const AdminStudentManagementPage = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {students.map((student) => {
-                  const tutor = staff.find(s => s.id === student.tutor_id);
-                  return (
-                    <TableRow key={student.id}>
-                      <TableCell>
-                        <Avatar>
-                          <AvatarImage src={student.profile_photo} alt={student.name} />
-                          <AvatarFallback>{student.name.charAt(0)}</AvatarFallback>
-                        </Avatar>
-                      </TableCell>
-                      <TableCell className="font-medium">{student.name}</TableCell>
-                      <TableCell>{student.register_number}</TableCell>
-                      <TableCell>{tutor ? tutor.name : 'N/A'}</TableCell>
-                      <TableCell className="text-center">{student.batch}-{parseInt(student.batch) + 4}</TableCell>
-                      <TableCell className="text-center">{student.semester}</TableCell>
-                      <TableCell className="text-center">{student.leave_taken}</TableCell>
-                      <TableCell className="text-right space-x-2">
-                        <Button variant="outline" size="icon" onClick={() => handleEdit(student)} className="transition-transform hover:scale-110 hover:bg-accent">
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button variant="destructive" size="icon" onClick={() => setStudentToDelete(student.id)} className="transition-transform hover:scale-110">
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
+                {!selectedBatch ? (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                      Please select a batch to view students
+                    </TableCell>
+                  </TableRow>
+                ) : filteredStudents.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                      No students found for the selected batch
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filteredStudents.map((student) => {
+                    const tutor = staff.find(s => s.id === student.tutor_id);
+                    return (
+                      <TableRow key={student.id}>
+                        <TableCell>
+                          <Avatar>
+                            <AvatarImage src={student.profile_photo} alt={student.name} />
+                            <AvatarFallback>{student.name.charAt(0)}</AvatarFallback>
+                          </Avatar>
+                        </TableCell>
+                        <TableCell className="font-medium">{student.name}</TableCell>
+                        <TableCell>{student.register_number}</TableCell>
+                        <TableCell>{tutor ? tutor.name : 'N/A'}</TableCell>
+                        <TableCell className="text-center">{student.batch}-{parseInt(student.batch) + 4}</TableCell>
+                        <TableCell className="text-center">{student.semester}</TableCell>
+                        <TableCell className="text-center">{student.leave_taken}</TableCell>
+                        <TableCell className="text-right space-x-2">
+                          <Button variant="outline" size="icon" onClick={() => handleEdit(student)} className="transition-transform hover:scale-110 hover:bg-accent">
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button variant="destructive" size="icon" onClick={() => setStudentToDelete(student.id)} className="transition-transform hover:scale-110">
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
               </TableBody>
             </Table>
           </div>

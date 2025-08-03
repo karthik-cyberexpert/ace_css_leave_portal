@@ -14,6 +14,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Users, CalendarOff, BarChart2, CalendarDays, X } from 'lucide-react';
+import { DateRangePicker } from '@/components/ui/date-range-picker';
 import MonthlyLeaveChart from '@/components/MonthlyLeaveChart';
 import { DailyLeaveChart } from '@/components/DailyLeaveChart';
 import { useAppContext } from '@/context/AppContext';
@@ -42,28 +43,51 @@ const TutorReportPage = () => {
     setStartDate('');
     setEndDate('');
   };
-
   // Get date constraints based on selected batch and semester
   const getDateConstraints = () => {
     if (selectedBatch === 'all' || selectedSemester === 'all') {
-      return { minDate: '', maxDate: '' };
+      return { minDate: '', maxDate: '', prevSemesterEndDate: null };
     }
     
     const semester = parseInt(selectedSemester);
     const range = getSemesterDateRange(selectedBatch, semester);
     
     if (!range?.start) {
-      return { minDate: '', maxDate: '' };
+      return { minDate: '', maxDate: '', prevSemesterEndDate: null };
     }
     
     const today = new Date();
-    const minDate = range.start.toISOString().split('T')[0];
-    const maxDate = today.toISOString().split('T')[0]; // Current date as max
+    let minDate: string;
+    let maxDate: string;
+    let prevSemesterEndDate: Date | null = null;
     
-    return { minDate, maxDate };
+    if (semester === 3) {
+      // For semester 3, allow selection from July 1 to January 31 (next year)
+      const batchYear = parseInt(selectedBatch);
+      const july1 = new Date(batchYear, 6, 1); // July 1st of batch year
+      const jan31NextYear = new Date(batchYear + 1, 0, 31); // January 31st next year
+      
+      // Get previous semester (semester 2) end date
+      const prevRange = getSemesterDateRange(selectedBatch, 2);
+      if (prevRange?.end) {
+        prevSemesterEndDate = prevRange.end;
+      }
+      
+      minDate = july1.toISOString().split('T')[0];
+      // Use the earlier of today or January 31st next year as max
+      maxDate = (today < jan31NextYear ? today : jan31NextYear).toISOString().split('T')[0];
+    } else {
+      // For other semesters, use the semester start date
+      const startDate = new Date(range.start);
+      startDate.setHours(0, 0, 0, 0);
+      minDate = startDate.toISOString().split('T')[0];
+      maxDate = today.toISOString().split('T')[0]; // Current date as max
+    }
+    
+    return { minDate, maxDate, prevSemesterEndDate };
   };
 
-  const { minDate, maxDate } = getDateConstraints();
+  const { minDate, maxDate, prevSemesterEndDate } = getDateConstraints();
 
   const clearDates = () => {
     setStartDate('');
@@ -223,25 +247,24 @@ const TutorReportPage = () => {
         </div>
         
         <div className="flex gap-3">
-          <Input 
-            type="date" 
-            value={startDate} 
-            onChange={(e) => setStartDate(e.target.value)}
-            className="w-40"
+          <DateRangePicker 
+            date={startDate ? new Date(startDate) : undefined} 
+            setDate={(date) => setStartDate(date ? date.toISOString().split('T')[0] : '')}
             placeholder="From Date"
             disabled={selectedBatch === 'all' || selectedSemester === 'all'}
-            min={minDate}
-            max={endDate || maxDate}
-          />
-          <Input 
-            type="date" 
-            value={endDate} 
-            onChange={(e) => setEndDate(e.target.value)}
+            minDate={minDate ? new Date(minDate) : undefined}
+            maxDate={endDate ? new Date(endDate) : (maxDate ? new Date(maxDate) : undefined)}
+            prevSemesterEndDate={prevSemesterEndDate}
             className="w-40"
+          />
+          <DateRangePicker 
+            date={endDate ? new Date(endDate) : undefined} 
+            setDate={(date) => setEndDate(date ? date.toISOString().split('T')[0] : '')}
             placeholder="To Date"
             disabled={selectedBatch === 'all' || selectedSemester === 'all'}
-            min={startDate || minDate}
-            max={maxDate}
+            minDate={startDate ? new Date(startDate) : (minDate ? new Date(minDate) : undefined)}
+            maxDate={maxDate ? new Date(maxDate) : undefined}
+            className="w-40"
           />
           {(startDate || endDate) && (
             <Button variant="outline" size="sm" onClick={clearDates}>

@@ -95,6 +95,8 @@ export interface Staff {
   profile_photo?: string;
   is_admin: boolean;
   is_tutor: boolean;
+  assigned_batch?: string;
+  assigned_semester?: number;
 }
 
 export interface LeaveRequest {
@@ -203,6 +205,7 @@ interface IAppContext {
   addStaff: (staffMember: NewStaffData) => Promise<void>;
   updateStaff: (id: string, data: Partial<Staff>) => Promise<void>;
   deleteStaff: (id: string) => Promise<void>;
+  assignBatchToTutor: (tutorId: string, batch: string, semester: number) => Promise<void>;
   addLeaveRequest: (request: Omit<LeaveRequest, 'id' | 'status' | 'student_name' | 'student_id' | 'student_register_number' | 'tutor_id' | 'tutor_name' | 'created_at' | 'original_status'>) => Promise<void>;
   updateLeaveRequestStatus: (id: string, status: RequestStatus, reason?: string) => Promise<void>;
   requestLeaveCancellation: (id: string, reason: string) => Promise<void>;
@@ -496,7 +499,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         setPollingInterval(null);
       }
     }
-  }, [profile, session, pollData, pollingInterval]);
+  }, [profile, session, pollData]); // Removed pollingInterval from dependencies
 
   useEffect(() => {
     const initializeSessionAndData = async () => {
@@ -1366,6 +1369,37 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   const getTutors = () => staff.filter(s => s.is_tutor);
 
+  const assignBatchToTutor = async (tutorId: string, batch: string, semester: number) => {
+    try {
+      // Update tutor's assigned batch and semester
+      await updateStaff(tutorId, {
+        assigned_batch: batch,
+        assigned_semester: semester,
+      });
+
+      // Get all students in this batch and semester and assign them to this tutor
+      const studentsToAssign = students.filter(
+        (student) => student.batch === batch && student.semester === semester
+      );
+
+      // Update each student's tutor_id
+      for (const student of studentsToAssign) {
+        await updateStudent(student.id, {
+          tutor_id: tutorId,
+        });
+      }
+
+      showSuccess(`Successfully assigned batch ${batch} semester ${semester} to tutor with ${studentsToAssign.length} students!`);
+      
+      // Refresh data to reflect the changes
+      if (profile) {
+        await fetchDataForProfile(profile);
+      }
+    } catch (error: any) {
+      showError(`Failed to assign batch to tutor: ${error.response?.data?.error || error.message}`);
+      throw error;
+    }
+  };
 
   // Chart data fetching functions
   const fetchWeeklyLeaveData = async (batch?: string): Promise<any[]> => {
@@ -1405,7 +1439,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     students, staff, leaveRequests, odRequests, profileChangeRequests, currentUser, currentTutor,
     handleLogin, handleLogout,
     addStudent, updateStudent, deleteStudent, bulkAddStudents,
-    addStaff, updateStaff, deleteStaff,
+    addStaff, updateStaff, deleteStaff, assignBatchToTutor,
     addLeaveRequest, updateLeaveRequestStatus, requestLeaveCancellation, approveRejectLeaveCancellation,
     addODRequest, updateODRequestStatus, requestODCancellation, approveRejectODCancellation,
     createProfileChangeRequest, updateProfileChangeRequestStatus,

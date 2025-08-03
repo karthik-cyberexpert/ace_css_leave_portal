@@ -167,22 +167,16 @@ export const BatchProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     let fallbackResult;
     
     if (isOddSemester) {
-      // For semester 3, start from July 21st instead of June 1st
-      if (semester === 3) {
-        fallbackResult = {
-          start: new Date(year, 6, 21), // July 21st
-          end: new Date(year, 11, 31) // December 31st
-        };
-      } else {
-        fallbackResult = {
-          start: new Date(year, 5, 1), // June 1st for semester 1
-          end: new Date(year, 11, 31) // December 31st
-        };
-      }
+      // All odd semesters (1, 3, 5, 7): June 1st to January 31st (next year)
+      fallbackResult = {
+        start: new Date(year, 5, 1), // June 1st
+        end: new Date(year + 1, 0, 31) // January 31st next year
+      };
     } else {
+      // All even semesters (2, 4, 6, 8): January 1st to June 30th
       fallbackResult = {
         start: new Date(year + 1, 0, 1), // January 1st
-        end: new Date(year + 1, 4, 31) // May 31st
+        end: new Date(year + 1, 5, 30) // June 30th
       };
     }
     

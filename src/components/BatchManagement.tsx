@@ -124,58 +124,23 @@ export const BatchManagement = () => {
     const batch = batches.find(b => b.id === batchId);
     if (!batch) return { minDate: new Date(), maxDate: new Date() };
 
-    const currentYear = new Date().getFullYear();
     const batchStartYear = batch.startYear;
     
     // Calculate which academic year this semester falls in
-    const semesterYear = batchStartYear + Math.floor((semester - 1) / 2);
+    const semesterIndex = Math.floor((semester - 1) / 2);
+    const semesterYear = batchStartYear + semesterIndex;
     
     let minDate: Date;
     let maxDate: Date;
     
     if (semester % 2 === 1) {
-      // Odd semesters (1, 3, 5, 7) run from June to January of next year
-      if (semester === 1) {
-        // First semester starts from June 1st
-        minDate = new Date(semesterYear, 5, 1); // June 1st
-      } else {
-        // For subsequent odd semesters, check if previous even semester has ended
-        const prevSemester = semesterDates.find(s => s.batch === batchId && s.semester === semester - 1);
-        if (prevSemester?.endDate) {
-          // Start the day after previous semester ends
-          const prevEndDate = new Date(prevSemester.endDate);
-          minDate = new Date(prevEndDate.getTime() + 24 * 60 * 60 * 1000); // Next day
-        } else {
-          // Default to June 1st if previous semester end date is not set
-          minDate = new Date(semesterYear, 5, 1);
-        }
-      }
-      maxDate = new Date(semesterYear + 1, 0, 31); // January 31st of next year
+      // Odd semesters (1, 3, 5, 7): May 1st to February 28/29 (next year)
+      minDate = new Date(semesterYear, 4, 1); // May 1st
+      maxDate = new Date(semesterYear + 1, 1, 28); // February 28th next year (will auto-adjust for leap years)
     } else {
-      // Even semesters (2, 4, 6, 8) run from January to June
-      // Check if previous odd semester has ended
-      const prevSemester = semesterDates.find(s => s.batch === batchId && s.semester === semester - 1);
-      if (prevSemester?.endDate) {
-        // Start the day after previous semester ends
-        const prevEndDate = new Date(prevSemester.endDate);
-        minDate = new Date(prevEndDate.getTime() + 24 * 60 * 60 * 1000); // Next day
-      } else {
-        // Default to January 1st if previous semester end date is not set
-        minDate = new Date(semesterYear + 1, 0, 1); // January 1st
-      }
-      maxDate = new Date(semesterYear + 1, 5, 30); // June 30th
-    }
-    
-    // For current year batches, don't allow future dates beyond current year + 4
-    const currentMaxDate = new Date(currentYear + 4, 11, 31);
-    if (maxDate > currentMaxDate) {
-      maxDate = currentMaxDate;
-    }
-    
-    // Don't allow dates before the batch started
-    const batchMinDate = new Date(batchStartYear, 5, 1);
-    if (minDate < batchMinDate) {
-      minDate = batchMinDate;
+      // Even semesters (2, 4, 6, 8): December 1st to July 31st (next year)
+      minDate = new Date(semesterYear, 11, 1); // December 1st
+      maxDate = new Date(semesterYear + 1, 6, 31); // July 31st next year
     }
     
     return { minDate, maxDate };
@@ -185,7 +150,7 @@ export const BatchManagement = () => {
   const isDateDisabled = (date: Date, batchId: string, semester: number, type: 'start' | 'end') => {
     const { minDate, maxDate } = getValidDateRange(batchId, semester);
     
-    // Disable dates outside the valid range
+    // Disable dates outside the semester's valid range
     if (date < minDate || date > maxDate) {
       return true;
     }
@@ -488,16 +453,11 @@ export const BatchManagement = () => {
                   const yearDiff = currentDate.getFullYear() - (batchObj?.startYear || 0);
                   
                   // Create a description of the current semester period
-                  let semesterPeriod = '';
-                  if (currentSemester % 2 === 1) {
-                    // Odd semester (June to January of next year)
-                    const semesterYear = (batchObj?.startYear || 0) + Math.floor((currentSemester - 1) / 2);
-                    semesterPeriod = `(Jun ${semesterYear} - Jan ${semesterYear + 1})`;
-                  } else {
-                    // Even semester (February-May)
-                    const semesterYear = (batchObj?.startYear || 0) + Math.floor((currentSemester - 1) / 2) + 1;
-                    semesterPeriod = `(Feb ${semesterYear} - May ${semesterYear})`;
-                  }
+                  const startDate = semesterDates.find(s => s.batch === batch && s.semester === currentSemester)?.startDate;
+                  const endDate = semesterDates.find(s => s.batch === batch && s.semester === currentSemester)?.endDate;
+                  const startDateStr = startDate ? startDate.toLocaleDateString() : 'N/A';
+                  const endDateStr = endDate ? endDate.toLocaleDateString() : 'N/A';
+                  const semesterPeriod = `${startDateStr} - ${endDateStr}`;
 
                   return (
                     <TableRow key={batch}>

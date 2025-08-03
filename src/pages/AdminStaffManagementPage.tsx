@@ -7,14 +7,16 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Pencil, Trash2, UserPlus, Eye, EyeOff } from 'lucide-react';
-import { showSuccess } from '@/utils/toast';
+import { showSuccess, showError } from '@/utils/toast';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose, DialogDescription } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription as HookFormDescription } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAppContext, Staff } from '@/context/AppContext';
+import { useBatchContext } from '@/context/BatchContext';
 
 const staffSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters."),
@@ -31,11 +33,15 @@ const staffSchema = z.object({
 type StaffFormValues = z.infer<typeof staffSchema>;
 
 const AdminStaffManagementPage = () => {
-  const { staff, addStaff, updateStaff, deleteStaff } = useAppContext();
+  const { staff, addStaff, updateStaff, deleteStaff, students, assignBatchToTutor, role, profile, refreshData } = useAppContext();
+  const { getAvailableBatches } = useBatchContext();
   const [staffToDelete, setStaffToDelete] = useState<string | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingStaff, setEditingStaff] = useState<Staff | null>(null);
   const [showPassword, setShowPassword] = useState(false);
+  
+  // State for batch-semester assignment per tutor
+  const [assignmentState, setAssignmentState] = useState<Record<string, { batch: string; semester: number | null }>>({});
 
   const form = useForm<StaffFormValues>({
     resolver: zodResolver(staffSchema),
@@ -77,6 +83,68 @@ const AdminStaffManagementPage = () => {
     }
   };
 
+  // Helper functions for batch/semester assignment
+  const handleBatchChange = (memberId: string, batch: string) => {
+    setAssignmentState(prev => ({
+      ...prev,
+      [memberId]: { batch, semester: null }
+    }));
+  };
+
+  const handleSemesterChange = (memberId: string, semester: number) => {
+    setAssignmentState(prev => ({
+      ...prev,
+      [memberId]: { ...prev[memberId], semester }
+    }));
+  };
+
+  const handleAssignBatch = async (memberId: string) => {
+    const assignment = assignmentState[memberId];
+    if (assignment?.batch && assignment?.semester) {
+      // Check if another tutor is already assigned to this batch-semester combination
+      const existingAssignment = staff.find(
+        (s) => s.id !== memberId && 
+               s.assigned_batch === assignment.batch && 
+               s.assigned_semester === assignment.semester
+      );
+      
+      if (existingAssignment) {
+        showError(`${existingAssignment.name} is already assigned to batch ${assignment.batch} semester ${assignment.semester}`);
+        return;
+      }
+      
+      try {
+        await assignBatchToTutor(memberId, assignment.batch, assignment.semester);
+        // Clear assignment state for this member
+        setAssignmentState(prev => {
+          const { [memberId]: removed, ...rest } = prev;
+          return rest;
+        });
+        
+        // Refresh data to make sure the UI reflects the latest updates
+        await refreshData();
+      } catch (error) {
+        console.error('Failed to assign batch to tutor:', error);
+      }
+    }
+  };
+
+  const handleRemoveAssignment = async (memberId: string) => {
+    try {
+      await updateStaff(memberId, {
+        assigned_batch: null,
+        assigned_semester: null,
+      });
+      
+      showSuccess('Assignment removed successfully!');
+      
+      // Refresh data to reflect the changes
+      await refreshData();
+    } catch (error) {
+      console.error('Failed to remove assignment:', error);
+    }
+  };
+
   const onSubmit = (data: StaffFormValues) => {
     if (editingStaff) {
       const { password, ...restOfData } = data;
@@ -115,28 +183,120 @@ const AdminStaffManagementPage = () => {
                   <TableHead>Name</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead className="text-center">Roles</TableHead>
+                  <TableHead className="text-center">Current Assignment</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {staff.map((member) => (
-                  <TableRow key={member.id}>
-                    <TableCell className="font-medium">{member.name}</TableCell>
-                    <TableCell>{member.email}</TableCell>
-                    <TableCell className="text-center space-x-2">
-                      {member.is_admin && <Badge variant="default">Admin</Badge>}
-                      {member.is_tutor && <Badge variant="secondary">Tutor</Badge>}
-                    </TableCell>
-                    <TableCell className="text-right space-x-2">
-                      <Button variant="outline" size="icon" onClick={() => handleEdit(member)} className="transition-transform hover:scale-110 hover:bg-accent">
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button variant="destructive" size="icon" onClick={() => setStaffToDelete(member.id)} className="transition-transform hover:scale-110">
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {staff.map((member) => {
+                  const currentAssignment = assignmentState[member.id];
+                  const availableBatches = getAvailableBatches();
+                  
+                  return (
+                    <TableRow key={member.id}>
+                      <TableCell className="font-medium">{member.name}</TableCell>
+                      <TableCell>{member.email}</TableCell>
+                      <TableCell className="text-center space-x-2">
+                        {member.is_admin && <Badge variant="default">Admin</Badge>}
+                        {member.is_tutor && <Badge variant="secondary">Tutor</Badge>}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {member.assigned_batch && member.assigned_semester ? (
+                          <Badge variant="outline">
+                            {member.assigned_batch} - Sem {member.assigned_semester}
+                          </Badge>
+                        ) : (
+                          <span className="text-muted-foreground text-sm">Not assigned</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          {/* Only show assignment controls for tutors and not for current user if they are admin */}
+                          {member.is_tutor && !(member.is_admin && profile?.id === member.id) && (
+                            <>
+                              {/* If tutor already has an assignment, show remove button */}
+                              {member.assigned_batch && member.assigned_semester ? (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleRemoveAssignment(member.id)}
+                                  className="transition-transform hover:scale-105 text-red-600 hover:text-red-700 hover:border-red-300"
+                                >
+                                  Remove Assignment
+                                </Button>
+                              ) : (
+                                /* If no assignment, show assignment controls */
+                                <>
+                                  <Select 
+                                    onValueChange={(value) => handleBatchChange(member.id, value)}
+                                    value={currentAssignment?.batch || ''}
+                                  >
+                                    <SelectTrigger className="w-28">
+                                      <SelectValue placeholder="Batch" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {availableBatches.map((batch) => (
+                                        <SelectItem key={batch.id} value={batch.id}>
+                                          {batch.name}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                  
+                                  {currentAssignment?.batch && (
+                                    <Select 
+                                      onValueChange={(value) => handleSemesterChange(member.id, parseInt(value))}
+                                      value={currentAssignment?.semester?.toString() || ''}
+                                    >
+                                      <SelectTrigger className="w-28">
+                                        <SelectValue placeholder="Semester" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {Array.from({ length: 8 }, (_, i) => i + 1).map((semester) => (
+                                          <SelectItem key={semester} value={semester.toString()}>
+                                            Semester {semester}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  )}
+                                  
+                                  <Button
+                                    variant="default"
+                                    size="sm"
+                                    onClick={() => handleAssignBatch(member.id)}
+                                    disabled={!currentAssignment?.batch || !currentAssignment?.semester}
+                                    className="transition-transform hover:scale-105"
+                                  >
+                                    Assign
+                                  </Button>
+                                </>
+                              )}
+                            </>
+                          )}
+                          
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            onClick={() => handleEdit(member)} 
+                            className="transition-transform hover:scale-105"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          
+                          <Button 
+                            variant="destructive" 
+                            size="sm" 
+                            onClick={() => setStaffToDelete(member.id)} 
+                            className="transition-transform hover:scale-105"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </div>
