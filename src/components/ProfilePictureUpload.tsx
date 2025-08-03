@@ -14,6 +14,7 @@ interface ProfilePictureUploadProps {
   altText: string;
   className?: string;
   onUploadSuccess?: (imageUrl: string) => void;
+  isEditable?: boolean;
 }
 
 const ProfilePictureUpload: React.FC<ProfilePictureUploadProps> = ({
@@ -21,7 +22,8 @@ const ProfilePictureUpload: React.FC<ProfilePictureUploadProps> = ({
   fallbackIcon,
   altText,
   className = "h-20 w-20 border-2 border-primary",
-  onUploadSuccess
+  onUploadSuccess,
+  isEditable = true
 }) => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -47,7 +49,9 @@ const ProfilePictureUpload: React.FC<ProfilePictureUploadProps> = ({
   }, [currentImageSrc]);
 
   const handleAvatarClick = () => {
-    setIsDialogOpen(true);
+    if (isEditable) {
+      setIsDialogOpen(true);
+    }
   };
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -121,7 +125,7 @@ const ProfilePictureUpload: React.FC<ProfilePictureUploadProps> = ({
 
   return (
     <>
-      <div className="relative group cursor-pointer" onClick={handleAvatarClick}>
+      <div className={`relative group ${isEditable ? 'cursor-pointer' : 'cursor-default'}`} onClick={handleAvatarClick}>
         <Avatar className={className}>
           <AvatarImage src={displayImageSrc} alt={altText} />
           <AvatarFallback className="text-3xl">
@@ -129,10 +133,12 @@ const ProfilePictureUpload: React.FC<ProfilePictureUploadProps> = ({
           </AvatarFallback>
         </Avatar>
         
-        {/* Hover overlay */}
-        <div className="absolute inset-0 bg-black bg-opacity-50 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-          <Camera className="h-6 w-6 text-white" />
-        </div>
+        {/* Hover overlay - only show for editable profiles */}
+        {isEditable && (
+          <div className="absolute inset-0 bg-black bg-opacity-50 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+            <Camera className="h-6 w-6 text-white" />
+          </div>
+        )}
       </div>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>

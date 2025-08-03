@@ -17,7 +17,10 @@ const TutorStudentManagementPage = () => {
 
   const myStudents = useMemo(() => {
     if (!currentTutor) return [];
-    return students.filter(student => student.tutor_id === currentTutor.id);
+    // Filter only active students for tutors
+    return students.filter(student => 
+      student.tutor_id === currentTutor.id && student.is_active
+    );
   }, [students, currentTutor]);
 
   const handleEdit = (student: Student) => {

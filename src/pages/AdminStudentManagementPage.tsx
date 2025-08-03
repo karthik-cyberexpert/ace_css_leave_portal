@@ -116,6 +116,7 @@ const { students, addStudent, updateStudent, deleteStudent, bulkAddStudents, sta
                   <TableHead className="text-center">Batch</TableHead>
                   <TableHead className="text-center">Semester</TableHead>
                   <TableHead className="text-center">Leave Taken</TableHead>
+                  <TableHead className="text-center">Status</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -149,6 +150,9 @@ const { students, addStudent, updateStudent, deleteStudent, bulkAddStudents, sta
                         <TableCell className="text-center">{student.batch}-{parseInt(student.batch) + 4}</TableCell>
                         <TableCell className="text-center">{student.semester}</TableCell>
                         <TableCell className="text-center">{student.leave_taken}</TableCell>
+                        <TableCell className="text-center">
+                          {student.is_active ? 'Active' : 'Inactive'}
+                        </TableCell>
                         <TableCell className="text-right space-x-2">
                           <Button variant="outline" size="icon" onClick={() => handleEdit(student)} className="transition-transform hover:scale-110 hover:bg-accent">
                             <Pencil className="h-4 w-4" />

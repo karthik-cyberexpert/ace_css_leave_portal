@@ -16,26 +16,31 @@ const sidebarNavItems = [
     title: "Dashboard",
     href: "/dashboard",
     icon: LayoutDashboard,
+    allowInactive: false,
   },
   {
     title: "Leave Request",
     href: "/leave-request",
     icon: FileText,
+    allowInactive: false,
   },
   {
     title: "OD Request",
     href: "/od-request",
     icon: Briefcase,
+    allowInactive: false,
   },
   {
     title: "Request Status",
     href: "/request-status",
     icon: ClipboardList,
+    allowInactive: false,
   },
   {
     title: "Profile",
     href: "/profile",
     icon: UserCircle,
+    allowInactive: true,
   },
 ];
 
@@ -43,6 +48,7 @@ const SidebarContent = ({ isMobile = false }: { isMobile?: boolean }) => {
   const location = useLocation();
   const { currentUser } = useAppContext();
   const LinkComponent = isMobile ? SheetClose : React.Fragment;
+  const isUserActive = currentUser?.is_active ?? true;
 
   // Get the best profile picture URL (handles custom uploads and Gravatar)
   const profilePictureUrl = getBestProfilePicture(currentUser?.profile_photo, currentUser?.email);
@@ -57,24 +63,45 @@ const SidebarContent = ({ isMobile = false }: { isMobile?: boolean }) => {
         <span className="font-semibold text-lg text-foreground">{currentUser?.name}</span>
       </Link>
       <Separator className="bg-sidebar-border mb-6" />
+      {!isUserActive && (
+        <div className="mb-4 p-3 bg-red-100 dark:bg-red-900 border border-red-300 dark:border-red-700 rounded-lg">
+          <p className="text-red-800 dark:text-red-200 text-sm font-medium text-center">
+            Account Inactive - Limited Access
+          </p>
+        </div>
+      )}
       <nav className="flex flex-col space-y-2">
-        {sidebarNavItems.map((item) => (
-          <LinkComponent key={item.href} asChild>
-            <Button
-              variant="ghost"
-              className={cn(
-                "justify-start text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors duration-200",
-                location.pathname === item.href && "bg-sidebar-accent text-sidebar-accent-foreground"
+        {sidebarNavItems.map((item) => {
+          const isDisabled = !isUserActive && !item.allowInactive;
+          return (
+            <LinkComponent key={item.href} asChild={!isDisabled}>
+              {isDisabled ? (
+                <Button
+                  variant="ghost"
+                  className="justify-start text-sidebar-foreground opacity-50 cursor-not-allowed"
+                  disabled
+                >
+                  <item.icon className="mr-3 h-5 w-5" />
+                  {item.title}
+                </Button>
+              ) : (
+                <Button
+                  variant="ghost"
+                  className={cn(
+                    "justify-start text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors duration-200",
+                    location.pathname === item.href && "bg-sidebar-accent text-sidebar-accent-foreground"
+                  )}
+                  asChild
+                >
+                  <Link to={item.href} className="flex items-center w-full">
+                    <item.icon className="mr-3 h-5 w-5" />
+                    {item.title}
+                  </Link>
+                </Button>
               )}
-              asChild
-            >
-              <Link to={item.href} className="flex items-center w-full">
-                <item.icon className="mr-3 h-5 w-5" />
-                {item.title}
-              </Link>
-            </Button>
-          </LinkComponent>
-        ))}
+            </LinkComponent>
+          );
+        })}
       </nav>
     </>
   );

@@ -36,6 +36,7 @@ const ProfilePage = () => {
                 // The profile will be refreshed automatically through the context
                 console.log('Profile picture uploaded:', imageUrl);
               }}
+              isEditable={currentUser.is_active}
             />
             <div>
               <CardTitle className="text-3xl font-bold">{currentUser.name}</CardTitle>
@@ -57,17 +58,31 @@ const ProfilePage = () => {
               <span className="font-semibold text-muted-foreground">Current Semester</span>
               <p className="font-medium text-base">Semester {currentUser.semester}</p>
             </div>
+            <div className="flex flex-col space-y-1">
+              <span className="font-semibold text-muted-foreground">Status</span>
+              <div className="flex items-center gap-2">
+                <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                  currentUser.is_active 
+                    ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' 
+                    : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+                }`}>
+                  {currentUser.is_active ? 'Active' : 'Inactive'}
+                </span>
+              </div>
+            </div>
             <EditableProfileField 
               label="Email" 
               value={currentUser.email} 
               fieldType="email"
               userType="Student"
+              isEditable={currentUser.is_active}
             />
             <EditableProfileField 
               label="Mobile" 
               value={currentUser.mobile} 
               fieldType="mobile"
               userType="Student"
+              isEditable={currentUser.is_active}
             />
             <div className="flex flex-col space-y-1">
               <span className="font-semibold text-muted-foreground">Tutor</span>

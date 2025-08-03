@@ -68,6 +68,27 @@ const DashboardPage = () => {
     );
   }
 
+  // Show read-only dashboard for inactive students
+  if (!currentUser.is_active) {
+    return (
+      <Layout>
+        <div className="text-center py-12">
+          <div className="bg-red-50 dark:bg-red-900 border border-red-200 dark:border-red-700 rounded-lg p-8 max-w-2xl mx-auto">
+            <h1 className="text-2xl font-bold text-red-800 dark:text-red-200 mb-4">
+              Account Inactive
+            </h1>
+            <p className="text-red-700 dark:text-red-300 mb-6">
+              Your account has been marked as inactive. You cannot submit new requests or make changes to your profile.
+            </p>
+            <p className="text-red-600 dark:text-red-400 text-sm">
+              Please contact your tutor or administrator for assistance.
+            </p>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
+
   return (
     <Layout>
       <Marquee text={warningMessage} className="mb-6 rounded-md" />
