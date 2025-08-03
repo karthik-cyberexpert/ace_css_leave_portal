@@ -81,13 +81,17 @@ const RequestStatusPage = () => {
     }
   };
 
-  const handleUploadSubmit = () => {
+  const handleUploadSubmit = async () => {
     if (!selectedRequestForReview || selectedRequestForReview.type !== 'OD' || !uploadFile) return;
-    const simulatedUrl = URL.createObjectURL(uploadFile);
-    uploadODCertificate(selectedRequestForReview.id, simulatedUrl);
-    showSuccess('Certificate uploaded for verification!');
-    setSelectedRequestForReview(null);
-    setUploadFile(null);
+    
+    try {
+      await uploadODCertificate(selectedRequestForReview.id, uploadFile);
+      showSuccess('Certificate uploaded for verification!');
+      setSelectedRequestForReview(null);
+      setUploadFile(null);
+    } catch (error) {
+      console.error('Failed to upload certificate:', error);
+    }
   };
 
   const getStatusBadge = (status: RequestStatus, certStatus?: CertificateStatus) => {

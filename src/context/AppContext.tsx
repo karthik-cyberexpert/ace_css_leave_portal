@@ -33,9 +33,16 @@ apiClient.interceptors.response.use(
         showError('Your session has been invalidated because another user logged into this account.');
       }
       
-      localStorage.removeItem('auth_token');
-      localStorage.removeItem('user_profile');
-      window.location.href = '/login';
+      // Only clear storage and redirect if we're not on the login page
+      // or if this is a session invalidation (not a login attempt)
+      const isLoginPage = window.location.pathname === '/login' || window.location.pathname === '/';
+      const isLoginAttempt = error.config?.url?.includes('/auth/login');
+      
+      if (!isLoginPage || !isLoginAttempt) {
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('user_profile');
+        window.location.href = '/login';
+      }
     }
     return Promise.reject(error);
   }
@@ -209,12 +216,14 @@ interface IAppContext {
   updateTutorProfile: (id: string, data: { email?: string; mobile?: string; password?: string }) => Promise<void>;
   updateCurrentUserProfile: (data: { email?: string; mobile?: string; password?: string }) => Promise<void>;
   getTutors: () => Staff[];
-  uploadODCertificate: (id: string, certificateUrl: string) => Promise<void>;
+  uploadODCertificate: (id: string, file: File) => Promise<void>;
   verifyODCertificate: (id: string, isApproved: boolean) => Promise<void>;
   handleOverdueCertificates: () => Promise<void>;
   uploadProfilePhoto: (file: File) => Promise<string>;
   removeProfilePhoto: () => Promise<void>;
   refreshData: () => Promise<void>;
+  fetchWeeklyLeaveData: (batch?: string) => Promise<any[]>;
+  fetchDailyLeaveData: (batch?: string) => Promise<any[]>;
 }
 
 const AppContext = createContext<IAppContext | undefined>(undefined);
@@ -564,7 +573,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         console.error('Failed to refresh profile after upload:', profileError);
       }
       
-      return response.data.filePath;
+      return response.data.path;
     } catch (error: any) {
       throw new Error(error.response?.data?.error || 'Failed to upload photo');
     }
@@ -630,7 +639,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     } catch (error: any) {
       console.error('Login failed:', error);
       const errorMessage = error.response?.data?.error || error.response?.data?.message || error.message || "Invalid username or password.";
-      return { error: { message: errorMessage } };
+      return { error: errorMessage };
     }
   };
   
@@ -1075,16 +1084,113 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const uploadODCertificate = async (id: string, certificateUrl: string) => {
+  const uploadODCertificate = async (id: string, file: File) => {
+    console.log('=== Certificate Upload Started ===');
+    console.log('OD Request ID:', id);
+    console.log('File details:', {
+      name: file.name,
+      size: file.size,
+      type: file.type,
+      lastModified: file.lastModified
+    });
+    
+    // Validate file
+    if (!file) {
+      throw new Error('No file provided');
+    }
+    
+    // Check file size (10MB limit)
+    const maxSize = 10 * 1024 * 1024; // 10MB
+    if (file.size > maxSize) {
+      throw new Error('File size must be less than 10MB');
+    }
+    
+    // Check file type
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'application/pdf'];
+    if (!allowedTypes.includes(file.type)) {
+      throw new Error('File must be an image (JPEG, PNG, GIF) or PDF');
+    }
+    
+    const formData = new FormData();
+    formData.append('certificate', file);
+    
+    console.log('FormData created with certificate field');
+    console.log('FormData entries:');
+    for (const [key, value] of formData.entries()) {
+      console.log(`${key}:`, value instanceof File ? `File: ${value.name}` : value);
+    }
+    
     try {
-      const response = await apiClient.put(`/od-requests/${id}/certificate`, { 
-        certificateUrl,
-        certificateStatus: 'Pending Verification'
+      console.log('Sending POST request to:', `/api/od-requests/${id}/certificate`);
+      
+      // Use fetch instead of axios for better multipart handling
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
+        throw new Error('No authentication token found');
+      }
+      
+      const response = await fetch(`${API_BASE_URL}/api/od-requests/${id}/certificate/upload`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          // Don't set Content-Type - let browser set it with boundary
+        },
+        body: formData
       });
-      showSuccess("Certificate uploaded successfully!");
-      setODRequests(prev => prev.map(req => req.id === id ? response.data : req));
+      
+      console.log('Response status:', response.status);
+      console.log('Response ok:', response.ok);
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('Upload failed:', errorData);
+        throw new Error(errorData.error || `HTTP ${response.status}`);
+      }
+      
+      const responseData = await response.json();
+      console.log('Upload successful:', responseData);
+      
+      showSuccess(responseData.message || 'Certificate uploaded successfully!');
+      
+      // Force immediate refresh of all data to ensure admin interface shows changes
+      console.log('Forcing immediate data refresh after certificate upload...');
+      if (profile) {
+        await pollData(profile, false); // Non-silent refresh to ensure immediate update
+      }
+      
+      // Update the OD request with the returned data (fallback)
+      if (responseData.id) {
+        // The response contains the full updated request object
+        console.log('Updating OD request with response data:', responseData);
+        setODRequests(prev => prev.map(req => 
+          req.id === id ? responseData : req
+        ));
+      } else {
+        console.log('No request data in response, refreshing OD requests');
+        // Fallback: refresh all OD requests
+        try {
+          const odResponse = await apiClient.get('/od-requests');
+          const updatedRequest = odResponse.data.find((req: any) => req.id === id);
+          if (updatedRequest) {
+            console.log('Found updated request:', updatedRequest);
+            setODRequests(prev => prev.map(req => req.id === id ? updatedRequest : req));
+          }
+        } catch (refreshError) {
+          console.error('Failed to refresh OD requests:', refreshError);
+        }
+      }
+      
+      return responseData;
+      
     } catch (error: any) {
-      showError(`Failed to upload certificate: ${error.response?.data?.error || error.message}`);
+      console.error('Certificate upload error:', error);
+      
+      let errorMessage = 'Failed to upload certificate';
+      if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      showError(errorMessage);
       throw error;
     }
   };
@@ -1096,6 +1202,13 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         certificateStatus: isApproved ? 'Approved' : 'Rejected'
       });
       showSuccess(`Certificate ${isApproved ? 'approved' : 'rejected'}!`);
+      
+      // Force immediate refresh to ensure all users see the verification change
+      console.log('Forcing immediate data refresh after certificate verification...');
+      if (profile) {
+        await pollData(profile, false); // Non-silent refresh to ensure immediate update
+      }
+      
       setODRequests(prev => prev.map(req => req.id === id ? response.data : req));
     } catch (error: any) {
       showError(`Failed to verify certificate: ${error.response?.data?.error || error.message}`);
@@ -1254,6 +1367,31 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const getTutors = () => staff.filter(s => s.is_tutor);
 
 
+  // Chart data fetching functions
+  const fetchWeeklyLeaveData = async (batch?: string): Promise<any[]> => {
+    try {
+      const params = batch ? { batch } : {};
+      const response = await apiClient.get('/api/leave-data/weekly', { params });
+      return response.data || [];
+    } catch (error: any) {
+      console.error('Failed to fetch weekly leave data:', error);
+      showError(`Failed to fetch weekly leave data: ${error.response?.data?.error || error.message}`);
+      return [];
+    }
+  };
+
+  const fetchDailyLeaveData = async (batch?: string): Promise<any[]> => {
+    try {
+      const params = batch ? { batch } : {};
+      const response = await apiClient.get('/api/leave-data/daily', { params });
+      return response.data || [];
+    } catch (error: any) {
+      console.error('Failed to fetch daily leave data:', error);
+      showError(`Failed to fetch daily leave data: ${error.response?.data?.error || error.message}`);
+      return [];
+    }
+  };
+
   // Manual refresh function for user-triggered updates
   const refreshData = useCallback(async () => {
     if (profile) {
@@ -1274,7 +1412,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     updateTutorProfile, updateCurrentUserProfile,
     getTutors, uploadODCertificate, verifyODCertificate, handleOverdueCertificates,
     uploadProfilePhoto, removeProfilePhoto,
-    refreshData,
+    refreshData, fetchWeeklyLeaveData, fetchDailyLeaveData,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

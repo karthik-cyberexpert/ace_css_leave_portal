@@ -10,7 +10,10 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Users, CalendarOff, BarChart2 } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Button } from '@/components/ui/button';
+import { Users, CalendarOff, BarChart2, CalendarDays, X } from 'lucide-react';
 import MonthlyLeaveChart from '@/components/MonthlyLeaveChart';
 import { DailyLeaveChart } from '@/components/DailyLeaveChart';
 import { useAppContext } from '@/context/AppContext';
@@ -18,9 +21,54 @@ import { useBatchContext } from '@/context/BatchContext';
 import { eachDayOfInterval, format, parseISO } from 'date-fns';
 
 const TutorReportPage = () => {
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
   const { students, leaveRequests, currentTutor, loading } = useAppContext();
   const { getSemesterDateRange } = useBatchContext();
+  const [selectedBatch, setSelectedBatch] = useState<string>('all');
   const [selectedSemester, setSelectedSemester] = useState<string>('all');
+
+  const handleBatchChange = (value: string) => {
+    setSelectedBatch(value);
+    // Clear dates and semester when changing batch
+    setStartDate('');
+    setEndDate('');
+    setSelectedSemester('all');
+  };
+
+  const handleSemesterChange = (value: string) => {
+    setSelectedSemester(value);
+    // Clear dates when changing semester
+    setStartDate('');
+    setEndDate('');
+  };
+
+  // Get date constraints based on selected batch and semester
+  const getDateConstraints = () => {
+    if (selectedBatch === 'all' || selectedSemester === 'all') {
+      return { minDate: '', maxDate: '' };
+    }
+    
+    const semester = parseInt(selectedSemester);
+    const range = getSemesterDateRange(selectedBatch, semester);
+    
+    if (!range?.start) {
+      return { minDate: '', maxDate: '' };
+    }
+    
+    const today = new Date();
+    const minDate = range.start.toISOString().split('T')[0];
+    const maxDate = today.toISOString().split('T')[0]; // Current date as max
+    
+    return { minDate, maxDate };
+  };
+
+  const { minDate, maxDate } = getDateConstraints();
+
+  const clearDates = () => {
+    setStartDate('');
+    setEndDate('');
+  };
 
   // If currentTutor is not yet loaded, show a loading indicator or return null
   if (loading || !currentTutor) {
@@ -35,38 +83,70 @@ const TutorReportPage = () => {
 
   const tutorStudentData = useMemo(() => {
     if (!currentTutor) return [];
-    return students.filter(s => s.tutor_id === currentTutor.id);
-  }, [students, currentTutor]);
+    let filteredStudents = students.filter(s => s.tutor_id === currentTutor.id);
+    
+    // Filter by batch if selected
+    if (selectedBatch !== 'all') {
+      filteredStudents = filteredStudents.filter(s => s.batch === selectedBatch);
+    }
+    
+    return filteredStudents;
+  }, [students, currentTutor, selectedBatch]);
 
   const tutorStudentLeaveRequests = useMemo(() => {
     if (!currentTutor) return [];
     return leaveRequests.filter(req => req.tutor_id === currentTutor.id);
   }, [leaveRequests, currentTutor]);
 
+  // Get available batches for this tutor's students
+  const availableBatches = useMemo(() => {
+    if (!currentTutor) return [];
+    const allTutorStudents = students.filter(s => s.tutor_id === currentTutor.id);
+    const batches = [...new Set(allTutorStudents.map(s => s.batch))].sort();
+    return ['all', ...batches];
+  }, [students, currentTutor]);
+
+  // Get available semesters for the selected batch
+  const availableSemesters = useMemo(() => {
+    if (selectedBatch === 'all') return ['all'];
+    // Show all 8 semesters for any selected batch
+    return ['all', ...Array.from({length: 8}, (_, i) => i + 1)];
+  }, [selectedBatch]);
+
   const dailyChartData = useMemo(() => {
     try {
       if (selectedSemester === 'all') return [];
+      
+      let interval = null;
+      
+      if (startDate && endDate) {
+        // Use custom date range if both dates are provided
+        interval = {
+          start: new Date(startDate),
+          end: new Date(endDate)
+        };
+      } else {
+        // Use semester date range as fallback
+        const semester = parseInt(selectedSemester);
+        const tutorBatch = selectedBatch !== 'all' ? selectedBatch : (tutorStudentData.length > 0 ? tutorStudentData[0].batch : null);
+        if (!tutorBatch) return [];
 
-      const semester = parseInt(selectedSemester);
-      const tutorBatch = tutorStudentData.length > 0 ? tutorStudentData[0].batch : null;
-      if (!tutorBatch) return [];
+        const range = getSemesterDateRange(tutorBatch, semester);
+        if (!range?.start || !(range.start instanceof Date)) return [];
 
-      const range = getSemesterDateRange(tutorBatch, semester);
+        const today = new Date();
+        today.setHours(23, 59, 59, 999);
 
-      if (!range?.start || !(range.start instanceof Date)) return [];
+        const endDate = (range.end && range.end instanceof Date && today > range.end) ? range.end : today;
 
-      const today = new Date();
-      today.setHours(23, 59, 59, 999); 
+        interval = {
+          start: new Date(range.start),
+          end: endDate,
+        };
+      }
 
-      const endDate = (range.end && range.end instanceof Date && today > range.end) ? range.end : today;
-
-      const interval = {
-        start: new Date(range.start),
-        end: endDate,
-      };
-
-      if (interval.start > interval.end) {
-          return [];
+      if (!interval || interval.start > interval.end) {
+        return [];
       }
 
       const days = eachDayOfInterval(interval);
@@ -103,7 +183,7 @@ const TutorReportPage = () => {
       console.error("Error calculating daily chart data:", error);
       return [];
     }
-  }, [selectedSemester, tutorStudentData, tutorStudentLeaveRequests, getSemesterDateRange]);
+  }, [startDate, endDate, selectedBatch, selectedSemester, tutorStudentData, tutorStudentLeaveRequests, getSemesterDateRange]);
 
   const totalStudents = tutorStudentData.length;
   const totalLeaves = tutorStudentData.reduce((acc, student) => acc + student.leave_taken, 0);
@@ -115,34 +195,110 @@ const TutorReportPage = () => {
         <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
           <h1 className="text-2xl md:text-3xl font-bold">Student Report for {currentTutor.name}</h1>
           <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-            <Select value={selectedSemester} onValueChange={setSelectedSemester}>
+            <Select value={selectedBatch} onValueChange={handleBatchChange}>
+              <SelectTrigger className="w-full sm:w-[180px]">
+                <SelectValue placeholder="Select Batch" />
+              </SelectTrigger>
+              <SelectContent>
+                {availableBatches.map(batch => (
+                  <SelectItem key={batch} value={String(batch)}>
+                    {batch === 'all' ? 'All Batches' : `${batch}-${parseInt(String(batch)) + 4}`}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={selectedSemester} onValueChange={handleSemesterChange} disabled={selectedBatch === 'all'}>
               <SelectTrigger className="w-full sm:w-[180px]">
                 <SelectValue placeholder="Select Semester" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Semesters</SelectItem>
-                {[1, 2, 3, 4, 5, 6, 7, 8].map(semester => (
-                  <SelectItem key={semester} value={String(semester)}>{`Semester ${semester}`}</SelectItem>
+                {availableSemesters.map(semester => (
+                  <SelectItem key={semester} value={String(semester)}>
+                    {semester === 'all' ? 'All Semesters' : `Semester ${semester}`}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
         </div>
         
+        <div className="flex gap-3">
+          <Input 
+            type="date" 
+            value={startDate} 
+            onChange={(e) => setStartDate(e.target.value)}
+            className="w-40"
+            placeholder="From Date"
+            disabled={selectedBatch === 'all' || selectedSemester === 'all'}
+            min={minDate}
+            max={endDate || maxDate}
+          />
+          <Input 
+            type="date" 
+            value={endDate} 
+            onChange={(e) => setEndDate(e.target.value)}
+            className="w-40"
+            placeholder="To Date"
+            disabled={selectedBatch === 'all' || selectedSemester === 'all'}
+            min={startDate || minDate}
+            max={maxDate}
+          />
+          {(startDate || endDate) && (
+            <Button variant="outline" size="sm" onClick={clearDates}>
+              Clear
+            </Button>
+          )}
+        </div>
+        
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {/* ... cards ... */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Total Students</CardTitle>
+              <Users className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{totalStudents}</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Total Leaves Taken</CardTitle>
+              <CalendarOff className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{totalLeaves}</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Average Leaves per Student</CardTitle>
+              <BarChart2 className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{averageLeaves}</div>
+            </CardContent>
+          </Card>
         </div>
 
-        {selectedSemester !== 'all' ? (
+        {selectedBatch !== 'all' && selectedSemester !== 'all' ? (
           <DailyLeaveChart 
             data={dailyChartData} 
-            title={`Daily Leave Report for Semester ${selectedSemester}`}
+            title={startDate && endDate 
+              ? `Daily Leave Report for Batch ${selectedBatch}-${parseInt(selectedBatch) + 4} (${format(new Date(startDate), 'MMM d, yyyy')} - ${format(new Date(endDate), 'MMM d, yyyy')})`
+              : `Daily Leave Report for Batch ${selectedBatch}-${parseInt(selectedBatch) + 4}, Semester ${selectedSemester}`
+            }
           />
         ) : (
           <Card>
             <CardHeader>
-              <CardTitle>Select a Semester</CardTitle>
-              <CardDescription>Please select a semester to view the daily leave report.</CardDescription>
+              <CardTitle>
+                {selectedBatch === 'all' ? 'Select a Batch and Semester' : 'Select a Semester'}
+              </CardTitle>
+              <CardDescription>
+                {selectedBatch === 'all' 
+                  ? 'Please select a batch and semester to view the daily leave report.'
+                  : 'Please select a semester to view the daily leave report. You can also use custom date ranges above.'}
+              </CardDescription>
             </CardHeader>
           </Card>
         )}

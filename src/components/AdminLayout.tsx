@@ -45,23 +45,25 @@ const SidebarContent = ({ isMobile = false }: { isMobile?: boolean }) => {
       </Link>
       <Separator className="bg-sidebar-border mb-6" />
       <nav className="flex flex-col space-y-2">
-        {sidebarNavItems.map((item) => (
-          <LinkComponent key={item.href} asChild>
-            <Button
-              variant="ghost"
-              className={cn(
-                "justify-start text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors duration-200",
-                location.pathname === item.href && "bg-sidebar-accent text-sidebar-accent-foreground"
-              )}
-              asChild
-            >
-              <Link to={item.href} className="flex items-center w-full">
-                <item.icon className="mr-3 h-5 w-5" />
-                {item.title}
-              </Link>
-            </Button>
-          </LinkComponent>
-        ))}
+        {sidebarNavItems.map((item) => {
+          return (
+            <LinkComponent key={item.href} {...(isMobile ? { asChild: true } : {})}>
+              <Button
+                variant="ghost"
+                className={cn(
+                  "justify-start text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors duration-200",
+                  location.pathname === item.href && "bg-sidebar-accent text-sidebar-accent-foreground"
+                )}
+                asChild
+              >
+                <Link to={item.href} className="flex items-center w-full">
+                  <item.icon className="mr-3 h-5 w-5" />
+                  {item.title}
+                </Link>
+              </Button>
+            </LinkComponent>
+          );
+        })}
       </nav>
     </>
   );

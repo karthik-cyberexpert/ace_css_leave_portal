@@ -9,7 +9,16 @@ const DashboardOverview = () => {
   const { leaveRequests, currentUser } = useAppContext();
   const { getSemesterDateRange, getCurrentActiveSemester } = useBatchContext();
   
-  const leavesTaken = currentUser.leave_taken;
+  // Handle case when currentUser is not loaded yet
+  if (!currentUser) {
+    return (
+      <div className="grid gap-6 md:grid-cols-2">
+        <div className="text-center py-8 text-muted-foreground">Loading user data...</div>
+      </div>
+    );
+  }
+  
+  const leavesTaken = currentUser.leave_taken || 0;
   
   const leavesApplied = leaveRequests.filter(r => 
     r.student_id === currentUser.id && (r.status === 'Pending' || r.status === 'Forwarded')

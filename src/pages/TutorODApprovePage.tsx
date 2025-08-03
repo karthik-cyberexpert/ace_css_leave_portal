@@ -102,7 +102,7 @@ const TutorODApprovePage = () => {
                           <Button 
                             variant="ghost" 
                             size="sm" 
-                            onClick={() => setViewCertificate(request.certificate_url!)}
+onClick={() => setViewCertificate(request.certificate_url!)}
                             className="h-6 w-6 p-0"
                           >
                             <Eye size={14} />
@@ -210,7 +210,7 @@ const TutorODApprovePage = () => {
                   <>
                     <p className="text-sm text-gray-600">Click the button below to view the uploaded certificate:</p>
                     <Button 
-                      onClick={() => setViewCertificate(verifyRequest.certificate_url!)}
+onClick={() => setViewCertificate(verifyRequest.certificate_url!)}
                       className="flex items-center gap-2"
                     >
                       <Eye size={16} />

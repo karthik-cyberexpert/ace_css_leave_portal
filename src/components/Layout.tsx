@@ -9,6 +9,7 @@ import { Sheet, SheetContent, SheetTrigger, SheetClose } from '@/components/ui/s
 import { Notifications } from '@/components/Notifications';
 import { useAppContext } from '@/context/AppContext';
 import { ThemeToggle } from './theme-toggle';
+import { getBestProfilePicture } from '@/utils/gravatar';
 
 const sidebarNavItems = [
   {
@@ -43,14 +44,17 @@ const SidebarContent = ({ isMobile = false }: { isMobile?: boolean }) => {
   const { currentUser } = useAppContext();
   const LinkComponent = isMobile ? SheetClose : React.Fragment;
 
+  // Get the best profile picture URL (handles custom uploads and Gravatar)
+  const profilePictureUrl = getBestProfilePicture(currentUser?.profile_photo, currentUser?.email);
+
   return (
     <>
       <Link to="/profile" className="flex items-center space-x-3 p-4 mb-6 hover:bg-sidebar-accent rounded-lg transition-colors">
         <Avatar className="h-10 w-10">
-          <AvatarImage src={currentUser.profile_photo} alt={currentUser.name} />
+          <AvatarImage src={profilePictureUrl} alt={currentUser?.name} />
           <AvatarFallback><UserCircle className="h-10 w-10 text-sidebar-primary-foreground" /></AvatarFallback>
         </Avatar>
-        <span className="font-semibold text-lg text-foreground">{currentUser.name}</span>
+        <span className="font-semibold text-lg text-foreground">{currentUser?.name}</span>
       </Link>
       <Separator className="bg-sidebar-border mb-6" />
       <nav className="flex flex-col space-y-2">

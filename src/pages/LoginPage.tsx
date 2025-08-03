@@ -30,18 +30,25 @@ const LoginPage = () => {
   });
 
   const onSubmit = async (data: LoginFormValues) => {
-    setIsLoading(true);
-    const { error } = await handleLogin(data.identifier, data.password);
-    
-    if (error) {
-      setIsLoading(false);
-      showError(error.message);
-    } else {
-      // Login successful - navigate based on role
-      // Wait a bit for context to update, then navigate
-      setTimeout(() => {
+    try {
+      setIsLoading(true);
+      const { error } = await handleLogin(data.identifier, data.password);
+      
+      if (error) {
         setIsLoading(false);
-      }, 100);
+        showError(error);
+        return; // Prevent any further execution
+      } else {
+        // Login successful - navigate based on role
+        // Wait a bit for context to update, then navigate
+        setTimeout(() => {
+          setIsLoading(false);
+        }, 100);
+      }
+    } catch (err) {
+      console.error('Login error:', err);
+      setIsLoading(false);
+      showError('An unexpected error occurred during login');
     }
   };
 

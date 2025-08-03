@@ -5,13 +5,27 @@ import { useAppContext } from '@/context/AppContext';
 import { useBatchContext } from '@/context/BatchContext';
 import { calculateWorkingDaysFromSemesterStart } from '@/utils/dateUtils';
 
-const COLORS = ['#0088FE', '#00C49F']; // Colors for the pie chart segments
+const COLORS = ['#ef4444', '#22c55e', '#64748b']; // Red for leave, Green for attended, Gray for no data
 
 const LeaveSummaryChart = () => {
   const { currentUser } = useAppContext();
   const { getSemesterDateRange } = useBatchContext();
   
-  const leavesTaken = currentUser.leave_taken;
+  // Handle case when currentUser is not loaded yet
+  if (!currentUser) {
+    return (
+      <Card className="lg:col-span-2 shadow-sm transition-all duration-300 hover:shadow-xl hover:-translate-y-1">
+        <CardHeader>
+          <CardTitle className="text-lg font-medium">Leave Summary</CardTitle>
+        </CardHeader>
+        <CardContent className="h-[350px] flex items-center justify-center">
+          <div className="text-center py-8 text-muted-foreground">Loading leave summary...</div>
+        </CardContent>
+      </Card>
+    );
+  }
+  
+  const leavesTaken = currentUser.leave_taken || 0;
   
   // Calculate total working days from semester start to current date
   const totalWorkingDays = useMemo(() => {
@@ -27,18 +41,53 @@ const LeaveSummaryChart = () => {
     return calculateWorkingDaysFromSemesterStart(semesterRange.start);
   }, [currentUser?.batch, currentUser?.semester, getSemesterDateRange]);
   
-  const allowedLeaves = totalWorkingDays > 0 ? totalWorkingDays : 0;
-  const leavesRemaining = Math.max(0, allowedLeaves - leavesTaken);
-
-  const leaveData = [
-    { name: 'Leaves Taken', value: leavesTaken },
-    { name: 'Leaves Remaining', value: leavesRemaining },
+  // Calculate attendance: total working days minus leave days taken
+  // Note: leavesTaken is now calculated dynamically on the backend including current day leaves
+  const workingDaysAttended = Math.max(0, totalWorkingDays - leavesTaken);
+  
+  console.log('LeaveSummaryChart Debug:', {
+    totalWorkingDays,
+    leavesTaken,
+    workingDaysAttended,
+    studentBatch: currentUser?.batch,
+    studentSemester: currentUser?.semester
+  });
+  
+  // Only show data if we have working days to calculate from
+  const leaveData = totalWorkingDays > 0 ? [
+    { name: 'Days on Leave', value: leavesTaken },
+    { name: 'Days Attended', value: workingDaysAttended },
+  ] : [
+    { name: 'No Data Available', value: 1 }
   ];
+
+  // Custom tooltip
+  const CustomTooltip = ({ active, payload }: any) => {
+    if (active && payload && payload.length) {
+      const data = payload[0];
+      const percentage = totalWorkingDays > 0 ? ((data.value / totalWorkingDays) * 100).toFixed(1) : '0';
+      
+      return (
+        <div className="bg-white p-3 border border-gray-200 rounded-lg shadow-lg">
+          <p className="font-semibold text-gray-800">{data.name}</p>
+          <p className="text-sm text-gray-600">
+            {data.value} day{data.value !== 1 ? 's' : ''} ({percentage}%)
+          </p>
+          {totalWorkingDays > 0 && (
+            <p className="text-xs text-gray-500 mt-1">
+              Total working days: {totalWorkingDays}
+            </p>
+          )}
+        </div>
+      );
+    }
+    return null;
+  };
 
   return (
     <Card className="lg:col-span-2 shadow-sm transition-all duration-300 hover:shadow-xl hover:-translate-y-1">
       <CardHeader>
-        <CardTitle className="text-lg font-medium">Leave Summary</CardTitle>
+        <CardTitle className="text-lg font-medium">Attendance vs Leave Distribution</CardTitle>
       </CardHeader>
       <CardContent className="h-[350px]">
         <ResponsiveContainer width="100%" height="100%">
@@ -58,7 +107,7 @@ const LeaveSummaryChart = () => {
                 <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
               ))}
             </Pie>
-            <Tooltip />
+            <Tooltip content={<CustomTooltip />} />
             <Legend verticalAlign="bottom" height={36}/>
           </PieChart>
         </ResponsiveContainer>

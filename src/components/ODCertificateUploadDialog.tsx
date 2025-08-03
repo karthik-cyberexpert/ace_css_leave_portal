@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { useAppContext, ODRequest } from '@/context/AppContext';
 import { Upload, Link, Eye } from 'lucide-react';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { showError, showSuccess } from '@/utils/toast';
 
 interface ODCertificateUploadDialogProps {
   open: boolean;
@@ -15,7 +16,7 @@ interface ODCertificateUploadDialogProps {
 
 export const ODCertificateUploadDialog = ({ open, onOpenChange, odRequest }: ODCertificateUploadDialogProps) => {
   const { uploadODCertificate, refreshData } = useAppContext();
-  const [uploadMode, setUploadMode] = useState<'url' | 'file'>('url');
+  const [uploadMode, setUploadMode] = useState<'url' | 'file'>('file'); // Default to file upload
   const [certificateUrl, setCertificateUrl] = useState('');
   const [isUploading, setIsUploading] = useState(false);
 
@@ -35,27 +36,12 @@ export const ODCertificateUploadDialog = ({ open, onOpenChange, odRequest }: ODC
     setIsUploading(true);
     try {
       if (uploadMode === 'file' && selectedFile) {
-        // Upload file
-        const formData = new FormData();
-        formData.append('certificate', selectedFile);
-        
-        const response = await fetch(`http://localhost:3002/od-requests/${odRequest.id}/certificate/upload`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
-          },
-          body: formData
-        });
-        
-        if (!response.ok) {
-          throw new Error('Failed to upload certificate');
-        }
-        
-        const result = await response.json();
-        console.log('Certificate uploaded successfully:', result);
+        // Upload file using AppContext function
+        await uploadODCertificate(odRequest.id, selectedFile);
       } else if (uploadMode === 'url' && certificateUrl) {
-        // Upload URL
-        await uploadODCertificate(odRequest.id, certificateUrl);
+        // For URL mode, we'll create a temporary file object or handle differently
+        // Since the backend expects files, we'll show an error for now
+        throw new Error('URL upload is not supported yet. Please upload a file instead.');
       } else {
         throw new Error('No certificate provided');
       }
@@ -67,8 +53,9 @@ export const ODCertificateUploadDialog = ({ open, onOpenChange, odRequest }: ODC
       await refreshData();
       
       onOpenChange(false);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to upload certificate:', error);
+      showError(error.message || 'Failed to upload certificate');
     } finally {
       setIsUploading(false);
     }
