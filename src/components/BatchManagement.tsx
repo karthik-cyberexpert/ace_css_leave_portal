@@ -22,7 +22,7 @@ interface Semester {
 }
 
 export const BatchManagement = () => {
-  const { students } = useAppContext();
+  const { students, syncStudentStatusWithBatch } = useAppContext();
   const { semesterDates, setSemesterDates, saveSemesterDates, batches, createBatch, updateBatch, deleteBatch } = useBatchContext();
   const [selectedSemesters, setSelectedSemesters] = useState<Record<string, number>>({});
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -270,12 +270,16 @@ export const BatchManagement = () => {
     if (!editingBatch) return;
     
     try {
-      // For now, we'll just toggle the active status
-      // In a real application, you might want to update other properties
       const currentBatch = batches.find(b => b.id === editingBatch.id);
       if (currentBatch) {
-        await updateBatch(editingBatch.id, { isActive: !currentBatch.isActive });
-        showSuccess(`Batch ${editingBatch.name} updated successfully!`);
+        // Toggle the active status
+        const newActiveStatus = !currentBatch.isActive;
+        await updateBatch(editingBatch.id, { isActive: newActiveStatus });
+
+        // Sync student status
+        await syncStudentStatusWithBatch(editingBatch.id, newActiveStatus);
+
+        showSuccess(`Batch ${editingBatch.name} updated and student statuses synchronized successfully!`);
       }
       setIsEditDialogOpen(false);
       setEditingBatch(null);

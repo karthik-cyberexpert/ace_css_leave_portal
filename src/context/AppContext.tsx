@@ -81,6 +81,7 @@ export interface Student {
   batch: string;
   semester: number;
   leave_taken: number;
+  is_active: boolean;
   email: string;
   mobile: string;
   profile_photo?: string;
@@ -227,6 +228,7 @@ interface IAppContext {
   refreshData: () => Promise<void>;
   fetchWeeklyLeaveData: (batch?: string) => Promise<any[]>;
   fetchDailyLeaveData: (batch?: string) => Promise<any[]>;
+  syncStudentStatusWithBatch: (batchId: string, isActive: boolean) => Promise<void>;
 }
 
 const AppContext = createContext<IAppContext | undefined>(undefined);
@@ -1426,6 +1428,25 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  // Function to sync student status with batch status
+  const syncStudentStatusWithBatch = async (batchId: string, isActive: boolean) => {
+    try {
+      const response = await apiClient.put(`/students/sync-batch-status/${batchId}`, { isActive });
+      
+      if (response.data.updatedCount > 0) {
+        showSuccess(`Updated ${response.data.updatedCount} students to ${isActive ? 'active' : 'inactive'} status for batch ${batchId}`);
+        
+        // Refresh student data to reflect the changes
+        if (profile) {
+          await fetchDataForProfile(profile);
+        }
+      }
+    } catch (error: any) {
+      showError(`Failed to sync student status: ${error.response?.data?.error || error.message}`);
+      throw error;
+    }
+  };
+
   // Manual refresh function for user-triggered updates
   const refreshData = useCallback(async () => {
     if (profile) {
@@ -1446,7 +1467,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     updateTutorProfile, updateCurrentUserProfile,
     getTutors, uploadODCertificate, verifyODCertificate, handleOverdueCertificates,
     uploadProfilePhoto, removeProfilePhoto,
-    refreshData, fetchWeeklyLeaveData, fetchDailyLeaveData,
+    refreshData, fetchWeeklyLeaveData, fetchDailyLeaveData, syncStudentStatusWithBatch,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
