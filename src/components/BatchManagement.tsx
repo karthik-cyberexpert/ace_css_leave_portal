@@ -108,15 +108,54 @@ export const BatchManagement = () => {
     setSelectedSemesters(prev => ({ ...prev, [batch]: semester }));
   };
 
-  const handleDateChange = (batch: string, semester: number, date: Date | undefined, type: 'start' | 'end') => {
+  const handleDateChange = async (batch: string, semester: number, date: Date | undefined, type: 'start' | 'end') => {
+    console.log('handleDateChange called:', { batch, semester, date, type });
+    
     setSemesterDates(prev => {
       const existing = prev.find(s => s.batch === batch && s.semester === semester);
+      let newSemesterDates;
+      
       if (existing) {
-        return prev.map(s => s.batch === batch && s.semester === semester ? { ...s, [type === 'start' ? 'startDate' : 'endDate']: date } : s);
+        newSemesterDates = prev.map(s => 
+          s.batch === batch && s.semester === semester 
+            ? { ...s, [type === 'start' ? 'startDate' : 'endDate']: date } 
+            : s
+        );
+        console.log('Updated existing semester date entry:', { batch, semester, type, date });
       } else {
-        return [...prev, { id: `${batch}-${semester}`, batch, semester, startDate: type === 'start' ? date : undefined, endDate: type === 'end' ? date : undefined }];
+        // Create the semester date entry with the batch ID
+        const newEntry = { 
+          id: `${batch}-${semester}`, 
+          batch, 
+          semester, 
+          startDate: type === 'start' ? date : undefined, 
+          endDate: type === 'end' ? date : undefined 
+        };
+        newSemesterDates = [...prev, newEntry];
+        console.log('Adding new semester date entry:', newEntry);
       }
+      
+      console.log('New semester dates state:', newSemesterDates);
+      return newSemesterDates;
     });
+    
+    // Auto-save the semester dates after updating
+    try {
+      console.log('Auto-saving semester dates...');
+      // Small delay to ensure state is updated
+      setTimeout(async () => {
+        try {
+          await saveSemesterDates();
+          console.log('Semester dates auto-saved successfully');
+          showSuccess('Semester date saved successfully');
+        } catch (error) {
+          console.error('Auto-save failed:', error);
+          showError('Failed to save semester date');
+        }
+      }, 100);
+    } catch (error) {
+      console.error('Error during auto-save:', error);
+    }
   };
 
   // Function to get valid date range for a batch and semester

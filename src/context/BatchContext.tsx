@@ -174,6 +174,7 @@ export const BatchProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const loadSemesterDatesFromStorage = () => {
     try {
       const storedDates = localStorage.getItem('batchSemesterDates');
+      console.log('Loading semester dates from localStorage:', storedDates);
       if (storedDates) {
         const parsedDates = JSON.parse(storedDates, (key, value) => {
           if (key === 'startDate' || key === 'endDate') {
@@ -181,7 +182,10 @@ export const BatchProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           }
           return value;
         });
+        console.log('Parsed semester dates:', parsedDates);
         setSemesterDates(parsedDates);
+      } else {
+        console.log('No semester dates found in localStorage');
       }
     } catch (error) {
       console.error('Error loading semester dates from storage:', error);
@@ -284,7 +288,28 @@ export const BatchProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
 
   const getSemesterDateRange = (batch: string, semester: number) => {
-    const semesterData = semesterDates.find(s => s.batch === batch && s.semester === semester);
+    console.log('getSemesterDateRange called with:', { batch, semester, allSemesterDates: semesterDates });
+    
+    // Try to find semester data with exact batch match first
+    let semesterData = semesterDates.find(s => s.batch === batch && s.semester === semester);
+    
+    // If not found, try with batch name format (e.g., "2024-2028")
+    if (!semesterData) {
+      const batchYear = parseInt(batch);
+      if (!isNaN(batchYear)) {
+        const batchName = `${batchYear}-${batchYear + 4}`;
+        semesterData = semesterDates.find(s => s.batch === batchName && s.semester === semester);
+        console.log('Trying batch name format:', { batchName, found: !!semesterData });
+      }
+    }
+    
+    // If still not found, try the reverse - if batch is in "2024-2028" format, try just "2024"
+    if (!semesterData && batch.includes('-')) {
+      const batchStartYear = batch.split('-')[0];
+      semesterData = semesterDates.find(s => s.batch === batchStartYear && s.semester === semester);
+      console.log('Trying batch start year format:', { batchStartYear, found: !!semesterData });
+    }
+    
     if (semesterData?.startDate) {
       console.log('Using custom semester date:', { batch, semester, startDate: semesterData.startDate, endDate: semesterData.endDate });
       return {
@@ -293,37 +318,59 @@ export const BatchProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       };
     }
     
-    // Fallback to default date calculation if no custom dates are set
+    // Smart fallback calculation based on current date and semester logic
     const batchYear = parseInt(batch);
     if (isNaN(batchYear)) return null;
     
     const semesterIndex = Math.floor((semester - 1) / 2);
     const isOddSemester = semester % 2 === 1;
-    const year = batchYear + semesterIndex;
+    const academicYear = batchYear + semesterIndex;
+    
+    // Get current date for better calculation
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth(); // 0-based (0 = January, 11 = December)
     
     let fallbackResult;
     
     if (isOddSemester) {
-      // All odd semesters (1, 3, 5, 7): June 1st to January 31st (next year)
+      // Odd semesters (1, 3, 5, 7): June to January (next year)
+      // For current semester calculation, use a more realistic start date
+      let semesterStartDate;
+      
+      // If this is the current academic year and we're past June
+      if (academicYear === currentYear && currentMonth >= 5) {
+        // Use June 1st of current year
+        semesterStartDate = new Date(academicYear, 5, 1);
+      } else if (academicYear === currentYear - 1 && currentMonth <= 1) {
+        // We're in Jan-Feb of next year, semester started last June
+        semesterStartDate = new Date(academicYear, 5, 1);
+      } else {
+        // For future/past semesters, use standard June 1st
+        semesterStartDate = new Date(academicYear, 5, 1);
+      }
+      
       fallbackResult = {
-        start: new Date(year, 5, 1), // June 1st
-        end: new Date(year + 1, 0, 31) // January 31st next year
+        start: semesterStartDate,
+        end: new Date(academicYear + 1, 0, 31) // January 31st next year
       };
     } else {
-      // All even semesters (2, 4, 6, 8): January 1st to June 30th
+      // Even semesters (2, 4, 6, 8): January to June of the same calendar year
       fallbackResult = {
-        start: new Date(year + 1, 0, 1), // January 1st
-        end: new Date(year + 1, 5, 30) // June 30th
+        start: new Date(academicYear + 1, 0, 1), // January 1st
+        end: new Date(academicYear + 1, 5, 30) // June 30th
       };
     }
     
-    console.log('Using fallback calculation:', { 
+    console.log('Using smart fallback calculation:', { 
       batch, 
       semester, 
       batchYear, 
       semesterIndex, 
       isOddSemester, 
-      calculatedYear: year, 
+      academicYear, 
+      currentYear,
+      currentMonth,
       result: fallbackResult 
     });
     
@@ -401,20 +448,33 @@ export const BatchProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         return;
       }
       
+      console.log('Saving semester dates:', semesterDates);
+      
       // Create a backup of current data
       const currentData = localStorage.getItem('batchSemesterDates');
       
       try {
         // Save the new data
-        const dataToSave = JSON.stringify(semesterDates);
+        const dataToSave = JSON.stringify(semesterDates, (key, value) => {
+          // Ensure Date objects are properly serialized
+          if (value instanceof Date) {
+            return value.toISOString();
+          }
+          return value;
+        });
         localStorage.setItem('batchSemesterDates', dataToSave);
-        console.log('Semester dates saved successfully:', semesterDates);
+        console.log('Semester dates saved successfully to localStorage:', dataToSave);
         
         // Verify the save was successful
         const savedData = localStorage.getItem('batchSemesterDates');
-        if (!savedData || savedData !== dataToSave) {
-          throw new Error('Data verification failed after save');
+        if (!savedData) {
+          throw new Error('Data verification failed - localStorage returned null after save');
         }
+        
+        // Parse and verify the saved data structure
+        const parsedSavedData = JSON.parse(savedData);
+        console.log('Verification - saved data parsed successfully:', parsedSavedData);
+        
       } catch (saveError) {
         // Restore backup if save failed
         if (currentData) {

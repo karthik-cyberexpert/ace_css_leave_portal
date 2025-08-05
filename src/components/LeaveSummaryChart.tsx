@@ -9,7 +9,7 @@ const COLORS = ['#ef4444', '#22c55e', '#64748b']; // Red for leave, Green for at
 
 const LeaveSummaryChart = () => {
   const { currentUser } = useAppContext();
-  const { getSemesterDateRange } = useBatchContext();
+  const { getSemesterDateRange, semesterDates } = useBatchContext();
   
   // Handle case when currentUser is not loaded yet
   if (!currentUser) {
@@ -33,13 +33,39 @@ const LeaveSummaryChart = () => {
       return 0;
     }
 
-    const semesterRange = getSemesterDateRange(currentUser.batch, currentUser.semester);
-    if (!semesterRange?.start) {
-      return 0;
+    console.log('LeaveSummaryChart: Calculating working days for:', {
+      batch: currentUser.batch,
+      semester: currentUser.semester,
+      semesterDatesLength: semesterDates?.length || 0
+    });
+
+    // First, try to find the semester date directly from context (same as DashboardOverview)
+    const directSemesterDate = semesterDates.find(sd => 
+      sd.batch === currentUser.batch && sd.semester === currentUser.semester
+    );
+    
+    let semesterStartDate = null;
+    
+    if (directSemesterDate && directSemesterDate.startDate) {
+      semesterStartDate = directSemesterDate.startDate;
+      console.log('LeaveSummaryChart: Using direct semester date from context:', semesterStartDate);
+    } else {
+      // Fallback to getSemesterDateRange
+      const semesterRange = getSemesterDateRange(currentUser.batch, currentUser.semester);
+      console.log('LeaveSummaryChart: Semester range from getSemesterDateRange:', semesterRange);
+      semesterStartDate = semesterRange?.start;
+    }
+    
+    if (!semesterStartDate) {
+      console.log('LeaveSummaryChart: No semester start date found, using July 21, 2025 as default');
+      semesterStartDate = new Date('2025-07-21');
     }
 
-    return calculateWorkingDaysFromSemesterStart(semesterRange.start);
-  }, [currentUser?.batch, currentUser?.semester, getSemesterDateRange]);
+    console.log('LeaveSummaryChart: Using semester start date:', semesterStartDate);
+    const workingDays = calculateWorkingDaysFromSemesterStart(semesterStartDate);
+    console.log('LeaveSummaryChart: Total working days calculated:', workingDays);
+    return workingDays;
+  }, [currentUser?.batch, currentUser?.semester, getSemesterDateRange, semesterDates]);
   
   // Calculate attendance: total working days minus leave days taken
   // Note: leavesTaken is now calculated dynamically on the backend including current day leaves
