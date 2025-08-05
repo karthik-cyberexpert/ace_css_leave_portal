@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { addDays, isAfter, isSameDay } from 'date-fns';
-import axios from 'axios';
+import apiClient from '@/utils/apiClient';
 import { useAppContext } from './AppContext';
 
 export interface SemesterDates {
@@ -44,37 +44,8 @@ export const useBatchContext = () => {
   return context;
 };
 
-const apiClient = axios.create({
-  baseURL: 'http://localhost:3002',
-  headers: {
-    'Content-Type': 'application/json'
-  }
-});
-
-// Set up request interceptor to add auth token
-apiClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem('auth_token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
-
-// Set up response interceptor to handle auth errors
-apiClient.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      // Token expired or invalid
-      localStorage.removeItem('auth_token');
-      localStorage.removeItem('user_profile');
-      console.error('Authentication failed - redirecting to login');
-      // You might want to redirect to login page here
-      window.location.href = '/login';
-    }
-    return Promise.reject(error);
-  }
-);
+// Using shared apiClient from utils to ensure consistent configuration
+// and prevent multiple interceptors from causing infinite loops
 
 export const BatchProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [semesterDates, setSemesterDates] = useState<SemesterDates[]>([]);

@@ -11,7 +11,7 @@ const TutorDashboardPage = () => {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   
   const tutorData = useMemo(() => {
-    if (!currentTutor) return { pendingLeaves: 0, pendingODs: 0, totalStudents: 0, allMyLeaveRequests: [], myStudents: [] };
+    if (!currentTutor) return { pendingLeaves: 0, pendingODs: 0, totalStudents: 0, allMyLeaveRequests: [], allMyODRequests: [], myStudents: [] };
     
     const myStudents = students.filter(s => s.tutor_id === currentTutor.id);
     const myStudentIds = new Set(myStudents.map(s => s.id));
@@ -24,6 +24,7 @@ const TutorDashboardPage = () => {
       pendingODs: myODRequests.filter(r => r.status === 'Pending').length,
       totalStudents: myStudents.length,
       allMyLeaveRequests: myLeaveRequests,
+      allMyODRequests: myODRequests,
       myStudents,
     };
   }, [students, leaveRequests, odRequests, currentTutor]);
@@ -113,7 +114,7 @@ const TutorDashboardPage = () => {
           onBatchChange={() => {}} // No batch change for tutors
           isNextMonthDisabled={isNextMonthDisabled()}
         />
-        <MonthlyLeaveChart data={tutorData.allMyLeaveRequests} />
+        <MonthlyLeaveChart leaveData={tutorData.allMyLeaveRequests} odData={tutorData.allMyODRequests} />
       </div>
     </TutorLayout>
   );

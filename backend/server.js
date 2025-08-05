@@ -850,18 +850,27 @@ app.post('/staff', authenticateToken, async (req, res) => {
 app.put('/students/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
-    const updates = req.body;
+    const { password, ...studentUpdates } = req.body;
     
-    const setClause = Object.keys(updates).map(key => `${key} = ?`).join(', ');
-    const values = Object.values(updates);
-    values.push(id);
-
-    await query(`UPDATE students SET ${setClause} WHERE id = ?`, values);
+    // Update students table (excluding password as it's not stored there)
+    if (Object.keys(studentUpdates).length > 0) {
+      const setClause = Object.keys(studentUpdates).map(key => `${key} = ?`).join(', ');
+      const values = Object.values(studentUpdates);
+      values.push(id);
+      await query(`UPDATE students SET ${setClause} WHERE id = ?`, values);
+    }
+    
+    // Update password in users table if provided
+    if (password) {
+      const passwordHash = await bcrypt.hash(password, 10);
+      await query('UPDATE users SET password_hash = ? WHERE id = ?', [passwordHash, id]);
+      console.log(`Password updated for student ${id}`);
+    }
     
     const [updatedStudent] = await query('SELECT * FROM students WHERE id = ?', [id]);
     res.json(updatedStudent);
   } catch (error) {
-    console.error(error);
+    console.error('Error updating student:', error);
     res.status(500).json({ error: 'Failed to update student' });
   }
 });
@@ -870,18 +879,27 @@ app.put('/students/:id', authenticateToken, async (req, res) => {
 app.put('/staff/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
-    const updates = req.body;
+    const { password, ...staffUpdates } = req.body;
     
-    const setClause = Object.keys(updates).map(key => `${key} = ?`).join(', ');
-    const values = Object.values(updates);
-    values.push(id);
-
-    await query(`UPDATE staff SET ${setClause} WHERE id = ?`, values);
+    // Update staff table (excluding password as it's not stored there)
+    if (Object.keys(staffUpdates).length > 0) {
+      const setClause = Object.keys(staffUpdates).map(key => `${key} = ?`).join(', ');
+      const values = Object.values(staffUpdates);
+      values.push(id);
+      await query(`UPDATE staff SET ${setClause} WHERE id = ?`, values);
+    }
+    
+    // Update password in users table if provided
+    if (password) {
+      const passwordHash = await bcrypt.hash(password, 10);
+      await query('UPDATE users SET password_hash = ? WHERE id = ?', [passwordHash, id]);
+      console.log(`Password updated for staff member ${id}`);
+    }
     
     const [updatedStaff] = await query('SELECT * FROM staff WHERE id = ?', [id]);
     res.json(updatedStaff);
   } catch (error) {
-    console.error(error);
+    console.error('Error updating staff:', error);
     res.status(500).json({ error: 'Failed to update staff' });
   }
 });

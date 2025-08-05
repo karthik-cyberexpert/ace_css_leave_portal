@@ -22,25 +22,37 @@ const MonthlyLeaveChart = ({ leaveData, odData }: MonthlyLeaveChartProps) => {
     od: 0,
   }));
 
-  // Process leave requests
-  leaveData.forEach(request => {
-    if (request.status === 'Approved') {
-      const monthIndex = getMonth(new Date(request.start_date));
-      if (monthlyData[monthIndex]) {
-        monthlyData[monthIndex].leaves += request.total_days;
+  // Process leave requests (with null safety)
+  if (leaveData && Array.isArray(leaveData)) {
+    leaveData.forEach(request => {
+      if (request && request.status === 'Approved' && request.start_date) {
+        try {
+          const monthIndex = getMonth(new Date(request.start_date));
+          if (monthlyData[monthIndex] && typeof request.total_days === 'number') {
+            monthlyData[monthIndex].leaves += request.total_days;
+          }
+        } catch (error) {
+          console.warn('Error processing leave request:', error, request);
+        }
       }
-    }
-  });
+    });
+  }
 
-  // Process OD requests
-  odData.forEach(request => {
-    if (request.status === 'Approved') {
-      const monthIndex = getMonth(new Date(request.start_date));
-      if (monthlyData[monthIndex]) {
-        monthlyData[monthIndex].od += request.total_days;
+  // Process OD requests (with null safety)
+  if (odData && Array.isArray(odData)) {
+    odData.forEach(request => {
+      if (request && request.status === 'Approved' && request.start_date) {
+        try {
+          const monthIndex = getMonth(new Date(request.start_date));
+          if (monthlyData[monthIndex] && typeof request.total_days === 'number') {
+            monthlyData[monthIndex].od += request.total_days;
+          }
+        } catch (error) {
+          console.warn('Error processing OD request:', error, request);
+        }
       }
-    }
-  });
+    });
+  }
 
   return (
     <Card className="col-span-1 lg:col-span-3 transition-all duration-300 hover:shadow-xl hover:-translate-y-1">

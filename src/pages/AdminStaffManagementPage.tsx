@@ -149,9 +149,12 @@ const AdminStaffManagementPage = () => {
     if (editingStaff) {
       const { password, ...restOfData } = data;
       const staffData: Partial<Staff> = { ...restOfData };
-      if (password) {
-        // Password update logic would go here, if implemented
+      
+      // Include password in the update if it's provided
+      if (password && password.trim() !== '') {
+        (staffData as any).password = password;
       }
+      
       updateStaff(editingStaff.id, staffData);
     } else {
       if (!data.password) {

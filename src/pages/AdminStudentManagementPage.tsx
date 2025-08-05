@@ -63,6 +63,12 @@ const { students, activeStudents, addStudent, updateStudent, deleteStudent, bulk
           email: data.email,
           mobile: data.mobile,
         };
+        
+        // Include password in the update if it's provided
+        if (password && password.trim() !== '') {
+          (studentData as any).password = password;
+        }
+        
         await updateStudent(editingStudent.id, studentData);
       } else {
         // addStudent expects NewStudentData which has tutorName, it handles finding tutorId internally

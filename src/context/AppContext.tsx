@@ -2,51 +2,10 @@ import React, { createContext, useContext, useState, ReactNode, useEffect, useCa
 import { BulkStudent } from '@/components/BulkAddStudentsDialog';
 import { format, addDays, isBefore, parseISO, differenceInDays } from 'date-fns';
 import { showError, showSuccess } from '@/utils/toast';
-import axios from 'axios';
+import apiClient from '@/utils/apiClient';
 
 // API Client Configuration
 const API_BASE_URL = 'http://localhost:3002';
-
-const apiClient = axios.create({
-  baseURL: API_BASE_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
-
-// Add request interceptor to include auth token
-apiClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem('auth_token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
-
-// Add response interceptor to handle auth errors
-apiClient.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      // Check if it's a session invalidation
-      if (error.response?.data?.code === 'SESSION_INVALID') {
-        showError('Your session has been invalidated because another user logged into this account.');
-      }
-      
-      // Only clear storage and redirect if we're not on the login page
-      // or if this is a session invalidation (not a login attempt)
-      const isLoginPage = window.location.pathname === '/login' || window.location.pathname === '/';
-      const isLoginAttempt = error.config?.url?.includes('/auth/login');
-      
-      if (!isLoginPage || !isLoginAttempt) {
-        localStorage.removeItem('auth_token');
-        localStorage.removeItem('user_profile');
-        window.location.href = '/login';
-      }
-    }
-    return Promise.reject(error);
-  }
-);
 
 type Session = {
   access_token: string;

@@ -23,7 +23,6 @@ const sidebarNavItems = [
 const SidebarContent = ({ isMobile = false }: { isMobile?: boolean }) => {
   const location = useLocation();
   const { currentTutor, user } = useAppContext();
-  const LinkComponent = isMobile ? SheetClose : React.Fragment;
 
   // Use getBestProfilePicture to get either custom image or Gravatar fallback
   const avatarSrc = getBestProfilePicture(currentTutor?.profile_photo, currentTutor?.email || user?.email);
@@ -39,8 +38,8 @@ const SidebarContent = ({ isMobile = false }: { isMobile?: boolean }) => {
       </Link>
       <Separator className="bg-sidebar-border mb-6" />
       <nav className="flex flex-col space-y-2">
-        {sidebarNavItems.map((item) => (
-          <LinkComponent key={item.href} asChild>
+        {sidebarNavItems.map((item) => {
+          const buttonContent = (
             <Button
               variant="ghost"
               className={cn(
@@ -54,8 +53,18 @@ const SidebarContent = ({ isMobile = false }: { isMobile?: boolean }) => {
                 {item.title}
               </Link>
             </Button>
-          </LinkComponent>
-        ))}
+          );
+
+          return isMobile ? (
+            <SheetClose key={item.href} asChild>
+              {buttonContent}
+            </SheetClose>
+          ) : (
+            <React.Fragment key={item.href}>
+              {buttonContent}
+            </React.Fragment>
+          );
+        })}
       </nav>
     </>
   );
