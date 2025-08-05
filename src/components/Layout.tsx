@@ -16,31 +16,31 @@ const sidebarNavItems = [
     title: "Dashboard",
     href: "/dashboard",
     icon: LayoutDashboard,
-    allowInactive: false,
+    allowInactive: true, // Allow inactive students to view dashboard
   },
   {
     title: "Leave Request",
     href: "/leave-request",
     icon: FileText,
-    allowInactive: false,
+    allowInactive: false, // Disable for inactive students
   },
   {
     title: "OD Request",
     href: "/od-request",
     icon: Briefcase,
-    allowInactive: false,
+    allowInactive: false, // Disable for inactive students
   },
   {
     title: "Request Status",
     href: "/request-status",
     icon: ClipboardList,
-    allowInactive: false,
+    allowInactive: true, // Allow inactive students to view request status (read-only)
   },
   {
     title: "Profile",
     href: "/profile",
     icon: UserCircle,
-    allowInactive: true,
+    allowInactive: true, // Allow inactive students to view profile
   },
 ];
 

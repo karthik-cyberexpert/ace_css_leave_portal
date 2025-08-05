@@ -1440,16 +1440,22 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       const response = await apiClient.put(`/students/sync-batch-status/${batchId}`, { isActive });
       
       if (response.data.updatedCount > 0) {
-        showSuccess(`Updated ${response.data.updatedCount} students to ${isActive ? 'active' : 'inactive'} status for batch ${batchId}`);
+        console.log(`✅ Updated ${response.data.updatedCount} students to ${isActive ? 'active' : 'inactive'} status for batch ${batchId}`);
         
         // Refresh student data to reflect the changes
         if (profile) {
           await fetchDataForProfile(profile);
         }
+        
+        return { success: true, updatedCount: response.data.updatedCount };
+      } else {
+        console.log(`ℹ️ No students found to update for batch ${batchId}`);
+        return { success: true, updatedCount: 0 };
       }
     } catch (error: any) {
-      showError(`Failed to sync student status: ${error.response?.data?.error || error.message}`);
-      throw error;
+      console.warn(`⚠️ Failed to sync student status for batch ${batchId}:`, error.response?.data?.error || error.message);
+      // Don't throw error or show error toast - this is handled by the calling function
+      return { success: false, error: error.response?.data?.error || error.message };
     }
   };
 

@@ -53,12 +53,28 @@ const apiClient = axios.create({
 
 // Set up request interceptor to add auth token
 apiClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
+  const token = localStorage.getItem('auth_token');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
 });
+
+// Set up response interceptor to handle auth errors
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      // Token expired or invalid
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('user_profile');
+      console.error('Authentication failed - redirecting to login');
+      // You might want to redirect to login page here
+      window.location.href = '/login';
+    }
+    return Promise.reject(error);
+  }
+);
 
 export const BatchProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [semesterDates, setSemesterDates] = useState<SemesterDates[]>([]);
@@ -239,6 +255,12 @@ export const BatchProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   const updateBatch = async (batchId: string, updates: Partial<Batch>): Promise<void> => {
     try {
+      // Check if user is authenticated
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
+        throw new Error('User not authenticated. Please log in again.');
+      }
+
       // Convert camelCase to snake_case for API
       const dbUpdates: any = {};
       if ('is_active' in updates) dbUpdates.is_active = updates.is_active;
@@ -246,6 +268,8 @@ export const BatchProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       if ('start_year' in updates) dbUpdates.start_year = updates.start_year;
       if ('end_year' in updates) dbUpdates.end_year = updates.end_year;
       if ('name' in updates) dbUpdates.name = updates.name;
+      
+      console.log('Updating batch:', { batchId, dbUpdates, hasToken: !!token });
       
       await apiClient.put(`/batches/${batchId}`, dbUpdates);
       await loadBatchesFromDatabase(); // Reload from database
@@ -255,9 +279,21 @@ export const BatchProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       if (activeStatus !== undefined && syncStudentStatusWithBatch) {
         await syncStudentStatusWithBatch(batchId, activeStatus);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to update batch:', error);
-      throw error;
+      
+      // Handle specific authentication errors
+      if (error.response?.status === 401) {
+        throw new Error('Authentication expired. Please log in again.');
+      } else if (error.response?.status === 403) {
+        throw new Error('Access denied. You do not have permission to update batches.');
+      } else if (error.response?.data?.error) {
+        throw new Error(error.response.data.error);
+      } else if (error.message) {
+        throw new Error(error.message);
+      } else {
+        throw new Error('Unknown error occurred while updating batch.');
+      }
     }
   };
 

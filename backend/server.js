@@ -1314,8 +1314,15 @@ app.put('/od-requests/:id/status', authenticateToken, async (req, res) => {
     let params = [status, cancelReason || null];
     
     if (status === 'Approved') {
-      const uploadDeadline = new Date();
-      uploadDeadline.setDate(uploadDeadline.getDate() + 7);
+      // Get the OD request details to calculate deadline from end_date
+      const [odRequest] = await query('SELECT end_date FROM od_requests WHERE id = ?', [id]);
+      if (!odRequest) {
+        return res.status(404).json({ error: 'OD request not found' });
+      }
+      
+      // Calculate upload deadline as 3 days from the END DATE of the OD request
+      const uploadDeadline = new Date(odRequest.end_date);
+      uploadDeadline.setDate(uploadDeadline.getDate() + 3);
       updateQuery += ', certificate_status = ?, upload_deadline = ?';
       params.push('Pending Upload', uploadDeadline);
     }

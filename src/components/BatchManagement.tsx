@@ -269,23 +269,79 @@ export const BatchManagement = () => {
   const handleUpdateBatch = async () => {
     if (!editingBatch) return;
     
+    // Check authentication first
+    const authToken = localStorage.getItem('auth_token');
+    if (!authToken) {
+      showError('Authentication required. Please log in again.');
+      // Redirect to login or refresh
+      window.location.href = '/login';
+      return;
+    }
+    
+    const currentBatch = batches.find(b => b.id === editingBatch.id);
+    if (!currentBatch) {
+      showError('Batch not found. Please refresh and try again.');
+      return;
+    }
+
+    const newActiveStatus = !currentBatch.is_active;
+    let batchUpdateSuccess = false;
+    let studentSyncSuccess = false;
+    
     try {
-      const currentBatch = batches.find(b => b.id === editingBatch.id);
-      if (currentBatch) {
-        // Toggle the active status
-        const newActiveStatus = !currentBatch.is_active;
-        await updateBatch(editingBatch.id, { is_active: newActiveStatus });
-
-        // Sync student status
-        await syncStudentStatusWithBatch(editingBatch.id, newActiveStatus);
-
-        showSuccess(`Batch ${editingBatch.name} updated and student statuses synchronized successfully!`);
+      console.log(`Attempting to ${newActiveStatus ? 'activate' : 'deactivate'} batch ${editingBatch.name}`);
+      
+      // First, update the batch
+      await updateBatch(editingBatch.id, { is_active: newActiveStatus });
+      batchUpdateSuccess = true;
+      console.log(`✅ Batch ${editingBatch.name} status updated to ${newActiveStatus ? 'active' : 'inactive'}`);
+      
+      // Then, try to sync student status (this is optional and should not fail the entire operation)
+      try {
+        if (syncStudentStatusWithBatch) {
+          await syncStudentStatusWithBatch(editingBatch.id, newActiveStatus);
+          studentSyncSuccess = true;
+          console.log('✅ Student status sync completed');
+        }
+      } catch (syncError) {
+        console.warn('⚠️ Student sync failed, but batch update succeeded:', syncError);
+        // Don't throw here - batch update was successful
       }
+      
+      // Show success message based on what succeeded
+      if (batchUpdateSuccess && studentSyncSuccess) {
+        showSuccess(`Batch ${editingBatch.name} updated and student statuses synchronized successfully!`);
+      } else if (batchUpdateSuccess) {
+        showSuccess(`Batch ${editingBatch.name} updated successfully! (Student sync will be handled automatically)`);
+      }
+      
       setIsEditDialogOpen(false);
       setEditingBatch(null);
-    } catch (error) {
-      console.error('Error updating batch:', error);
-      showError('Failed to update batch. Please try again.');
+    } catch (error: any) {
+      console.error('❌ Error updating batch:', error);
+      
+      let errorMessage = 'Unknown error occurred';
+      
+      if (error.message) {
+        errorMessage = error.message;
+      } else if (error.response?.data?.error) {
+        errorMessage = error.response.data.error;
+      } else if (error.response?.statusText) {
+        errorMessage = `${error.response.status}: ${error.response.statusText}`;
+      }
+      
+      // Handle specific error types
+      if (error.message?.includes('Authentication') || error.response?.status === 401) {
+        showError('Session expired. Please log in again.');
+        // Clear auth and redirect
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('user_profile');
+        setTimeout(() => window.location.href = '/login', 2000);
+      } else if (error.message?.includes('permission') || error.response?.status === 403) {
+        showError('You do not have permission to perform this action.');
+      } else {
+        showError(`Failed to update batch: ${errorMessage}`);
+      }
     }
   };
   

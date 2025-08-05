@@ -42,7 +42,7 @@ const ODCertificateReminder = () => {
                   ({daysRemaining >= 0 ? `${daysRemaining} days remaining` : 'Overdue'})
                 </span>
                 <Button asChild size="sm">
-                  <Link to="/request-status">Upload Now</Link>
+                  <Link to={`/request-status?highlight=${req.id}`}>Upload Now</Link>
                 </Button>
               </AlertDescription>
             </Alert>

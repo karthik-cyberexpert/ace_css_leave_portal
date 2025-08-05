@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
@@ -11,11 +11,16 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAppContext, LeaveRequest, ODRequest, RequestStatus, CertificateStatus } from '@/context/AppContext';
 import { format, parseISO, differenceInDays } from 'date-fns'; // Import format, parseISO, and differenceInDays for displaying dates
+import { useSearchParams } from 'react-router-dom';
 
 type CombinedRequest = (LeaveRequest & { type: 'Leave' }) | (ODRequest & { type: 'OD' });
 
 const RequestStatusPage = () => {
   const { leaveRequests, odRequests, requestLeaveCancellation, requestODCancellation, currentUser, uploadODCertificate, updateLeaveRequestStatus, updateODRequestStatus } = useAppContext();
+  const [searchParams, setSearchParams] = useSearchParams();
+  
+  // Check if the current user is inactive
+  const isUserInactive = !currentUser?.is_active;
   const [selectedRequestForReview, setSelectedRequestForReview] = useState<CombinedRequest | null>(null);
   const [cancelReason, setCancelReason] = useState('');
   const [uploadFile, setUploadFile] = useState<File | null>(null);
@@ -37,6 +42,17 @@ const RequestStatusPage = () => {
     ];
     return combined.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()); // Sort by created_at for latest first
   }, [leaveRequests, odRequests, currentUser?.id]);
+
+  // Handle URL highlight parameter
+  useEffect(() => {
+    const highlightId = searchParams.get('highlight');
+    if (highlightId && allRequests.length > 0) {
+      const requestToHighlight = allRequests.find(request => request.id.toString() === highlightId);
+      if (requestToHighlight) {
+        setSelectedRequestForReview(requestToHighlight);
+      }
+    }
+  }, [searchParams, allRequests]);
 
   const handleRequestCancellation = async () => {
     if (!selectedRequestForReview || !cancelReason.trim()) return;
@@ -111,19 +127,31 @@ const RequestStatusPage = () => {
     return <span className={cn("px-3 py-1 rounded-full text-xs font-semibold", colorClasses[status as keyof typeof colorClasses] || 'bg-gray-100 text-gray-800')}>{statusText}</span>;
   };
 
-  const canRequestCancellation = selectedRequestForReview && 
+  const canRequestCancellation = !isUserInactive && selectedRequestForReview && 
     (selectedRequestForReview.status === 'Pending' || 
      selectedRequestForReview.status === 'Approved' || 
      selectedRequestForReview.status === 'Forwarded');
 
-  const canUploadCertificate = selectedRequestForReview?.type === 'OD' && 
+  const canUploadCertificate = !isUserInactive && selectedRequestForReview?.type === 'OD' && 
     selectedRequestForReview.status === 'Approved' && 
     selectedRequestForReview.certificate_status === 'Pending Upload';
 
-  const canRetryRequest = selectedRequestForReview?.status === 'Rejected';
+  const canRetryRequest = !isUserInactive && selectedRequestForReview?.status === 'Rejected';
 
   return (
     <Layout>
+      {isUserInactive && (
+        <div className="mb-6">
+          <div className="bg-red-50 dark:bg-red-900 border border-red-200 dark:border-red-700 rounded-lg p-4">
+            <h3 className="text-lg font-semibold text-red-800 dark:text-red-200 mb-2">
+              Account Inactive - Limited Access
+            </h3>
+            <p className="text-red-700 dark:text-red-300 text-sm">
+              You can view your request status but cannot perform actions like canceling requests, uploading certificates, or retrying requests.
+            </p>
+          </div>
+        </div>
+      )}
       <Card className="w-full max-w-6xl mx-auto transition-all duration-300 hover:shadow-xl">
         <CardHeader>
           <CardTitle className="text-2xl md:text-3xl font-bold">Request Status</CardTitle>
