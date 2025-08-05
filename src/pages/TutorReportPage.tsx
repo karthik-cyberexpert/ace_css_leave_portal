@@ -24,7 +24,7 @@ import { eachDayOfInterval, format, parseISO } from 'date-fns';
 const TutorReportPage = () => {
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
-  const { students, leaveRequests, currentTutor, loading } = useAppContext();
+  const { students, leaveRequests, odRequests, currentTutor, loading } = useAppContext();
   const { getSemesterDateRange } = useBatchContext();
   const [selectedBatch, setSelectedBatch] = useState<string>('all');
   const [selectedSemester, setSelectedSemester] = useState<string>('all');
@@ -122,6 +122,11 @@ const TutorReportPage = () => {
     return leaveRequests.filter(req => req.tutor_id === currentTutor.id);
   }, [leaveRequests, currentTutor]);
 
+  const tutorStudentODRequests = useMemo(() => {
+    if (!currentTutor) return [];
+    return odRequests.filter(req => req.tutor_id === currentTutor.id);
+  }, [odRequests, currentTutor]);
+
   // Get available batches for this tutor's students
   const availableBatches = useMemo(() => {
     if (!currentTutor) return [];
@@ -177,7 +182,9 @@ const TutorReportPage = () => {
 
       return days.map(day => {
         const studentsOnLeave = new Set<string>();
+        const studentsOnOD = new Set<string>();
         
+        // Process leave requests
         tutorStudentLeaveRequests.forEach(req => {
           if (req.status === 'Approved') {
             const leaveStart = parseISO(req.start_date);
@@ -198,16 +205,38 @@ const TutorReportPage = () => {
           }
         });
         
+        // Process OD requests
+        tutorStudentODRequests.forEach(req => {
+          if (req.status === 'Approved') {
+            const odStart = parseISO(req.start_date);
+            const odEnd = parseISO(req.end_date);
+            
+            const dayStart = new Date(day);
+            dayStart.setHours(0, 0, 0, 0);
+            
+            const odStartNormalized = new Date(odStart);
+            odStartNormalized.setHours(0, 0, 0, 0);
+            
+            const odEndNormalized = new Date(odEnd);
+            odEndNormalized.setHours(23, 59, 59, 999); 
+            
+            if (dayStart >= odStartNormalized && dayStart <= odEndNormalized) {
+              studentsOnOD.add(req.student_id);
+            }
+          }
+        });
+        
         return { 
           date: format(day, 'MMM d'), 
-          studentsOnLeave: studentsOnLeave.size 
+          studentsOnLeave: studentsOnLeave.size,
+          studentsOnOD: studentsOnOD.size
         };
       });
     } catch (error) {
       console.error("Error calculating daily chart data:", error);
       return [];
     }
-  }, [startDate, endDate, selectedBatch, selectedSemester, tutorStudentData, tutorStudentLeaveRequests, getSemesterDateRange]);
+  }, [startDate, endDate, selectedBatch, selectedSemester, tutorStudentData, tutorStudentLeaveRequests, tutorStudentODRequests, getSemesterDateRange]);
 
   const totalStudents = tutorStudentData.length;
   const totalLeaves = tutorStudentData.reduce((acc, student) => acc + student.leave_taken, 0);
@@ -307,8 +336,8 @@ const TutorReportPage = () => {
           <DailyLeaveChart 
             data={dailyChartData} 
             title={startDate && endDate 
-              ? `Daily Leave Report for Batch ${selectedBatch}-${parseInt(selectedBatch) + 4} (${format(new Date(startDate), 'MMM d, yyyy')} - ${format(new Date(endDate), 'MMM d, yyyy')})`
-              : `Daily Leave Report for Batch ${selectedBatch}-${parseInt(selectedBatch) + 4}, Semester ${selectedSemester}`
+              ? `Daily Leave & OD Report for Batch ${selectedBatch}-${parseInt(selectedBatch) + 4} (${format(new Date(startDate), 'MMM d, yyyy')} - ${format(new Date(endDate), 'MMM d, yyyy')})`
+              : `Daily Leave & OD Report for Batch ${selectedBatch}-${parseInt(selectedBatch) + 4}, Semester ${selectedSemester}`
             }
           />
         ) : (
@@ -326,7 +355,7 @@ const TutorReportPage = () => {
           </Card>
         )}
 
-        <MonthlyLeaveChart data={tutorStudentLeaveRequests} />
+        <MonthlyLeaveChart leaveData={tutorStudentLeaveRequests} odData={tutorStudentODRequests} />
 
         <Card className="transition-all duration-300 hover:shadow-lg">
           <CardHeader>

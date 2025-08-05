@@ -886,7 +886,92 @@ app.put('/staff/:id', authenticateToken, async (req, res) => {
   }
 });
 
+// Create a new batch
+app.post('/batches', authenticateToken, async (req, res) => {
+  try {
+    const { startYear } = req.body;
+    const id = startYear.toString();
+    const endYear = startYear + 4;
+    const name = `${startYear}-${endYear}`;
+
+    await query(
+      'INSERT INTO batches (id, start_year, end_year, name, is_active) VALUES (?, ?, ?, ?, ?)',
+      [id, startYear, endYear, name, true]
+    );
+
+    res.status(201).json({ message: 'Batch created successfully', id });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to create batch', details: error.message });
+  }
+});
+
+// Update a batch
+app.put('/batches/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updates = req.body;
+    
+    const setClause = Object.keys(updates).map(key => `${key} = ?`).join(', ');
+    const values = Object.values(updates);
+    values.push(id);
+
+    await query(`UPDATE batches SET ${setClause} WHERE id = ?`, values);
+    
+    const [updatedBatch] = await query('SELECT * FROM batches WHERE id = ?', [id]);
+    res.json(updatedBatch);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to update batch', details: error.message });
+  }
+});
+
+// Delete a batch
+app.delete('/batches/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    await query('DELETE FROM batches WHERE id = ?', [id]);
+    res.json({ message: 'Batch deleted successfully' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to delete batch', details: error.message });
+  }
+});
+
+// Get all batches
+app.get('/batches', authenticateToken, async (req, res) => {
+  try {
+    const batches = await query('SELECT * FROM batches ORDER BY start_year');
+    res.json(batches);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to retrieve batches', details: error.message });
+  }
+});
+
 // Update student profile (direct update)
+app.put('/students/sync-batch-status/:batchId', authenticateToken, async (req, res) => {
+  try {
+    const { batchId } = req.params;
+    const { isActive } = req.body;
+
+    // Update all students in this batch to have the correct active status
+    const [result] = await query(
+      'UPDATE students SET is_active = ? WHERE batch = ?',
+      [isActive, batchId]
+    );
+
+    if (result.affectedRows > 0) {
+      res.json({ message: `${result.affectedRows} students updated`, updatedCount: result.affectedRows });
+    } else {
+      res.status(404).json({ error: 'No students found for this batch' });
+    }
+  } catch (error) {
+    console.error('Failed to update students status:', error);
+    res.status(500).json({ error: 'Failed to update students status' });
+  }
+});
+
 app.put('/students/:id/profile', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;

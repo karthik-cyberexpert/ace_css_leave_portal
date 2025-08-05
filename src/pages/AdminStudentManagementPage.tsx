@@ -14,7 +14,7 @@ import { StudentFormDialog, StudentFormValues } from '@/components/StudentFormDi
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 const AdminStudentManagementPage = () => {
-const { students, addStudent, updateStudent, deleteStudent, bulkAddStudents, staff } = useAppContext();
+const { students, activeStudents, addStudent, updateStudent, deleteStudent, bulkAddStudents, staff } = useAppContext();
   const { getAvailableBatches } = useBatchContext();
   const [studentToDelete, setStudentToDelete] = useState<string | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -22,8 +22,8 @@ const { students, addStudent, updateStudent, deleteStudent, bulkAddStudents, sta
   const [isBulkAddOpen, setIsBulkAddOpen] = useState(false);
   const [selectedBatch, setSelectedBatch] = useState<string | null>(null);
   const filteredStudents = useMemo(() => {
-    return selectedBatch ? students.filter(student => student.batch === selectedBatch) : [];
-  }, [students, selectedBatch]);
+    return selectedBatch ? activeStudents.filter(student => student.batch === selectedBatch) : [];
+  }, [activeStudents, selectedBatch]);
 
 
   const handleAddNew = () => {

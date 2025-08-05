@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { addDays, isAfter, isSameDay } from 'date-fns';
+import axios from 'axios';
 import { useAppContext } from './AppContext';
 
 export interface SemesterDates {
@@ -27,9 +28,9 @@ interface BatchContextType {
   getCurrentActiveSemester: (batch: string) => number;
   isDateWithinSemester: (date: Date, batch: string, semester: number) => boolean;
   saveSemesterDates: () => Promise<void>;
-  createBatch: (startYear: number) => Promise<void>;
+  createBatch: (startYear: number) => void;
   updateBatch: (batchId: string, updates: Partial<Batch>) => Promise<void>;
-  deleteBatch: (batchId: string) => Promise<void>;
+  deleteBatch: (batchId: string) => void;
   getAvailableBatches: () => Batch[];
 }
 
@@ -43,106 +44,136 @@ export const useBatchContext = () => {
   return context;
 };
 
+const apiClient = axios.create({
+  baseURL: 'http://localhost:3002',
+  headers: {
+    'Content-Type': 'application/json'
+  }
+});
+
+// Set up request interceptor to add auth token
+apiClient.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
 export const BatchProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [semesterDates, setSemesterDates] = useState<SemesterDates[]>([]);
   const [batches, setBatches] = useState<Batch[]>([]);
-  const [isInitialized, setIsInitialized] = useState(false);
+  const { syncStudentStatusWithBatch } = useAppContext();
 
-  // Load data from localStorage on mount
-  const { profile } = useAppContext();
-  
+  // Load batches from localStorage on mount
   useEffect(() => {
-    // Only initialize once when admin profile is first available
-    if (profile?.is_admin && !isInitialized) {
-      console.log('Initializing batch context for admin user...');
-      
-      // Load semester dates
-      const savedDates = localStorage.getItem('batchSemesterDates');
-      if (savedDates) {
-        try {
-          const parsed = JSON.parse(savedDates);
-          const datesWithDateObjects = parsed.map((item: any) => ({
-            ...item,
-            startDate: item.startDate ? new Date(item.startDate) : undefined,
-            endDate: item.endDate ? new Date(item.endDate) : undefined,
-          }));
-          setSemesterDates(datesWithDateObjects);
-          console.log('Loaded semester dates from localStorage:', datesWithDateObjects);
-        } catch (error) {
-          console.error('Error loading semester dates:', error);
-        }
-      }
+    loadBatchesFromStorage();
+    loadSemesterDatesFromStorage();
+  }, []);
 
-      // Load batches
-      const savedBatches = localStorage.getItem('batches');
-      if (savedBatches) {
-        try {
-          const loadedBatches = JSON.parse(savedBatches);
-          setBatches(loadedBatches);
-          console.log('Loaded batches from localStorage:', loadedBatches);
-        } catch (error) {
-          console.error('Error loading batches:', error);
-        }
-      } else {
-        // Initialize with default batches if none are saved
-        const currentYear = new Date().getFullYear();
-        const defaultBatches: Batch[] = [];
-        // Create batches for the current year and the 3 previous years
-        for (let i = 0; i < 4; i++) {
-          const year = currentYear - i;
-          defaultBatches.push({
-            id: year.toString(),
-            startYear: year,
-            endYear: year + 4,
-            name: `${year}-${year + 4}`,
-            isActive: true,
-          });
-        }
-        const sortedBatches = defaultBatches.sort((a, b) => b.startYear - a.startYear);
-        setBatches(sortedBatches);
-        console.log('Created default batches:', sortedBatches);
-      }
-      
-      setIsInitialized(true);
-    }
-  }, [profile?.is_admin, isInitialized]);
-
-  // Function to save batches to localStorage
-  const saveBatches = async (updatedBatches: Batch[]) => {
+  const loadBatchesFromStorage = () => {
     try {
-      localStorage.setItem('batches', JSON.stringify(updatedBatches));
-      setBatches(updatedBatches);
+      const storedBatches = localStorage.getItem('batches');
+      if (storedBatches) {
+        const parsedBatches = JSON.parse(storedBatches);
+        setBatches(parsedBatches);
+      } else {
+        // Initialize with some default batches if none exist
+        const defaultBatches = generateDefaultBatches();
+        setBatches(defaultBatches);
+        saveBatchesToStorage(defaultBatches);
+      }
     } catch (error) {
-      console.error('Error saving batches:', error);
-      throw error;
+      console.error('Error loading batches from storage:', error);
+      const defaultBatches = generateDefaultBatches();
+      setBatches(defaultBatches);
+      saveBatchesToStorage(defaultBatches);
     }
   };
 
-  // CRUD operations for batches
-  const createBatch = async (startYear: number) => {
+  const loadSemesterDatesFromStorage = () => {
+    try {
+      const storedDates = localStorage.getItem('batchSemesterDates');
+      if (storedDates) {
+        const parsedDates = JSON.parse(storedDates, (key, value) => {
+          if (key === 'startDate' || key === 'endDate') {
+            return value ? new Date(value) : undefined;
+          }
+          return value;
+        });
+        setSemesterDates(parsedDates);
+      }
+    } catch (error) {
+      console.error('Error loading semester dates from storage:', error);
+    }
+  };
+
+  const generateDefaultBatches = (): Batch[] => {
+    const currentYear = new Date().getFullYear();
+    const defaultBatches: Batch[] = [];
+    
+    // Generate batches from 2020 to current year + 2
+    for (let year = 2020; year <= currentYear + 2; year++) {
+      defaultBatches.push({
+        id: year.toString(),
+        startYear: year,
+        endYear: year + 4,
+        name: `${year}-${year + 4}`,
+        isActive: year >= currentYear - 4 && year <= currentYear // Active for recent batches
+      });
+    }
+    
+    return defaultBatches;
+  };
+
+  const saveBatchesToStorage = (batchesToSave: Batch[]) => {
+    try {
+      localStorage.setItem('batches', JSON.stringify(batchesToSave));
+    } catch (error) {
+      console.error('Error saving batches to storage:', error);
+    }
+  };
+
+  const createBatch = (startYear: number): void => {
     const newBatch: Batch = {
       id: startYear.toString(),
       startYear,
       endYear: startYear + 4,
       name: `${startYear}-${startYear + 4}`,
-      isActive: true,
+      isActive: true
     };
-    const updatedBatches = [...batches, newBatch].sort((a, b) => b.startYear - a.startYear);
-    await saveBatches(updatedBatches);
+    
+    const updatedBatches = [...batches, newBatch];
+    setBatches(updatedBatches);
+    saveBatchesToStorage(updatedBatches);
   };
 
-  const updateBatch = async (batchId: string, updates: Partial<Batch>) => {
-    const updatedBatches = batches.map(b => b.id === batchId ? { ...b, ...updates } : b);
-    await saveBatches(updatedBatches);
+  const updateBatch = async (batchId: string, updates: Partial<Batch>): Promise<void> => {
+    try {
+      const updatedBatches = batches.map(batch => 
+        batch.id === batchId ? { ...batch, ...updates } : batch
+      );
+      setBatches(updatedBatches);
+      saveBatchesToStorage(updatedBatches);
+      
+      // If updating isActive status, sync student statuses via backend
+      if ('isActive' in updates && syncStudentStatusWithBatch) {
+        await syncStudentStatusWithBatch(batchId, updates.isActive!);
+      }
+    } catch (error) {
+      console.error('Failed to update batch:', error);
+      throw error;
+    }
   };
 
-  const deleteBatch = async (batchId: string) => {
-    const updatedBatches = batches.filter(b => b.id !== batchId);
-    await saveBatches(updatedBatches);
+  const deleteBatch = (batchId: string): void => {
+    const updatedBatches = batches.filter(batch => batch.id !== batchId);
+    setBatches(updatedBatches);
+    saveBatchesToStorage(updatedBatches);
   };
 
   const getAvailableBatches = useCallback(() => {
-    return batches.filter(b => b.isActive);
+    return batches.filter(batch => batch.isActive);
   }, [batches]);
 
 

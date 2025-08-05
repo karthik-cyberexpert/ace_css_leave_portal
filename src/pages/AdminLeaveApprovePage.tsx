@@ -47,7 +47,7 @@ const AdminLeaveApprovePage = () => {
       <Card className="w-full mx-auto">
         <CardHeader>
           <CardTitle className="text-2xl md:text-3xl font-bold">Admin Leave Management</CardTitle>
-          <CardDescription>Review, approve, or reject all student leave requests, including those forwarded by tutors and cancellation requests.</CardDescription>
+          <CardDescription>Review, approve, or reject student leave requests that have been forwarded by tutors.</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
@@ -65,7 +65,7 @@ const AdminLeaveApprovePage = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {leaveRequests.map((request) => {
+                {leaveRequests.filter(request => request.status === 'Forwarded').map((request) => {
                   const studentInfo = getStudentInfo(request.student_id);
                   return (
                     <TableRow key={request.id} className="transition-colors hover:bg-muted/50">

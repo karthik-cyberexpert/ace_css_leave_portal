@@ -61,7 +61,7 @@ const AdminODApprovePage = () => {
   return (
     <AdminLayout>
       <Card>
-        <CardHeader><CardTitle>Admin OD Management</CardTitle><CardDescription>Review, manage, and verify all student OD requests.</CardDescription></CardHeader>
+        <CardHeader><CardTitle>Admin OD Management</CardTitle><CardDescription>Review, manage, and verify student OD requests that have been forwarded by tutors.</CardDescription></CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
             <Table>
@@ -77,7 +77,7 @@ const AdminODApprovePage = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {odRequests.map((request) => {
+                {odRequests.filter(request => request.status === 'Forwarded').map((request) => {
                   const studentInfo = getStudentInfo(request.student_id);
                   return (
                     <TableRow key={request.id}>

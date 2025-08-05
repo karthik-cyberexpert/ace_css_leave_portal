@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -6,6 +6,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 interface DailyChartData {
   date: string;
   studentsOnLeave: number;
+  studentsOnOD: number;
 }
 
 interface DailyLeaveChartProps {
@@ -14,14 +15,32 @@ interface DailyLeaveChartProps {
 }
 
 export const DailyLeaveChart = ({ data, title }: DailyLeaveChartProps) => {
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  
   // Safety check: ensure data is valid array
   const safeData = Array.isArray(data) ? data.filter(item => 
     item && 
     typeof item === 'object' && 
-    typeof item.date === 'string' && 
+    typeof item.date === 'string' &&
     typeof item.studentsOnLeave === 'number' &&
-    !isNaN(item.studentsOnLeave)
+    typeof item.studentsOnOD === 'number' &&
+    !isNaN(item.studentsOnLeave) &&
+    !isNaN(item.studentsOnOD)
   ) : [];
+  
+  // Auto-scroll to the end when data changes
+  useEffect(() => {
+    if (scrollContainerRef.current && safeData.length > 0) {
+      // Small delay to ensure the chart is rendered
+      const timer = setTimeout(() => {
+        if (scrollContainerRef.current) {
+          scrollContainerRef.current.scrollLeft = scrollContainerRef.current.scrollWidth;
+        }
+      }, 100);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [safeData.length, title]); // Re-trigger when data changes or title changes
   
   // Function to check if a date string represents a Sunday
   const isSunday = (dateString: string): boolean => {
@@ -57,13 +76,16 @@ export const DailyLeaveChart = ({ data, title }: DailyLeaveChartProps) => {
       <CardHeader>
         <CardTitle>{title}</CardTitle>
         <CardDescription>
-          Daily breakdown of students on leave from semester start date to current date.
+          Daily breakdown of students on leave and OD from semester start date to current date.
           {safeData.length > 0 && ` (${safeData.length} days)`}
           {sundayDates.length > 0 && ` • ${sundayDates.length} Sunday${sundayDates.length > 1 ? 's' : ''} marked in red`}
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="w-full overflow-x-auto rounded-md border">
+        <div 
+          ref={scrollContainerRef}
+          className="w-full overflow-x-auto rounded-md border"
+        >
           <div style={{ width: `${chartWidth}px`, padding: '10px', minWidth: '100%' }}>
             <ResponsiveContainer width="100%" height={450}>
               <BarChart 
@@ -83,14 +105,14 @@ export const DailyLeaveChart = ({ data, title }: DailyLeaveChartProps) => {
                   domain={[0, 10]}
                   ticks={[0, 2, 4, 6, 8, 10]}
                   tickCount={6}
-                  label={{ value: 'Students on Leave', angle: -90, position: 'insideLeft' }}
+                  label={{ value: 'Number of Students', angle: -90, position: 'insideLeft' }}
                 />
                 <Tooltip 
                   formatter={(value: any, name: any) => {
                     if (typeof value === 'number') {
-                      return [value, 'Students on Leave'];
+                      return [value, name];
                     }
-                    return [String(value || 0), 'Students on Leave'];
+                    return [String(value || 0), name];
                   }}
                   labelFormatter={(label: any) => {
                     if (typeof label === 'string') {
@@ -104,10 +126,17 @@ export const DailyLeaveChart = ({ data, title }: DailyLeaveChartProps) => {
                     borderRadius: '4px'
                   }}
                 />
+                <Legend />
                 <Bar 
                   dataKey="studentsOnLeave" 
                   fill="#3b82f6" 
                   name="Students on Leave"
+                  radius={[2, 2, 0, 0]}
+                />
+                <Bar 
+                  dataKey="studentsOnOD" 
+                  fill="#10b981" 
+                  name="Students on OD"
                   radius={[2, 2, 0, 0]}
                 />
                 {/* Add vertical lines and text for Sundays */}

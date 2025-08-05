@@ -15,7 +15,7 @@ import { CalendarDays, X, Users, Clock, TrendingUp } from 'lucide-react';
 import { DateRangePicker } from '@/components/ui/date-range-picker';
 
 const AdminReportPage = () => {
-  const { students, leaveRequests, getTutors } = useAppContext();
+  const { students, leaveRequests, odRequests, getTutors } = useAppContext();
   const [selectedBatch, setSelectedBatch] = useState<string>('all');
   const [selectedSemester, setSelectedSemester] = useState<string>('all');
   const [debugInfo, setDebugInfo] = useState<any>({});
@@ -106,6 +106,7 @@ const AdminReportPage = () => {
     try {
       addDebugInfo('students', students);
       addDebugInfo('leaveRequests', leaveRequests);
+      addDebugInfo('odRequests', odRequests);
       addDebugInfo('tutors', tutors);
       addDebugInfo('availableBatches', getAvailableBatches());
     } catch (error) {
@@ -221,7 +222,9 @@ const AdminReportPage = () => {
 
       const chartData = days.map(day => {
         const studentsOnLeave = new Set<string>();
+        const studentsOnOD = new Set<string>();
         
+        // Process leave requests
         leaveRequests.forEach(req => {
           if (req.status === 'Approved' && batchStudentIds.has(req.student_id)) {
             const leaveStart = parseISO(req.start_date);
@@ -242,9 +245,31 @@ const AdminReportPage = () => {
           }
         });
         
+        // Process OD requests
+        odRequests.forEach(req => {
+          if (req.status === 'Approved' && batchStudentIds.has(req.student_id)) {
+            const odStart = parseISO(req.start_date);
+            const odEnd = parseISO(req.end_date);
+            
+            const dayStart = new Date(day);
+            dayStart.setHours(0, 0, 0, 0);
+            
+            const odStartNormalized = new Date(odStart);
+            odStartNormalized.setHours(0, 0, 0, 0);
+            
+            const odEndNormalized = new Date(odEnd);
+            odEndNormalized.setHours(23, 59, 59, 999);
+            
+            if (dayStart >= odStartNormalized && dayStart <= odEndNormalized) {
+              studentsOnOD.add(req.student_id);
+            }
+          }
+        });
+        
         return { 
           date: format(day, 'MMM d'), 
-          studentsOnLeave: studentsOnLeave.size 
+          studentsOnLeave: studentsOnLeave.size,
+          studentsOnOD: studentsOnOD.size
         };
       });
       
@@ -255,7 +280,7 @@ const AdminReportPage = () => {
       console.error("Error calculating daily chart data:", error);
       return [];
     }
-  }, [selectedBatch, selectedSemester, startDate, endDate, semesterDateRanges, leaveRequests, students]);
+  }, [selectedBatch, selectedSemester, startDate, endDate, semesterDateRanges, leaveRequests, odRequests, students]);
 
 
 
@@ -319,8 +344,8 @@ const AdminReportPage = () => {
           <DailyLeaveChart 
             data={dailyChartData} 
             title={startDate && endDate 
-              ? `Daily Leave Report for Batch ${selectedBatch}-${parseInt(selectedBatch) + 4} (${format(new Date(startDate), 'MMM d, yyyy')} - ${format(new Date(endDate), 'MMM d, yyyy')})`
-              : `Daily Leave Report for Batch ${selectedBatch}-${parseInt(selectedBatch) + 4}, Semester ${selectedSemester}`
+              ? `Daily Leave & OD Report for Batch ${selectedBatch}-${parseInt(selectedBatch) + 4} (${format(new Date(startDate), 'MMM d, yyyy')} - ${format(new Date(endDate), 'MMM d, yyyy')})`
+              : `Daily Leave & OD Report for Batch ${selectedBatch}-${parseInt(selectedBatch) + 4}, Semester ${selectedSemester}`
             }
           />
         ) : (

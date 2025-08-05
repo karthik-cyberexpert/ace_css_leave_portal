@@ -3,23 +3,27 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/com
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { format, getMonth } from 'date-fns';
 
-interface LeaveRequestChartData {
+interface RequestChartData {
   start_date: string;
   total_days: number;
   status: string;
+  request_type?: 'leave' | 'od'; // Add type to distinguish between leave and OD
 }
 
 interface MonthlyLeaveChartProps {
-  data: LeaveRequestChartData[];
+  leaveData: RequestChartData[];
+  odData: RequestChartData[];
 }
 
-const MonthlyLeaveChart = ({ data }: MonthlyLeaveChartProps) => {
+const MonthlyLeaveChart = ({ leaveData, odData }: MonthlyLeaveChartProps) => {
   const monthlyData = Array.from({ length: 12 }, (_, i) => ({
     name: format(new Date(0, i), 'MMM'),
     leaves: 0,
+    od: 0,
   }));
 
-  data.forEach(request => {
+  // Process leave requests
+  leaveData.forEach(request => {
     if (request.status === 'Approved') {
       const monthIndex = getMonth(new Date(request.start_date));
       if (monthlyData[monthIndex]) {
@@ -28,11 +32,21 @@ const MonthlyLeaveChart = ({ data }: MonthlyLeaveChartProps) => {
     }
   });
 
+  // Process OD requests
+  odData.forEach(request => {
+    if (request.status === 'Approved') {
+      const monthIndex = getMonth(new Date(request.start_date));
+      if (monthlyData[monthIndex]) {
+        monthlyData[monthIndex].od += request.total_days;
+      }
+    }
+  });
+
   return (
     <Card className="col-span-1 lg:col-span-3 transition-all duration-300 hover:shadow-xl hover:-translate-y-1">
       <CardHeader>
-        <CardTitle>Monthly Leave Report</CardTitle>
-        <CardDescription>Total approved leave days per month for the current year.</CardDescription>
+        <CardTitle>Monthly Leave & OD Report</CardTitle>
+        <CardDescription>Total approved leave days and OD days per month for the current year.</CardDescription>
       </CardHeader>
       <CardContent className="h-[350px]">
         <ResponsiveContainer width="100%" height="100%">
@@ -45,7 +59,8 @@ const MonthlyLeaveChart = ({ data }: MonthlyLeaveChartProps) => {
             <YAxis />
             <Tooltip />
             <Legend />
-            <Bar dataKey="leaves" fill="#8884d8" name="Total Leave Days" />
+            <Bar dataKey="leaves" fill="#3b82f6" name="Leave Days" />
+            <Bar dataKey="od" fill="#10b981" name="OD Days" />
           </BarChart>
         </ResponsiveContainer>
       </CardContent>

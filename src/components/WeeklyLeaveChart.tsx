@@ -7,7 +7,7 @@ import { ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
 import { format } from 'date-fns';
 
 interface WeeklyLeaveChartProps {
-  data: { week: string; students: number }[];
+  data: { week: string; students: number; studentsOnOD: number }[];
   currentMonth?: Date;
   selectedBatch?: string;
   batchOptions?: string[];
@@ -67,7 +67,7 @@ const WeeklyLeaveChart = ({
           <div>
             <CardTitle className="flex items-center gap-2">
               <Calendar className="h-5 w-5" />
-              Weekly Student Leave Statistics
+              Weekly Student Leave & OD Statistics
             </CardTitle>
             <CardDescription>
               Weekly breakdown for {format(currentMonth, 'MMMM yyyy')} - 
@@ -145,7 +145,10 @@ const WeeklyLeaveChart = ({
                 />
               ))
             ) : (
-              <Bar dataKey="students" fill="#8884d8" name="Students on Leave" />
+              <>
+                <Bar dataKey="students" fill="#3b82f6" name="Students on Leave" />
+                <Bar dataKey="studentsOnOD" fill="#10b981" name="Students on OD" />
+              </>
             )}
           </BarChart>
         </ResponsiveContainer>

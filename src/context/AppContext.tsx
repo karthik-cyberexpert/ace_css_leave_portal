@@ -190,7 +190,8 @@ interface IAppContext {
   profile: Profile | null;
   role: 'Admin' | 'Tutor' | 'Student' | null;
   loading: boolean;
-  students: Student[];
+  students: Student[]; // All students (including inactive) - for reports
+  activeStudents: Student[]; // Only active students - for general use
   staff: Staff[];
   leaveRequests: LeaveRequest[];
   odRequests: ODRequest[];
@@ -257,6 +258,11 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     if (profile.is_tutor) return 'Tutor';
     return 'Student';
   }, [profile]);
+
+  // Compute active students (for general use - excludes inactive students)
+  const activeStudents = useMemo(() => {
+    return students.filter(student => student.is_active);
+  }, [students]);
 
   // Automatic data polling function
   const pollData = useCallback(async (userProfile: Profile, silent: boolean = true) => {
@@ -1457,7 +1463,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   const value = {
     session, user, profile, role, loading: loadingInitial,
-    students, staff, leaveRequests, odRequests, profileChangeRequests, currentUser, currentTutor,
+    students, activeStudents, staff, leaveRequests, odRequests, profileChangeRequests, currentUser, currentTutor,
     handleLogin, handleLogout,
     addStudent, updateStudent, deleteStudent, bulkAddStudents,
     addStaff, updateStaff, deleteStaff, assignBatchToTutor,
