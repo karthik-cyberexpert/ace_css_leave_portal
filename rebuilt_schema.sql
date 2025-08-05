@@ -41,6 +41,8 @@ CREATE TABLE `students` (
   `id` VARCHAR(36) NOT NULL PRIMARY KEY,
   `name` VARCHAR(255) NOT NULL,
   `register_number` VARCHAR(50) NOT NULL UNIQUE,
+  `email` VARCHAR(255) NOT NULL UNIQUE,
+  `mobile` VARCHAR(20) NOT NULL,
   `tutor_id` VARCHAR(36),
   `batch` VARCHAR(4) NOT NULL,
   `semester` TINYINT(1) NOT NULL DEFAULT 1,
