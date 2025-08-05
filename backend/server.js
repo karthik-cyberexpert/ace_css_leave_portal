@@ -894,6 +894,12 @@ app.post('/batches', authenticateToken, async (req, res) => {
     const endYear = startYear + 4;
     const name = `${startYear}-${endYear}`;
 
+    // Check if batch already exists
+    const [existingBatch] = await query('SELECT id FROM batches WHERE id = ?', [id]);
+    if (existingBatch) {
+      return res.status(409).json({ error: 'A batch with this start year already exists' });
+    }
+
     await query(
       'INSERT INTO batches (id, start_year, end_year, name, is_active) VALUES (?, ?, ?, ?, ?)',
       [id, startYear, endYear, name, true]
@@ -902,7 +908,11 @@ app.post('/batches', authenticateToken, async (req, res) => {
     res.status(201).json({ message: 'Batch created successfully', id });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Failed to create batch', details: error.message });
+    if (error.code === 'ER_DUP_ENTRY') {
+      res.status(409).json({ error: 'A batch with this start year already exists' });
+    } else {
+      res.status(500).json({ error: 'Failed to create batch', details: error.message });
+    }
   }
 });
 

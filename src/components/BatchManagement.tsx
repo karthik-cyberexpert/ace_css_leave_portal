@@ -89,13 +89,13 @@ export const BatchManagement = () => {
   // Get batches that are eligible for semester date management (current semester only)
   const batchData = useMemo(() => {
     return batches.filter(b => {
-      if (!b.isActive) return false;
+      if (!b.is_active) return false;
       
-      const currentSemester = getCurrentSemesterForBatch(b.startYear);
+      const currentSemester = getCurrentSemesterForBatch(b.start_year);
       // Only show batches that have a valid current semester (1-8)
       return currentSemester >= 1 && currentSemester <= 8;
     }).map(batch => {
-      const currentSemester = getCurrentSemesterForBatch(batch.startYear);
+      const currentSemester = getCurrentSemesterForBatch(batch.start_year);
       return {
         batch: batch.id,
         semesters: [currentSemester], // Only allow managing the current semester
@@ -124,7 +124,7 @@ export const BatchManagement = () => {
     const batch = batches.find(b => b.id === batchId);
     if (!batch) return { minDate: new Date(), maxDate: new Date() };
 
-    const batchStartYear = batch.startYear;
+    const batchStartYear = batch.start_year;
     
     // Calculate which academic year this semester falls in
     const semesterIndex = Math.floor((semester - 1) / 2);
@@ -245,7 +245,7 @@ export const BatchManagement = () => {
     }
     
     // Check if batch already exists
-    if (batches.some(b => b.startYear === year)) {
+    if (batches.some(b => b.start_year === year)) {
       showError('A batch with this start year already exists.');
       return;
     }
@@ -273,8 +273,8 @@ export const BatchManagement = () => {
       const currentBatch = batches.find(b => b.id === editingBatch.id);
       if (currentBatch) {
         // Toggle the active status
-        const newActiveStatus = !currentBatch.isActive;
-        await updateBatch(editingBatch.id, { isActive: newActiveStatus });
+        const newActiveStatus = !currentBatch.is_active;
+        await updateBatch(editingBatch.id, { is_active: newActiveStatus });
 
         // Sync student status
         await syncStudentStatusWithBatch(editingBatch.id, newActiveStatus);
@@ -357,8 +357,8 @@ export const BatchManagement = () => {
                   <div>
                     <Label>Current Status</Label>
                     <div className="mt-2">
-                      <Badge variant={batches.find(b => b.id === editingBatch.id)?.isActive ? "default" : "secondary"}>
-                        {batches.find(b => b.id === editingBatch.id)?.isActive ? 'Active' : 'Inactive'}
+                      <Badge variant={batches.find(b => b.id === editingBatch.id)?.is_active ? "default" : "secondary"}>
+                        {batches.find(b => b.id === editingBatch.id)?.is_active ? 'Active' : 'Inactive'}
                       </Badge>
                     </div>
                   </div>
@@ -369,7 +369,7 @@ export const BatchManagement = () => {
                   Cancel
                 </Button>
                 <Button onClick={handleUpdateBatch}>
-                  {editingBatch && batches.find(b => b.id === editingBatch.id)?.isActive ? 'Deactivate' : 'Activate'}
+                  {editingBatch && batches.find(b => b.id === editingBatch.id)?.is_active ? 'Deactivate' : 'Activate'}
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -394,12 +394,12 @@ export const BatchManagement = () => {
                     <TableCell>
                       <div>
                         <div className="font-medium">{batch.name}</div>
-                        <div className="text-sm text-gray-500">{batch.startYear} - {batch.endYear}</div>
+                        <div className="text-sm text-gray-500">{batch.start_year} - {batch.end_year}</div>
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge variant={batch.isActive ? "default" : "secondary"}>
-                        {batch.isActive ? 'Active' : 'Inactive'}
+                      <Badge variant={batch.is_active ? "default" : "secondary"}>
+                        {batch.is_active ? 'Active' : 'Inactive'}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">
@@ -454,7 +454,7 @@ export const BatchManagement = () => {
                   const batchObj = batches.find(b => b.id === batch);
                   const currentDate = new Date();
                   const currentMonth = currentDate.getMonth() + 1;
-                  const yearDiff = currentDate.getFullYear() - (batchObj?.startYear || 0);
+                  const yearDiff = currentDate.getFullYear() - (batchObj?.start_year || 0);
                   
                   // Create a description of the current semester period
                   const startDate = semesterDates.find(s => s.batch === batch && s.semester === currentSemester)?.startDate;

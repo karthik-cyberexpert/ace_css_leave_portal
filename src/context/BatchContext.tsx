@@ -13,10 +13,10 @@ export interface SemesterDates {
 
 export interface Batch {
   id: string;
-  startYear: number;
-  endYear: number;
+  start_year: number;
+  end_year: number;
   name: string;
-  isActive: boolean;
+  is_active: boolean;
 }
 
 interface BatchContextType {
@@ -28,9 +28,9 @@ interface BatchContextType {
   getCurrentActiveSemester: (batch: string) => number;
   isDateWithinSemester: (date: Date, batch: string, semester: number) => boolean;
   saveSemesterDates: () => Promise<void>;
-  createBatch: (startYear: number) => void;
+  createBatch: (startYear: number) => Promise<void>;
   updateBatch: (batchId: string, updates: Partial<Batch>) => Promise<void>;
-  deleteBatch: (batchId: string) => void;
+  deleteBatch: (batchId: string) => Promise<void>;
   getAvailableBatches: () => Batch[];
 }
 
@@ -65,29 +65,122 @@ export const BatchProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const [batches, setBatches] = useState<Batch[]>([]);
   const { syncStudentStatusWithBatch } = useAppContext();
 
-  // Load batches from localStorage on mount
+  // Load batches from database on mount, with migration support
   useEffect(() => {
-    loadBatchesFromStorage();
+    const initializeBatches = async () => {
+      // Check if migration has been completed
+      const migrationComplete = localStorage.getItem('batches_migrated');
+      
+      if (!migrationComplete) {
+        // Migrate localStorage data to database first
+        await migrateLocalStorageToDatabase();
+      }
+      
+      // Load from database
+      await loadBatchesFromDatabase();
+    };
+    
+    initializeBatches();
     loadSemesterDatesFromStorage();
   }, []);
+
+  const migrateLocalStorageToDatabase = async () => {
+    try {
+      const storedBatches = localStorage.getItem('batches');
+      if (storedBatches) {
+        console.log('Found localStorage batches, migrating to database...');
+        const localBatches = JSON.parse(storedBatches);
+        
+        // Convert camelCase to snake_case for database
+        const dbBatches = localBatches.map((batch: any) => ({
+          id: batch.id,
+          start_year: batch.startYear || batch.start_year,
+          end_year: batch.endYear || batch.end_year,
+          name: batch.name,
+          is_active: batch.isActive !== undefined ? batch.isActive : batch.is_active
+        }));
+        
+        // Send each batch to database
+        let migratedCount = 0;
+        for (const batch of dbBatches) {
+          try {
+            await apiClient.post('/batches', {
+              startYear: batch.start_year
+            });
+            console.log(`Migrated batch ${batch.name} to database`);
+            migratedCount++;
+          } catch (error: any) {
+            // Check for duplicate/conflict errors
+            const errorMsg = error.response?.data?.error || error.message || '';
+            if (errorMsg.includes('already exists') || errorMsg.includes('Duplicate entry') || error.response?.status === 409) {
+              console.log(`Batch ${batch.name} already exists in database, skipping`);
+              migratedCount++; // Count as successful since it exists
+            } else {
+              console.warn(`Failed to migrate batch ${batch.name}:`, errorMsg);
+            }
+          }
+        }
+        
+        // Mark migration as complete
+        localStorage.setItem('batches_migrated', 'true');
+        console.log(`Migration completed! ${migratedCount}/${dbBatches.length} batches processed successfully.`);
+      } else {
+        // No localStorage batches found, mark as migrated
+        localStorage.setItem('batches_migrated', 'true');
+        console.log('No localStorage batches found to migrate.');
+      }
+    } catch (error) {
+      console.error('Error during migration:', error);
+      // Don't fail completely, but mark as attempted
+      localStorage.setItem('batches_migrated', 'error');
+    }
+  };
+
+  const loadBatchesFromDatabase = async (retryCount: number = 0) => {
+    try {
+      const response = await apiClient.get<Batch[]>('/batches');
+      setBatches(response.data);
+      console.log('Loaded batches from database:', response.data);
+    } catch (error: any) {
+      console.error('Failed to fetch batches from database:', error.message);
+      
+      // Retry once if it's a network error
+      if (retryCount < 1 && (error.code === 'NETWORK_ERROR' || error.code === 'ECONNREFUSED')) {
+        console.log('Retrying database connection...');
+        setTimeout(() => loadBatchesFromDatabase(retryCount + 1), 2000);
+        return;
+      }
+      
+      // Fallback to localStorage if database fails
+      console.log('Falling back to localStorage for batch data');
+      loadBatchesFromStorage();
+    }
+  };
 
   const loadBatchesFromStorage = () => {
     try {
       const storedBatches = localStorage.getItem('batches');
       if (storedBatches) {
         const parsedBatches = JSON.parse(storedBatches);
-        setBatches(parsedBatches);
+        // Convert to database format for consistency
+        const normalizedBatches = parsedBatches.map((batch: any) => ({
+          id: batch.id,
+          start_year: batch.startYear || batch.start_year,
+          end_year: batch.endYear || batch.end_year,
+          name: batch.name,
+          is_active: batch.isActive !== undefined ? batch.isActive : batch.is_active
+        }));
+        setBatches(normalizedBatches);
+        console.log('Loaded batches from localStorage (fallback):', normalizedBatches);
       } else {
         // Initialize with some default batches if none exist
         const defaultBatches = generateDefaultBatches();
         setBatches(defaultBatches);
-        saveBatchesToStorage(defaultBatches);
       }
     } catch (error) {
       console.error('Error loading batches from storage:', error);
       const defaultBatches = generateDefaultBatches();
       setBatches(defaultBatches);
-      saveBatchesToStorage(defaultBatches);
     }
   };
 
@@ -116,10 +209,10 @@ export const BatchProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     for (let year = 2020; year <= currentYear + 2; year++) {
       defaultBatches.push({
         id: year.toString(),
-        startYear: year,
-        endYear: year + 4,
+        start_year: year,
+        end_year: year + 4,
         name: `${year}-${year + 4}`,
-        isActive: year >= currentYear - 4 && year <= currentYear // Active for recent batches
+        is_active: year >= currentYear - 4 && year <= currentYear // Active for recent batches
       });
     }
     
@@ -134,31 +227,33 @@ export const BatchProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }
   };
 
-  const createBatch = (startYear: number): void => {
-    const newBatch: Batch = {
-      id: startYear.toString(),
-      startYear,
-      endYear: startYear + 4,
-      name: `${startYear}-${startYear + 4}`,
-      isActive: true
-    };
-    
-    const updatedBatches = [...batches, newBatch];
-    setBatches(updatedBatches);
-    saveBatchesToStorage(updatedBatches);
+  const createBatch = async (startYear: number): Promise<void> => {
+    try {
+      await apiClient.post('/batches', { startYear });
+      await loadBatchesFromDatabase(); // Reload from database
+    } catch (error) {
+      console.error('Failed to create batch:', error);
+      throw error;
+    }
   };
 
   const updateBatch = async (batchId: string, updates: Partial<Batch>): Promise<void> => {
     try {
-      const updatedBatches = batches.map(batch => 
-        batch.id === batchId ? { ...batch, ...updates } : batch
-      );
-      setBatches(updatedBatches);
-      saveBatchesToStorage(updatedBatches);
+      // Convert camelCase to snake_case for API
+      const dbUpdates: any = {};
+      if ('is_active' in updates) dbUpdates.is_active = updates.is_active;
+      if ('isActive' in updates) dbUpdates.is_active = updates.isActive;
+      if ('start_year' in updates) dbUpdates.start_year = updates.start_year;
+      if ('end_year' in updates) dbUpdates.end_year = updates.end_year;
+      if ('name' in updates) dbUpdates.name = updates.name;
       
-      // If updating isActive status, sync student statuses via backend
-      if ('isActive' in updates && syncStudentStatusWithBatch) {
-        await syncStudentStatusWithBatch(batchId, updates.isActive!);
+      await apiClient.put(`/batches/${batchId}`, dbUpdates);
+      await loadBatchesFromDatabase(); // Reload from database
+      
+      // If updating active status, sync student statuses via backend
+      const activeStatus = updates.is_active !== undefined ? updates.is_active : (updates as any).isActive;
+      if (activeStatus !== undefined && syncStudentStatusWithBatch) {
+        await syncStudentStatusWithBatch(batchId, activeStatus);
       }
     } catch (error) {
       console.error('Failed to update batch:', error);
@@ -166,14 +261,18 @@ export const BatchProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }
   };
 
-  const deleteBatch = (batchId: string): void => {
-    const updatedBatches = batches.filter(batch => batch.id !== batchId);
-    setBatches(updatedBatches);
-    saveBatchesToStorage(updatedBatches);
+  const deleteBatch = async (batchId: string): Promise<void> => {
+    try {
+      await apiClient.delete(`/batches/${batchId}`);
+      await loadBatchesFromDatabase(); // Reload from database
+    } catch (error) {
+      console.error('Failed to delete batch:', error);
+      throw error;
+    }
   };
 
   const getAvailableBatches = useCallback(() => {
-    return batches.filter(batch => batch.isActive);
+    return batches.filter(batch => batch.is_active);
   }, [batches]);
 
 
