@@ -42,31 +42,31 @@ export function DateRangePicker({
   }
 
   const isDateDisabled = (date: Date) => {
-    const july1 = new Date(date.getFullYear(), 6, 1); // July 1 of the year
-    const july29 = new Date(date.getFullYear(), 6, 29); // July 29 of the year
-
-    // For semester 3, special handling
-    if (minDate && minDate.getMonth() === 6 && minDate.getDate() === 1) { // July 1 minDate indicates semester 3
-      // If there's a previous semester end date and it's July 29, disable dates on or before July 29
-      if (prevSemesterEndDate && 
-          prevSemesterEndDate.getMonth() === 6 && 
-          prevSemesterEndDate.getDate() === 29) {
-        if (date <= july29) {
-          return true;
-        }
-      }
-      // Otherwise, allow selection from July 1 onward
-      if (date < july1) {
-        return true;
-      }
-    } else {
-      // Standard minDate check for other semesters
-      if (minDate && date < minDate) {
+    // Normalize dates to start of day for comparison
+    const currentDate = new Date(date);
+    currentDate.setHours(0, 0, 0, 0);
+    
+    // Check minDate constraint
+    if (minDate) {
+      const normalizedMinDate = new Date(minDate);
+      normalizedMinDate.setHours(0, 0, 0, 0);
+      
+      // Use the actual semester start date as minimum
+      if (currentDate < normalizedMinDate) {
         return true;
       }
     }
-
-    if (maxDate && date > maxDate) return true;
+    
+    // Check maxDate constraint
+    if (maxDate) {
+      const normalizedMaxDate = new Date(maxDate);
+      normalizedMaxDate.setHours(23, 59, 59, 999);
+      
+      if (currentDate > normalizedMaxDate) {
+        return true;
+      }
+    }
+    
     return false;
   }
 

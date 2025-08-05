@@ -1164,6 +1164,37 @@ app.post('/leave-requests', authenticateToken, async (req, res) => {
       [id, req.user.id, student.name, student.register_number, student.tutor_id, tutor.name, startDate, endDate, totalDays, subject, description]
     );
 
+    // Create notifications for tutor and admin
+    try {
+      // Notification for tutor
+      await createNotification(
+        student.tutor_id,
+        'New Leave Request',
+        `${student.name} has requested ${totalDays} day(s) for "${subject}".`,
+        'leave_request',
+        id,
+        'leave_request',
+        '/tutor-leave-approve'
+      );
+
+      // Notification for all admins
+      const admins = await query('SELECT id FROM users WHERE is_admin = TRUE');
+      for (const admin of admins) {
+        await createNotification(
+          admin.id,
+          'New Leave Request',
+          `${student.name} has submitted a leave request for "${subject}".`,
+          'leave_request',
+          id,
+          'leave_request',
+          '/admin-leave-requests'
+        );
+      }
+    } catch (notificationError) {
+      console.error('Error creating leave request notifications:', notificationError);
+      // Don't fail the request creation if notifications fail
+    }
+
     res.status(201).json({ message: 'Leave request created successfully', id });
   } catch (error) {
     console.error(error);
@@ -1294,6 +1325,37 @@ app.post('/od-requests', authenticateToken, async (req, res) => {
       [id, req.user.id, student.name, student.register_number, student.tutor_id, tutor.name, startDate, endDate, totalDays, purpose, destination, description]
     );
 
+    // Create notifications for tutor and admin
+    try {
+      // Notification for tutor
+      await createNotification(
+        student.tutor_id,
+        'New OD Request',
+        `${student.name} has requested ${totalDays} day(s) for "${purpose}".`,
+        'od_request',
+        id,
+        'od_request',
+        '/tutor-od-approve'
+      );
+
+      // Notification for all admins
+      const admins = await query('SELECT id FROM users WHERE is_admin = TRUE');
+      for (const admin of admins) {
+        await createNotification(
+          admin.id,
+          'New OD Request',
+          `${student.name} has submitted an OD request for "${purpose}".`,
+          'od_request',
+          id,
+          'od_request',
+          '/admin-od-requests'
+        );
+      }
+    } catch (notificationError) {
+      console.error('Error creating OD request notifications:', notificationError);
+      // Don't fail the request creation if notifications fail
+    }
+
     res.status(201).json({ message: 'OD request created successfully', id });
   } catch (error) {
     console.error('OD request creation error:', error);
@@ -1309,22 +1371,24 @@ app.put('/od-requests/:id/status', authenticateToken, async (req, res) => {
     const { id } = req.params;
     const { status, cancelReason } = req.body;
     
-    // Set upload deadline when approved (including from retried status)
+    // Set upload deadline and certificate status only after the OD has ended
     let updateQuery = 'UPDATE od_requests SET status = ?, cancel_reason = ?';
     let params = [status, cancelReason || null];
     
     if (status === 'Approved') {
-      // Get the OD request details to calculate deadline from end_date
+      // Get the OD request details
       const [odRequest] = await query('SELECT end_date FROM od_requests WHERE id = ?', [id]);
       if (!odRequest) {
         return res.status(404).json({ error: 'OD request not found' });
       }
-      
-      // Calculate upload deadline as 3 days from the END DATE of the OD request
-      const uploadDeadline = new Date(odRequest.end_date);
-      uploadDeadline.setDate(uploadDeadline.getDate() + 3);
-      updateQuery += ', certificate_status = ?, upload_deadline = ?';
-      params.push('Pending Upload', uploadDeadline);
+      const today = new Date().toISOString().split('T')[0];
+      // Set certificate_status only if current date is after end_date
+      if (new Date(today) > new Date(odRequest.end_date)) {
+        const uploadDeadline = new Date(odRequest.end_date);
+        uploadDeadline.setDate(uploadDeadline.getDate() + 3);
+        updateQuery += ', certificate_status = ?, upload_deadline = ?';
+        params.push('Pending Upload', uploadDeadline);
+      }
     }
     
     // Reset details for Retried requests
@@ -1609,6 +1673,15 @@ async function processODCertificateReminders() {
     // Get current date for comparisons
     const currentDate = new Date();
     const currentDateString = currentDate.toISOString().split('T')[0];
+    
+    // 0. First, update approved OD requests that have ended to 'Pending Upload' status
+    const endedODRequests = await query(
+      `UPDATE od_requests 
+       SET certificate_status = 'Pending Upload', upload_deadline = DATE_ADD(end_date, INTERVAL 3 DAY)
+       WHERE status = 'Approved' 
+       AND certificate_status IS NULL
+       AND end_date < CURDATE()`
+    );
     
     // 1. Find OD requests that need automatic rejection (end_date + 3 days has passed)
     const autoRejectCandidates = await query(
@@ -2155,6 +2228,147 @@ app.post('/notifications/profile-change', authenticateToken, async (req, res) =>
   } catch (error) {
     console.error('Error sending profile change notification:', error);
     res.status(500).json({ error: 'Failed to send notification' });
+  }
+});
+
+// ===============================================================================
+// NOTIFICATION SYSTEM - COMPLETELY REBUILT
+// ===============================================================================
+
+/**
+ * Create a single notification for a user
+ */
+async function createNotification(userId, title, message, type = 'system', referenceId = null, referenceType = null, actionUrl = null) {
+  try {
+    const notificationId = uuidv4();
+    
+    await query(
+      `INSERT INTO notifications (id, user_id, title, message, type, reference_id, reference_type, action_url, is_read, created_at) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, NOW())`,
+      [notificationId, userId, title, message, type, referenceId, referenceType, actionUrl]
+    );
+    
+    console.log(`✅ Notification created: ${notificationId} for user ${userId}`);
+    return notificationId;
+  } catch (error) {
+    console.error('❌ Error creating notification:', error);
+    throw error;
+  }
+}
+
+/**
+ * Create notifications for multiple users
+ */
+async function createNotificationForUsers(userIds, title, message, type = 'system', referenceId = null, referenceType = null, actionUrl = null) {
+  const notifications = [];
+  for (const userId of userIds) {
+    try {
+      const notificationId = await createNotification(userId, title, message, type, referenceId, referenceType, actionUrl);
+      notifications.push({ id: notificationId, userId });
+    } catch (error) {
+      console.error(`❌ Failed to create notification for user ${userId}:`, error);
+    }
+  }
+  return notifications;
+}
+
+// Get notifications for the current user (max 5 unread, then others)
+app.get('/api/notifications', authenticateToken, async (req, res) => {
+  try {
+    // Get unread notifications first (max 5)
+    const unreadNotifications = await query(
+      `SELECT * FROM notifications 
+       WHERE user_id = ? AND is_read = FALSE 
+       ORDER BY created_at DESC 
+       LIMIT 5`,
+      [req.user.id]
+    );
+
+    // If we have less than 5 unread, fill with recent read notifications
+    let readNotifications = [];
+    if (unreadNotifications.length < 5) {
+      const remainingSlots = 5 - unreadNotifications.length;
+      readNotifications = await query(
+        `SELECT * FROM notifications 
+         WHERE user_id = ? AND is_read = TRUE 
+         ORDER BY read_at DESC 
+         LIMIT ?`,
+        [req.user.id, remainingSlots]
+      );
+    }
+
+    const allNotifications = [...unreadNotifications, ...readNotifications];
+    
+    res.json({
+      notifications: allNotifications,
+      unreadCount: unreadNotifications.length,
+      totalCount: allNotifications.length
+    });
+  } catch (error) {
+    console.error('Error fetching notifications:', error);
+    res.status(500).json({ error: 'Failed to fetch notifications' });
+  }
+});
+
+// Mark a specific notification as read
+app.put('/api/notifications/:id/read', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Verify the notification belongs to the current user
+    const [notification] = await query(
+      'SELECT * FROM notifications WHERE id = ? AND user_id = ?',
+      [id, req.user.id]
+    );
+    
+    if (!notification) {
+      return res.status(404).json({ error: 'Notification not found' });
+    }
+    
+    if (notification.is_read) {
+      return res.json({ message: 'Notification already marked as read' });
+    }
+    
+    // Mark as read
+    await query(
+      'UPDATE notifications SET is_read = TRUE, read_at = NOW() WHERE id = ?',
+      [id]
+    );
+    
+    res.json({ message: 'Notification marked as read' });
+  } catch (error) {
+    console.error('Error marking notification as read:', error);
+    res.status(500).json({ error: 'Failed to mark notification as read' });
+  }
+});
+
+// Mark all notifications as read
+app.put('/api/notifications/mark-all-read', authenticateToken, async (req, res) => {
+  try {
+    await query(
+      'UPDATE notifications SET is_read = TRUE, read_at = NOW() WHERE user_id = ? AND is_read = FALSE',
+      [req.user.id]
+    );
+    
+    res.json({ message: 'All notifications marked as read' });
+  } catch (error) {
+    console.error('Error marking all notifications as read:', error);
+    res.status(500).json({ error: 'Failed to mark all notifications as read' });
+  }
+});
+
+// Get unread notification count
+app.get('/api/notifications/unread-count', authenticateToken, async (req, res) => {
+  try {
+    const [result] = await query(
+      'SELECT COUNT(*) as count FROM notifications WHERE user_id = ? AND is_read = FALSE',
+      [req.user.id]
+    );
+    
+    res.json({ unreadCount: result.count });
+  } catch (error) {
+    console.error('Error fetching unread count:', error);
+    res.status(500).json({ error: 'Failed to fetch unread count' });
   }
 });
 

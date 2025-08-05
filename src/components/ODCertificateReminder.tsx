@@ -10,11 +10,18 @@ import { format, differenceInDays, parseISO } from 'date-fns';
 const ODCertificateReminder = () => {
   const { odRequests, currentUser } = useAppContext();
 
-  const pendingUploads = odRequests.filter(req =>
-    req.student_id === currentUser.id &&
-    req.status === 'Approved' &&
-    req.certificate_status === 'Pending Upload'
-  );
+  const pendingUploads = odRequests.filter(req => {
+    // Only show reminders if OD has ended and certificate upload is pending
+    const odEndDate = new Date(req.end_date);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Reset time to compare dates only
+    odEndDate.setHours(0, 0, 0, 0); // Reset time to compare dates only
+    
+    return req.student_id === currentUser.id &&
+           req.status === 'Approved' &&
+           req.certificate_status === 'Pending Upload' &&
+           today > odEndDate; // Only show reminder after OD has ended
+  });
 
   if (pendingUploads.length === 0) {
     return null;
