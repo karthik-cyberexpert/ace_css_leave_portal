@@ -75,7 +75,7 @@ const StaffProfilePage = () => {
               value={displayMobile} 
               fieldType="mobile"
               userType={role as 'Admin' | 'Tutor'}
-              isEditable={displayMobile !== 'N/A'}
+              isEditable={true}
             />
             <div className="flex flex-col space-y-1">
               <span className="font-semibold text-muted-foreground">Username</span>
@@ -84,8 +84,8 @@ const StaffProfilePage = () => {
             <div className="flex flex-col space-y-1">
               <span className="font-semibold text-muted-foreground">Roles</span>
               <div className="flex gap-2 pt-1">
-                {profile.is_admin && <Badge variant="default">Admin</Badge>}
-                {profile.is_tutor && <Badge variant="secondary">Tutor</Badge>}
+                {Boolean(profile.is_admin) && <Badge variant="default">Admin</Badge>}
+                {Boolean(profile.is_tutor) && <Badge variant="secondary">Tutor</Badge>}
               </div>
             </div>
             {role === 'Tutor' && (

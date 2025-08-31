@@ -50,17 +50,29 @@ export const useBatchContext = () => {
 export const BatchProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [semesterDates, setSemesterDates] = useState<SemesterDates[]>([]);
   const [batches, setBatches] = useState<Batch[]>([]);
-  const { syncStudentStatusWithBatch } = useAppContext();
+  const { syncStudentStatusWithBatch, session, profile } = useAppContext();
 
   // Load batches from database on mount, with migration support
   useEffect(() => {
     const initializeBatches = async () => {
-      // Check if migration has been completed
-      const migrationComplete = localStorage.getItem('batches_migrated');
+      // Only run if user is authenticated
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
+        console.log('🔐 No auth token found, skipping batch initialization');
+        return;
+      }
+
+      console.log('🚀 Initializing batches with token:', token.substring(0, 20) + '...');
+
+      // Check if migration has been completed for this session
+      const migrationComplete = sessionStorage.getItem('batches_migrated_session');
       
       if (!migrationComplete) {
+        console.log('🔄 Running batch migration for this session...');
         // Migrate localStorage data to database first
         await migrateLocalStorageToDatabase();
+        // Mark migration complete for this session only
+        sessionStorage.setItem('batches_migrated_session', 'true');
       }
       
       // Load from database
@@ -70,6 +82,28 @@ export const BatchProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     initializeBatches();
     loadSemesterDatesFromStorage();
   }, []);
+  
+  // Re-initialize when authentication state changes
+  useEffect(() => {
+    const handleStorageChange = () => {
+      const token = localStorage.getItem('auth_token');
+      if (token && batches.length === 0) {
+        console.log('🔄 Auth token detected, re-initializing batches...');
+        loadBatchesFromDatabase();
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, [batches.length]);
+  
+  // Load batches when AppContext session is established
+  useEffect(() => {
+    if (session && profile && batches.length === 0) {
+      console.log('📡 Session established, loading batches...', { hasSession: !!session, hasProfile: !!profile });
+      loadBatchesFromDatabase();
+    }
+  }, [session, profile, batches.length]);
 
   const migrateLocalStorageToDatabase = async () => {
     try {
@@ -125,22 +159,76 @@ export const BatchProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   const loadBatchesFromDatabase = async (retryCount: number = 0) => {
     try {
+      console.log('Attempting to load batches from database...');
       const response = await apiClient.get<Batch[]>('/batches');
-      setBatches(response.data);
-      console.log('Loaded batches from database:', response.data);
-    } catch (error: any) {
-      console.error('Failed to fetch batches from database:', error.message);
+      console.log('Raw API response:', response);
       
-      // Retry once if it's a network error
-      if (retryCount < 1 && (error.code === 'NETWORK_ERROR' || error.code === 'ECONNREFUSED')) {
-        console.log('Retrying database connection...');
-        setTimeout(() => loadBatchesFromDatabase(retryCount + 1), 2000);
-        return;
+      if (response.data && Array.isArray(response.data)) {
+        setBatches(response.data);
+        console.log('✅ Successfully loaded', response.data.length, 'batches from database:', response.data);
+      } else {
+        console.warn('⚠️ API returned unexpected data format:', response.data);
+        setBatches([]);
+      }
+    } catch (error: any) {
+      console.error('❌ Failed to fetch batches from database:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+        url: error.config?.url,
+        method: error.config?.method
+      });
+      
+      // Check if it's an authentication error
+      if (error.response?.status === 401) {
+        console.error('Authentication failed - token may be invalid or expired');
+        const token = localStorage.getItem('auth_token');
+        console.log('Current token exists:', !!token);
       }
       
-      // Fallback to localStorage if database fails
-      console.log('Falling back to localStorage for batch data');
-      loadBatchesFromStorage();
+      // Check if it's a server error
+      if (error.response?.status === 500) {
+        console.error('Server error - database may be down or table may not exist');
+      }
+      
+      // Check if it's a network error
+      if (!error.response) {
+        console.error('Network error - backend server may be down');
+        
+        // Retry once if it's a network error
+        if (retryCount < 1) {
+          console.log('🔄 Retrying database connection in 2 seconds...');
+          setTimeout(() => loadBatchesFromDatabase(retryCount + 1), 2000);
+          return;
+        }
+      }
+      
+      // On error, try to fall back to localStorage if available
+      console.log('💾 Attempting to fall back to localStorage...');
+      try {
+        const storedBatches = localStorage.getItem('batches');
+        if (storedBatches) {
+          const parsedBatches = JSON.parse(storedBatches);
+          const normalizedBatches = parsedBatches.map((batch: any) => ({
+            id: batch.id,
+            start_year: batch.startYear || batch.start_year,
+            end_year: batch.endYear || batch.end_year,
+            name: batch.name,
+            is_active: batch.isActive !== undefined ? batch.isActive : batch.is_active
+          }));
+          setBatches(normalizedBatches);
+          console.log('✅ Loaded', normalizedBatches.length, 'batches from localStorage fallback');
+          return;
+        }
+      } catch (storageError) {
+        console.error('❌ Failed to load from localStorage:', storageError);
+      }
+      
+      // Generate some default batches if all else fails
+      console.log('📝 Generating default batches as last resort...');
+      const defaultBatches = generateDefaultBatches();
+      setBatches(defaultBatches);
+      console.log('✅ Generated', defaultBatches.length, 'default batches');
     }
   };
 
@@ -160,14 +248,14 @@ export const BatchProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         setBatches(normalizedBatches);
         console.log('Loaded batches from localStorage (fallback):', normalizedBatches);
       } else {
-        // Initialize with some default batches if none exist
-        const defaultBatches = generateDefaultBatches();
-        setBatches(defaultBatches);
+        // No default generation - start with empty array
+        setBatches([]);
+        console.log('No batches in localStorage, starting with empty list');
       }
     } catch (error) {
       console.error('Error loading batches from storage:', error);
-      const defaultBatches = generateDefaultBatches();
-      setBatches(defaultBatches);
+      // No default generation on error - start with empty array
+      setBatches([]);
     }
   };
 
@@ -220,10 +308,38 @@ export const BatchProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   const createBatch = async (startYear: number): Promise<void> => {
     try {
+      console.log(`Creating batch for year ${startYear}...`);
+      
+      // Check authentication first
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
+        throw new Error('Authentication required. Please log in again.');
+      }
+      
+      // Double-check if batch exists before creating
+      const existingBatch = batches.find(b => b.start_year === startYear);
+      if (existingBatch) {
+        throw new Error(`Batch ${startYear}-${startYear + 4} already exists`);
+      }
+      
       await apiClient.post('/batches', { startYear });
+      console.log(`✅ Batch ${startYear}-${startYear + 4} created successfully`);
+      
       await loadBatchesFromDatabase(); // Reload from database
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to create batch:', error);
+      
+      // Enhance error message for better user experience
+      if (error.response?.status === 409) {
+        const enhancedError = new Error(`Batch ${startYear}-${startYear + 4} already exists in the database`);
+        enhancedError.name = 'ConflictError';
+        throw enhancedError;
+      } else if (error.response?.status === 401) {
+        throw new Error('Authentication expired. Please log in again.');
+      } else if (error.response?.data?.error) {
+        throw new Error(error.response.data.error);
+      }
+      
       throw error;
     }
   };
@@ -274,10 +390,36 @@ export const BatchProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   const deleteBatch = async (batchId: string): Promise<void> => {
     try {
+      console.log(`Attempting to delete batch ${batchId}...`);
+      
+      // Check authentication first
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
+        throw new Error('Authentication required. Please log in again.');
+      }
+      
       await apiClient.delete(`/batches/${batchId}`);
+      console.log(`✅ Batch ${batchId} deleted successfully`);
+      
       await loadBatchesFromDatabase(); // Reload from database
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to delete batch:', error);
+      
+      // Enhanced error handling for delete operations
+      if (error.response?.status === 400) {
+        // Handle constraint violations (students, requests, etc.)
+        const errorMsg = error.response?.data?.details || error.response?.data?.error || 'Cannot delete batch due to existing dependencies';
+        throw new Error(errorMsg);
+      } else if (error.response?.status === 401) {
+        throw new Error('Authentication expired. Please log in again.');
+      } else if (error.response?.status === 404) {
+        throw new Error('Batch not found or already deleted.');
+      } else if (error.response?.status === 403) {
+        throw new Error('You do not have permission to delete batches.');
+      } else if (error.response?.data?.error) {
+        throw new Error(error.response.data.error);
+      }
+      
       throw error;
     }
   };

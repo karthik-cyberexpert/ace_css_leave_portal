@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { showSuccess } from '@/utils/toast';
 import { cn } from '@/lib/utils';
 import { useAppContext, LeaveRequest, RequestStatus } from '@/context/AppContext';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, differenceInDays } from 'date-fns';
 
 const AdminLeaveApprovePage = () => {
   const { leaveRequests, updateLeaveRequestStatus, approveRejectLeaveCancellation, students } = useAppContext();
@@ -27,6 +27,35 @@ const AdminLeaveApprovePage = () => {
   const getStudentInfo = (studentId: string) => {
     const student = students.find(s => s.id === studentId);
     return student ? { batch: student.batch, semester: student.semester } : { batch: 'N/A', semester: 'N/A' };
+  };
+
+  const getDurationTypeLabel = (durationType: string, totalDays: number | string) => {
+    // Convert totalDays to number for comparison
+    const numericTotalDays = parseFloat(String(totalDays));
+    
+    // If total_days is 0.5, it's definitely a half-day regardless of durationType
+    if (numericTotalDays === 0.5) {
+      switch (durationType) {
+        case 'half_day_forenoon':
+          return 'Half Day (Morning)';
+        case 'half_day_afternoon':
+          return 'Half Day (Afternoon)';
+        default:
+          return 'Half Day';
+      }
+    }
+    
+    // For other values, use the duration type or default to Full Day
+    switch (durationType) {
+      case 'full_day':
+        return 'Full Day';
+      case 'half_day_forenoon':
+        return 'Half Day (Morning)';
+      case 'half_day_afternoon':
+        return 'Half Day (Afternoon)';
+      default:
+        return 'Full Day';
+    }
   };
 
   const getStatusBadge = (status: RequestStatus) => {
@@ -60,12 +89,32 @@ const AdminLeaveApprovePage = () => {
                   <TableHead>Start Date</TableHead>
                   <TableHead>End Date</TableHead>
                   <TableHead className="text-right">Days</TableHead>
+                  <TableHead className="text-center">Duration Type</TableHead>
                   <TableHead className="text-center">Status</TableHead>
                   <TableHead className="text-center">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {leaveRequests.filter(request => request.status === 'Forwarded').map((request) => {
+                {leaveRequests.filter(request => {
+                  // Show Approved requests
+                  if (request.status === 'Approved') return true;
+                  // Show Forwarded requests
+                  if (request.status === 'Forwarded') return true;
+                  // Show Cancelled requests for record keeping
+                  if (request.status === 'Cancelled') return true;
+                  // Show Rejected requests for record keeping
+                  if (request.status === 'Rejected') return true;
+                  // Show Cancellation Pending requests
+                  if (request.status === 'Cancellation Pending') return true;
+                  // Show Retried requests
+                  if (request.status === 'Retried') return true;
+                  // For Pending requests, only show if older than 2 days
+                  if (request.status === 'Pending') {
+                    const daysSinceCreated = differenceInDays(new Date(), parseISO(request.created_at));
+                    return daysSinceCreated >= 2;
+                  }
+                  return false;
+                }).map((request) => {
                   const studentInfo = getStudentInfo(request.student_id);
                   return (
                     <TableRow key={request.id} className="transition-colors hover:bg-muted/50">
@@ -77,7 +126,10 @@ const AdminLeaveApprovePage = () => {
                       <TableCell className="text-center">{studentInfo.semester}</TableCell>
                       <TableCell>{format(parseISO(request.start_date), 'MMMM d yyyy')}</TableCell>
                       <TableCell>{format(parseISO(request.end_date), 'MMMM d yyyy')}</TableCell>
-                      <TableCell className="text-right">{request.total_days}</TableCell>
+                      <TableCell className="text-right">{typeof request.total_days === 'number' ? request.total_days.toFixed(1) : request.total_days}</TableCell>
+                    <TableCell className="text-center text-sm">
+                      {getDurationTypeLabel((request as any).duration_type || 'full_day', request.total_days)}
+                    </TableCell>
                     <TableCell className="text-center">
                       {getStatusBadge(request.status)}
                     </TableCell>
@@ -88,10 +140,12 @@ const AdminLeaveApprovePage = () => {
                           size="sm" 
                           onClick={() => handleRequestAction(request.id, 'Rejected')}
                         >
-                          Reject
+                          Revoke
                         </Button>
                       ) : (request.status === 'Pending' || request.status === 'Forwarded' || request.status === 'Retried' || request.status === 'Cancellation Pending') ? (
                         <Button variant="outline" size="sm" onClick={() => setSelectedRequest(request)}>Review</Button>
+                      ) : (request.status === 'Rejected' || request.status === 'Cancelled') ? (
+                        <span className="text-xs text-muted-foreground">Completed</span>
                       ) : (
                         <span className="text-xs text-muted-foreground">No actions</span>
                       )}

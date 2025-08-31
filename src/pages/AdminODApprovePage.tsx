@@ -9,7 +9,7 @@ import { showSuccess } from '@/utils/toast';
 import { useAppContext, ODRequest, RequestStatus, CertificateStatus } from '@/context/AppContext';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, differenceInDays } from 'date-fns';
 import { Eye } from 'lucide-react';
 
 const AdminODApprovePage = () => {
@@ -58,6 +58,35 @@ const AdminODApprovePage = () => {
     return <span className={cn("px-3 py-1 rounded-full text-xs font-semibold", colorClasses[status as keyof typeof colorClasses] || 'bg-gray-100 text-gray-800')}>{statusText}</span>;
   };
 
+  const getDurationTypeLabel = (durationType: string, totalDays: number | string) => {
+    // Convert totalDays to number for comparison
+    const numericTotalDays = parseFloat(String(totalDays));
+    
+    // If total_days is 0.5, it's definitely a half-day regardless of durationType
+    if (numericTotalDays === 0.5) {
+      switch (durationType) {
+        case 'half_day_forenoon':
+          return 'Half Day (Morning)';
+        case 'half_day_afternoon':
+          return 'Half Day (Afternoon)';
+        default:
+          return 'Half Day';
+      }
+    }
+    
+    // For other values, use the duration type or default to Full Day
+    switch (durationType) {
+      case 'full_day':
+        return 'Full Day';
+      case 'half_day_forenoon':
+        return 'Half Day (Morning)';
+      case 'half_day_afternoon':
+        return 'Half Day (Afternoon)';
+      default:
+        return 'Full Day';
+    }
+  };
+
   return (
     <AdminLayout>
       <Card>
@@ -70,6 +99,10 @@ const AdminODApprovePage = () => {
                   <TableHead>Student</TableHead>
                   <TableHead className="text-center">Batch</TableHead>
                   <TableHead className="text-center">Semester</TableHead>
+                  <TableHead>Start Date</TableHead>
+                  <TableHead>End Date</TableHead>
+                  <TableHead className="text-right">Total Days</TableHead>
+                  <TableHead className="text-center">Duration Type</TableHead>
                   <TableHead>Purpose</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Certificate</TableHead>
@@ -77,7 +110,26 @@ const AdminODApprovePage = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {odRequests.filter(request => request.status === 'Forwarded').map((request) => {
+                {odRequests.filter(request => {
+                  // Show Approved requests
+                  if (request.status === 'Approved') return true;
+                  // Show Forwarded requests
+                  if (request.status === 'Forwarded') return true;
+                  // Show Cancelled requests for record keeping
+                  if (request.status === 'Cancelled') return true;
+                  // Show Rejected requests for record keeping
+                  if (request.status === 'Rejected') return true;
+                  // Show Cancellation Pending requests
+                  if (request.status === 'Cancellation Pending') return true;
+                  // Show Retried requests
+                  if (request.status === 'Retried') return true;
+                  // For Pending requests, only show if older than 2 days
+                  if (request.status === 'Pending') {
+                    const daysSinceCreated = differenceInDays(new Date(), parseISO(request.created_at));
+                    return daysSinceCreated >= 2;
+                  }
+                  return false;
+                }).map((request) => {
                   const studentInfo = getStudentInfo(request.student_id);
                   return (
                     <TableRow key={request.id}>
@@ -87,6 +139,12 @@ const AdminODApprovePage = () => {
                       </TableCell>
                       <TableCell className="text-center">{studentInfo.batch}-{studentInfo.batch !== 'N/A' ? parseInt(studentInfo.batch) + 4 : 'N/A'}</TableCell>
                       <TableCell className="text-center">{studentInfo.semester}</TableCell>
+                      <TableCell>{format(parseISO(request.start_date), 'MMMM d yyyy')}</TableCell>
+                      <TableCell>{format(parseISO(request.end_date), 'MMMM d yyyy')}</TableCell>
+                      <TableCell className="text-right">{request.total_days}</TableCell>
+                      <TableCell className="text-center text-sm">
+                        {getDurationTypeLabel((request as any).duration_type || 'full_day', request.total_days)}
+                      </TableCell>
                       <TableCell>{request.purpose}</TableCell>
                     <TableCell>{getStatusBadge(request.status, request.certificate_status)}</TableCell>
                     <TableCell>
@@ -107,16 +165,21 @@ onClick={() => setViewCertificate(request.certificate_url!)}
                       </div>
                     </TableCell>
                     <TableCell className="text-center space-x-2">
-                      {request.status === 'Approved' && (
+                      {request.status === 'Approved' ? (
                         <Button 
                           variant="destructive" 
                           size="sm" 
                           onClick={() => handleRequestAction(request.id, 'Rejected')}
                         >
-                          Reject
+                          Revoke
                         </Button>
+                      ) : (request.status === 'Pending' || request.status === 'Forwarded' || request.status === 'Retried' || request.status === 'Cancellation Pending') ? (
+                        <Button variant="outline" size="sm" onClick={() => setSelectedRequest(request)}>Review</Button>
+                      ) : (request.status === 'Rejected' || request.status === 'Cancelled') ? (
+                        <span className="text-xs text-muted-foreground">Completed</span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">No actions</span>
                       )}
-                      {(request.status === 'Pending' || request.status === 'Forwarded' || request.status === 'Retried' || request.status === 'Cancellation Pending') && <Button variant="outline" size="sm" onClick={() => setSelectedRequest(request)}>Review</Button>}
                       {request.certificate_status === 'Pending Verification' && <Button variant="default" size="sm" onClick={() => setVerifyRequest(request)}>Verify Cert</Button>}
                     </TableCell>
                     </TableRow>

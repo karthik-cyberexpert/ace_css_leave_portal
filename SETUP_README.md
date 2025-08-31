@@ -104,7 +104,7 @@ mkdir -p backend/uploads/profile-photos backend/uploads/certificates
 npm run dev-full
 ```
 This starts both:
-- Backend server: http://localhost:3002
+- Backend server: http://localhost:3009
 - Frontend server: http://localhost:5173 (or 8080)
 
 ### Individual Servers
@@ -181,7 +181,7 @@ DB_USER=root
 DB_PASSWORD=your_password
 DB_NAME=cyber_security_leave_portal
 JWT_SECRET=your_jwt_secret_key
-PORT=3002
+PORT=3009
 ```
 
 ### Database Configuration

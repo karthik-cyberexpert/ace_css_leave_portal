@@ -53,7 +53,7 @@ const LatestLeaveDetails = () => {
                       {leave.status}
                     </span>
                   </TableCell>
-                  <TableCell className="text-right">{leave.total_days}</TableCell>
+                  <TableCell className="text-right">{typeof leave.total_days === 'number' ? leave.total_days.toFixed(1) : leave.total_days}</TableCell>
                 </TableRow>
               ))}
             </TableBody>

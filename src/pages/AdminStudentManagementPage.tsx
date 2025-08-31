@@ -12,6 +12,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useBatchContext } from '@/context/BatchContext';
 import { StudentFormDialog, StudentFormValues } from '@/components/StudentFormDialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { getBestProfilePicture } from '@/utils/gravatar';
 
 const AdminStudentManagementPage = () => {
 const { students, activeStudents, addStudent, updateStudent, deleteStudent, bulkAddStudents, staff } = useAppContext();
@@ -38,8 +39,8 @@ const { students, activeStudents, addStudent, updateStudent, deleteStudent, bulk
 
   const handleDeleteConfirm = () => {
     if (studentToDelete) {
-      deleteStudent(studentToDelete);
-      showSuccess('Student removed successfully!');
+      // Delete functionality disabled for security
+      showError("Delete functionality is disabled for security reasons.");
       setStudentToDelete(null);
     }
   };
@@ -146,7 +147,10 @@ const { students, activeStudents, addStudent, updateStudent, deleteStudent, bulk
                       <TableRow key={student.id}>
                         <TableCell>
                           <Avatar>
-                            <AvatarImage src={student.profile_photo} alt={student.name} />
+                            <AvatarImage 
+                              src={getBestProfilePicture(student.profile_photo, student.email) || undefined} 
+                              alt={student.name} 
+                            />
                             <AvatarFallback>{student.name.charAt(0)}</AvatarFallback>
                           </Avatar>
                         </TableCell>
@@ -155,7 +159,7 @@ const { students, activeStudents, addStudent, updateStudent, deleteStudent, bulk
                         <TableCell>{tutor ? tutor.name : 'N/A'}</TableCell>
                         <TableCell className="text-center">{student.batch}-{parseInt(student.batch) + 4}</TableCell>
                         <TableCell className="text-center">{student.semester}</TableCell>
-                        <TableCell className="text-center">{student.leave_taken}</TableCell>
+                        <TableCell className="text-center">{typeof student.leave_taken === 'number' ? student.leave_taken.toFixed(1) : student.leave_taken}</TableCell>
                         <TableCell className="text-center">
                           {student.is_active ? 'Active' : 'Inactive'}
                         </TableCell>
@@ -212,3 +216,4 @@ const { students, activeStudents, addStudent, updateStudent, deleteStudent, bulk
 };
 
 export default AdminStudentManagementPage;
+

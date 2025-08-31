@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+﻿import React, { useState, useMemo, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
@@ -130,7 +130,15 @@ const RequestStatusPage = () => {
   const canRequestCancellation = !isUserInactive && selectedRequestForReview && 
     (selectedRequestForReview.status === 'Pending' || 
      selectedRequestForReview.status === 'Approved' || 
-     selectedRequestForReview.status === 'Forwarded');
+     selectedRequestForReview.status === 'Forwarded') &&
+    (() => {
+      // Only allow cancellation if the last date hasn't passed
+      const requestEndDate = new Date(selectedRequestForReview.end_date);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      requestEndDate.setHours(0, 0, 0, 0);
+      return today <= requestEndDate;
+    })();
 
   const canUploadCertificate = !isUserInactive && selectedRequestForReview?.type === 'OD' && 
     selectedRequestForReview.status === 'Approved' && 
@@ -144,7 +152,15 @@ const RequestStatusPage = () => {
       return today > odEndDate;
     })();
 
-  const canRetryRequest = !isUserInactive && selectedRequestForReview?.status === 'Rejected';
+  const canRetryRequest = !isUserInactive && selectedRequestForReview?.status === 'Rejected' &&
+    (() => {
+      // Only allow retry if the last date hasn't passed
+      const requestEndDate = new Date(selectedRequestForReview.end_date);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      requestEndDate.setHours(0, 0, 0, 0);
+      return today <= requestEndDate;
+    })();
 
   return (
     <Layout>
@@ -172,6 +188,8 @@ const RequestStatusPage = () => {
                 <TableRow>
                   <TableHead>Type</TableHead>
                   <TableHead>Subject/Purpose</TableHead>
+                  <TableHead className="text-center">Start Date</TableHead>
+                  <TableHead className="text-center">End Date</TableHead>
                   <TableHead className="text-center">Status</TableHead>
                   <TableHead className="text-center">Actions</TableHead>
                 </TableRow>
@@ -181,6 +199,8 @@ const RequestStatusPage = () => {
                   <TableRow key={request.id}>
                     <TableCell className="font-medium">{request.type}</TableCell>
                     <TableCell>{request.subject}</TableCell>
+                    <TableCell className="text-center">{format(parseISO(request.start_date), 'MMM d, yyyy')}</TableCell>
+                    <TableCell className="text-center">{format(parseISO(request.end_date), 'MMM d, yyyy')}</TableCell>
                     <TableCell className="text-center">{getStatusBadge(request.status, request.type === 'OD' ? request.certificate_status : undefined)}</TableCell>
                     <TableCell className="text-center space-x-2">
                       <Button variant="outline" size="sm" onClick={() => setSelectedRequestForReview(request)}>Review</Button>
@@ -246,6 +266,48 @@ const RequestStatusPage = () => {
                     <p>{selectedRequestForReview.cancel_reason}</p>
                   </div>
                 )}
+
+                {/* Show info when actions are blocked by date validation */}
+                {selectedRequestForReview && (() => {
+                  const requestEndDate = new Date(selectedRequestForReview.end_date);
+                  const today = new Date();
+                  today.setHours(0, 0, 0, 0);
+                  requestEndDate.setHours(0, 0, 0, 0);
+                  const dateHasPassed = today > requestEndDate;
+                  
+                  // Show message when retry is blocked by date
+                  const wouldShowRetryButBlocked = selectedRequestForReview.status === 'Rejected' && dateHasPassed && !isUserInactive;
+                  // Show message when cancellation is blocked by date
+                  const wouldShowCancelButBlocked = 
+                    (selectedRequestForReview.status === 'Pending' || 
+                     selectedRequestForReview.status === 'Approved' || 
+                     selectedRequestForReview.status === 'Forwarded') && 
+                    selectedRequestForReview.status !== 'Cancellation Pending' && 
+                    dateHasPassed && !isUserInactive;
+                  
+                  if (wouldShowRetryButBlocked || wouldShowCancelButBlocked) {
+                    return (
+                      <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg">
+                        <p className="text-sm text-amber-800 dark:text-amber-300">
+                          <strong className="flex items-center mb-1">
+                            <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                            </svg>
+                            Actions Not Available
+                          </strong>
+                          {wouldShowRetryButBlocked && 'Retry action is not available because the leave/OD end date has already passed.'}
+                          {wouldShowCancelButBlocked && 'Cancellation is not available because the leave/OD end date has already passed.'}
+                          <br />
+                          <span className="text-xs">
+                            End date: {format(parseISO(selectedRequestForReview.end_date), 'MMMM d, yyyy')}
+                          </span>
+                        </p>
+                      </div>
+                    );
+                  }
+                  
+                  return null;
+                })()}
 
                 {/* Conditional input for cancellation reason or certificate upload */}
                 {canRequestCancellation && selectedRequestForReview.status !== 'Cancellation Pending' && (
@@ -350,3 +412,4 @@ const RequestStatusPage = () => {
 };
 
 export default RequestStatusPage;
+

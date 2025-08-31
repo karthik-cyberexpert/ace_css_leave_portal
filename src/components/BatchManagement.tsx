@@ -24,6 +24,15 @@ interface Semester {
 export const BatchManagement = () => {
   const { students, syncStudentStatusWithBatch } = useAppContext();
   const { semesterDates, setSemesterDates, saveSemesterDates, batches, createBatch, updateBatch, deleteBatch } = useBatchContext();
+  
+  // Debug: Log batch data whenever it changes
+  React.useEffect(() => {
+    console.log('🔍 BatchManagement Debug Info:');
+    console.log('  - Batches array:', batches);
+    console.log('  - Batches length:', batches.length);
+    console.log('  - Semester dates:', semesterDates);
+    console.log('  - Auth token exists:', !!localStorage.getItem('auth_token'));
+  }, [batches, semesterDates]);
   const [selectedSemesters, setSelectedSemesters] = useState<Record<string, number>>({});
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
@@ -111,50 +120,50 @@ export const BatchManagement = () => {
   const handleDateChange = async (batch: string, semester: number, date: Date | undefined, type: 'start' | 'end') => {
     console.log('handleDateChange called:', { batch, semester, date, type });
     
-    setSemesterDates(prev => {
-      const existing = prev.find(s => s.batch === batch && s.semester === semester);
-      let newSemesterDates;
-      
-      if (existing) {
-        newSemesterDates = prev.map(s => 
-          s.batch === batch && s.semester === semester 
-            ? { ...s, [type === 'start' ? 'startDate' : 'endDate']: date } 
-            : s
-        );
-        console.log('Updated existing semester date entry:', { batch, semester, type, date });
-      } else {
-        // Create the semester date entry with the batch ID
-        const newEntry = { 
-          id: `${batch}-${semester}`, 
-          batch, 
-          semester, 
-          startDate: type === 'start' ? date : undefined, 
-          endDate: type === 'end' ? date : undefined 
-        };
-        newSemesterDates = [...prev, newEntry];
-        console.log('Adding new semester date entry:', newEntry);
-      }
-      
-      console.log('New semester dates state:', newSemesterDates);
-      return newSemesterDates;
-    });
+    // Immediately update state with the new date
+    const newSemesterDates = semesterDates.slice(); // Create a copy
+    const existingIndex = newSemesterDates.findIndex(s => s.batch === batch && s.semester === semester);
     
-    // Auto-save the semester dates after updating
+    if (existingIndex >= 0) {
+      // Update existing entry
+      newSemesterDates[existingIndex] = {
+        ...newSemesterDates[existingIndex],
+        [type === 'start' ? 'startDate' : 'endDate']: date
+      };
+      console.log('Updated existing semester date entry:', { batch, semester, type, date });
+    } else {
+      // Create new entry
+      const newEntry = {
+        id: `${batch}-${semester}`,
+        batch,
+        semester,
+        startDate: type === 'start' ? date : undefined,
+        endDate: type === 'end' ? date : undefined
+      };
+      newSemesterDates.push(newEntry);
+      console.log('Adding new semester date entry:', newEntry);
+    }
+    
+    // Update state immediately
+    setSemesterDates(newSemesterDates);
+    console.log('New semester dates state:', newSemesterDates);
+    
+    // Auto-save with better error handling
     try {
       console.log('Auto-saving semester dates...');
-      // Small delay to ensure state is updated
-      setTimeout(async () => {
-        try {
-          await saveSemesterDates();
-          console.log('Semester dates auto-saved successfully');
-          showSuccess('Semester date saved successfully');
-        } catch (error) {
-          console.error('Auto-save failed:', error);
-          showError('Failed to save semester date');
+      // Use the updated data directly instead of relying on state
+      const dataToSave = JSON.stringify(newSemesterDates, (key, value) => {
+        if (value instanceof Date) {
+          return value.toISOString();
         }
-      }, 100);
+        return value;
+      });
+      localStorage.setItem('batchSemesterDates', dataToSave);
+      console.log('Semester dates auto-saved successfully to localStorage');
+      showSuccess('Semester date saved successfully');
     } catch (error) {
-      console.error('Error during auto-save:', error);
+      console.error('Auto-save failed:', error);
+      showError('Failed to save semester date');
     }
   };
 
@@ -283,7 +292,7 @@ export const BatchManagement = () => {
       return;
     }
     
-    // Check if batch already exists
+    // Check if batch already exists in the local state
     if (batches.some(b => b.start_year === year)) {
       showError('A batch with this start year already exists.');
       return;
@@ -294,9 +303,31 @@ export const BatchManagement = () => {
       setNewBatchYear('');
       setIsCreateDialogOpen(false);
       showSuccess(`Batch ${year}-${year + 4} created successfully!`);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating batch:', error);
-      showError('Failed to create batch. Please try again.');
+      
+      let errorMessage = 'Failed to create batch. Please try again.';
+      
+      // Handle specific error cases
+      if (error.response?.status === 409) {
+        errorMessage = `Batch ${year}-${year + 4} already exists in the database.`;
+      } else if (error.response?.status === 401) {
+        errorMessage = 'Authentication expired. Please log in again.';
+        // Redirect to login
+        setTimeout(() => {
+          localStorage.removeItem('auth_token');
+          localStorage.removeItem('user_profile');
+          window.location.href = '/login';
+        }, 2000);
+      } else if (error.response?.status === 403) {
+        errorMessage = 'You do not have permission to create batches.';
+      } else if (error.response?.data?.error) {
+        errorMessage = error.response.data.error;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      showError(errorMessage);
     }
   };
   
@@ -389,9 +420,31 @@ export const BatchManagement = () => {
       try {
         await deleteBatch(batchId);
         showSuccess(`Batch ${batchName} deleted successfully!`);
-      } catch (error) {
+      } catch (error: any) {
         console.error('Error deleting batch:', error);
-        showError('Failed to delete batch. Please try again.');
+        
+        let errorMessage = 'Failed to delete batch. Please try again.';
+        
+        if (error.message) {
+          errorMessage = error.message;
+        } else if (error.response?.data?.details) {
+          errorMessage = error.response.data.details;
+        } else if (error.response?.data?.error) {
+          errorMessage = error.response.data.error;
+        }
+        
+        // Handle authentication errors
+        if (error.message?.includes('Authentication') || error.response?.status === 401) {
+          showError('Session expired. Please log in again.');
+          // Clear auth and redirect
+          setTimeout(() => {
+            localStorage.removeItem('auth_token');
+            localStorage.removeItem('user_profile');
+            window.location.href = '/login';
+          }, 2000);
+        } else {
+          showError(errorMessage);
+        }
       }
     }
   };

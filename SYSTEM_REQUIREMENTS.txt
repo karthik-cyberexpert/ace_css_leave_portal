@@ -1,0 +1,439 @@
+# ====================================================
+# ACE CSS LEAVE PORTAL - COMPLETE SYSTEM REQUIREMENTS
+# ====================================================
+# This file lists everything you need to deploy the Leave Portal
+# Print this file and check each item before deployment!
+
+# ====================================================
+# SYSTEM REQUIREMENTS
+# ====================================================
+
+OPERATING_SYSTEM:
+  ✓ Windows 10/11 (64-bit) or Windows Server 2016/2019/2022
+  ✓ Minimum 4GB RAM (8GB recommended for smooth operation)
+  ✓ 10GB free disk space on D: drive (for installation)
+  ✓ Internet connection (for downloads and updates)
+  ✓ Administrator privileges (required for installation)
+
+NETWORK_REQUIREMENTS:
+  ✓ Static IP address or DDNS setup
+  ✓ Domain name (optional but recommended for professional look)
+  ✓ Ports 80, 3002, 8080, 3307 accessible through firewall
+  ✓ DNS A record pointing to server IP (if using domain)
+
+# ====================================================
+# CORE SOFTWARE TO DOWNLOAD AND INSTALL
+# ====================================================
+
+1. NODE.JS (JavaScript Runtime Engine)
+   📥 Download: https://nodejs.org/
+   📦 Version: LTS (Long Term Support) - Currently v18.x or v20.x
+   💾 Installation: Download .msi installer and run
+   📊 Size: ~50MB
+   🎯 Purpose: Runs the backend and frontend applications
+   ✅ Includes: Node.js runtime, npm, npx
+   ⚙️  Installation: Standard Windows installer - just click Next!
+
+2. MYSQL DATABASE SERVER
+   📥 Download: https://dev.mysql.com/downloads/mysql/
+   📦 Version: 8.0.x (latest stable version)
+   💾 Installation: MySQL Installer for Windows
+   📊 Size: ~400-500MB
+   🎯 Purpose: Stores all student data, leave applications, user accounts
+   ✅ Components needed:
+     - MySQL Server (main database)
+     - MySQL Workbench (visual database tool)
+     - MySQL Command Line Client (for scripts)
+   ⚙️  Configuration:
+     - Port: 3307 (NOT the default 3306!)
+     - Root password: Set a STRONG password and remember it!
+     - Service name: MySQL80
+
+3. NGINX WEB SERVER
+   📥 Download: https://nginx.org/en/download.html
+   📦 Version: Latest stable version (nginx/Windows)
+   💾 Installation: Extract ZIP to C:\nginx folder
+   📊 Size: ~15MB
+   🎯 Purpose: Makes website accessible without showing port numbers
+   ✅ Folder structure after extraction:
+     C:\nginx\
+     ├── nginx.exe
+     ├── conf\nginx.conf
+     ├── html\
+     └── logs\
+
+# ====================================================
+# GLOBAL NPM PACKAGES (Auto-installed by scripts)
+# ====================================================
+
+4. PM2 (Process Manager for Node.js)
+   📦 Install: npm install -g pm2
+   📦 Version: Latest (5.x)
+   📦 Additional: npm install -g pm2-windows-startup
+   🎯 Purpose: Keeps your application running 24/7
+   ✅ Features:
+     - Auto-restart if application crashes
+     - Windows service integration
+     - Log file management
+     - Multiple process management
+   ⚙️  Note: Installed automatically by deployment script
+
+5. VITE (Frontend Build Tool)
+   📦 Install: npm install -g vite (if needed)
+   📦 Version: Latest (4.x or 5.x)
+   🎯 Purpose: Builds the website frontend for production
+   ⚙️  Note: Also installed locally in project
+
+# ====================================================
+# WINDOWS TOOLS AND FEATURES
+# ====================================================
+
+REQUIRED_WINDOWS_COMPONENTS:
+  ✓ PowerShell 5.1 or later (built into Windows)
+  ✓ Windows Defender Firewall (enabled and configured)
+  ✓ .NET Framework 4.7.2 or later (usually pre-installed)
+  ✓ Windows Terminal (optional but recommended)
+
+OPTIONAL_WINDOWS_FEATURES:
+  ⭕ IIS (Internet Information Services) - alternative to Nginx
+  ⭕ Windows Subsystem for Linux (WSL) - not needed but useful
+
+DEVELOPMENT_TOOLS (if compiling native modules):
+  📥 Visual Studio Build Tools
+  📥 Download: https://aka.ms/vs/17/release/vs_buildtools.exe
+  🎯 Purpose: Compiles native Node.js modules (rarely needed)
+  ✅ Components:
+     - MSVC v143 compiler toolset
+     - Windows 10/11 SDK (latest)
+     - CMake tools for C++
+
+# ====================================================
+# PROJECT STRUCTURE AND FILES
+# ====================================================
+
+MAIN_PROJECT_FOLDERS:
+D:\leave-portal\
+├── backend\              # Server-side application code
+├── frontend\             # Website interface code  
+├── dist\                # Built website files (created after build)
+├── node_modules\        # Node.js dependencies (created after npm install)
+├── logs\                # Application log files (created by PM2)
+├── uploads\             # User uploaded documents (created by app)
+└── Documentation\       # All guide files
+
+CONFIGURATION_FILES:
+✓ .env.production        # Environment variables (database passwords, etc.)
+✓ ecosystem.config.production.js  # PM2 process configuration
+✓ nginx-leave-portal.conf         # Nginx web server configuration
+✓ package.json          # Project dependencies list
+✓ rebuilt_schema.sql    # Database structure file
+
+MANAGEMENT_SCRIPTS:
+✓ Prepare-Production.ps1           # Run on development machine
+✓ Deploy-Windows-Production.ps1    # Run on college server
+✓ start-production.bat              # Start the application
+✓ stop-production.bat              # Stop the application
+✓ restart-production.bat           # Restart the application
+✓ status-production.bat            # Check if running
+✓ start-nginx.bat                  # Start web server (if using domain)
+✓ stop-nginx.bat                   # Stop web server
+✓ reload-nginx.bat                 # Reload web server config
+✓ nginx-status.bat                 # Check web server status
+
+# ====================================================
+# NETWORK PORT ASSIGNMENTS
+# ====================================================
+
+PORT_USAGE:
+  🌐 Port 80   : Nginx HTTP (main website access)
+  🔒 Port 443  : Nginx HTTPS (secure access, optional)
+  🔧 Port 3002 : Backend API server (internal communication)
+  📱 Port 8080 : Frontend server (internal, serves website files)
+  🗄️  Port 3307 : MySQL database server (data storage)
+
+FIREWALL_CONFIGURATION:
+Windows Firewall Inbound Rules (allow these ports):
+  ✅ HTTP (port 80) - for website access
+  ✅ HTTPS (port 443) - for secure website access (optional)
+  ✅ Backend (port 3002) - for API communication
+  ✅ Frontend (port 8080) - for website files
+  ❌ MySQL (port 3307) - localhost only, block external access
+
+# ====================================================
+# DATABASE REQUIREMENTS
+# ====================================================
+
+MYSQL_CONFIGURATION:
+  📊 Database name: cyber_security_leave_portal
+  👤 Database user: leave_portal
+  🔐 User password: (set during installation)
+  🏠 Host: localhost
+  🚪 Port: 3307 (custom port, not default 3306)
+  📁 Storage engine: InnoDB (default)
+  🔤 Character set: utf8mb4 (supports all characters)
+
+DATABASE_TABLES (created automatically):
+  👥 users          # Student and teacher accounts
+  📝 leave_requests # Leave applications
+  📂 attachments    # Uploaded documents
+  🏷️  leave_types    # Types of leave (sick, casual, etc.)
+  📊 audit_logs     # System activity tracking
+  ⚙️  system_config # Application settings
+
+# ====================================================
+# INSTALLATION CHECKLIST
+# ====================================================
+
+PRE_INSTALLATION:
+□ Windows server ready with administrator access
+□ Internet connection available for downloads
+□ D: drive has at least 10GB free space
+□ Server IP address known
+□ Domain name registered (if using custom URL)
+
+SOFTWARE_INSTALLATION_ORDER:
+□ Step 1: Download and install Node.js LTS version
+□ Step 2: Download and install MySQL Server (port 3307)
+□ Step 3: Download and extract Nginx to C:\nginx
+□ Step 4: Verify all software is working:
+   - Run: node --version (should show version number)
+   - Run: mysql --version (should show version number)
+   - Check: C:\nginx\nginx.exe exists
+
+PROJECT_DEPLOYMENT:
+□ Step 5: Run Prepare-Production.ps1 on development machine
+□ Step 6: Copy entire project to D:\leave-portal on server
+□ Step 7: Run Deploy-Windows-Production.ps1 as Administrator
+□ Step 8: Configure MySQL database and import schema
+□ Step 9: Update .env.production with correct passwords
+□ Step 10: Start application and test access
+
+# ====================================================
+# VERIFICATION COMMANDS
+# ====================================================
+
+AFTER_SOFTWARE_INSTALLATION:
+Test Node.js:
+  C:\> node --version
+  Expected: v18.17.0 (or similar)
+
+Test npm:
+  C:\> npm --version  
+  Expected: 9.6.7 (or similar)
+
+Test MySQL:
+  C:\> mysql --version
+  Expected: mysql Ver 8.0.34 (or similar)
+
+Test Nginx:
+  C:\> C:\nginx\nginx.exe -v
+  Expected: nginx version: nginx/1.24.0 (or similar)
+
+AFTER_DEPLOYMENT:
+Check PM2 processes:
+  C:\> pm2 status
+  Expected: Two processes running (frontend and backend)
+
+Check website access:
+  Browser: http://your-server-ip:8080
+  Expected: Leave Portal login page
+
+Check database connection:
+  C:\> mysql -u leave_portal -p -P 3307
+  Expected: MySQL prompt after entering password
+
+# ====================================================
+# TROUBLESHOOTING GUIDE
+# ====================================================
+
+COMMON_INSTALLATION_ISSUES:
+
+❌ "Node.js not recognized"
+✅ Solution: Restart PowerShell after Node.js installation
+
+❌ "MySQL connection refused"
+✅ Solution: Check if MySQL service is running in Windows Services
+
+❌ "Port already in use"
+✅ Solution: Find and stop the process using the port:
+   netstat -ano | findstr :8080
+   taskkill /PID <process_id> /F
+
+❌ "Permission denied"
+✅ Solution: Run PowerShell as Administrator
+
+❌ "npm install fails"
+✅ Solution: Clear npm cache: npm cache clean --force
+
+❌ "Website not loading"
+✅ Solution: Check Windows Firewall settings for blocked ports
+
+❌ "Database import fails"
+✅ Solution: Make sure MySQL is running and credentials are correct
+
+# ====================================================
+# PERFORMANCE REQUIREMENTS
+# ====================================================
+
+MINIMUM_SYSTEM_SPECS:
+  🖥️  CPU: 2 cores, 2.0GHz
+  💾 RAM: 4GB (2GB for OS, 2GB for applications)
+  💿 Storage: 10GB free space
+  🌐 Network: 10 Mbps internet connection
+
+RECOMMENDED_SYSTEM_SPECS:
+  🖥️  CPU: 4 cores, 2.5GHz or better
+  💾 RAM: 8GB (plenty of room for multiple users)
+  💿 Storage: 20GB free space (room for growth)
+  🌐 Network: 100 Mbps connection
+  🔄 SSD storage (faster than traditional hard drives)
+
+EXPECTED_PERFORMANCE:
+  👥 Concurrent users: 50-100 students/teachers
+  📈 Response time: Under 2 seconds for most operations
+  💾 Database size: 1-5GB after one year of usage
+  📊 Server uptime: 99.9% (with proper maintenance)
+
+# ====================================================
+# SECURITY CONSIDERATIONS
+# ====================================================
+
+SECURITY_CHECKLIST:
+□ Change default admin password (admin/admin123)
+□ Use strong MySQL passwords (12+ characters)
+□ Enable Windows Updates (automatic recommended)
+□ Configure Windows Firewall properly
+□ Regular database backups
+□ Monitor log files for suspicious activity
+□ Keep Node.js and dependencies updated
+□ Use HTTPS in production (SSL certificate)
+
+BACKUP_STRATEGY:
+📁 Files to backup daily:
+   - Database: mysqldump command
+   - Uploaded files: D:\leave-portal\uploads\
+   - Configuration: .env.production
+
+📁 Files to backup weekly:
+   - Complete application folder
+   - Log files
+   - Nginx configuration
+
+# ====================================================
+# MAINTENANCE SCHEDULE
+# ====================================================
+
+DAILY_TASKS (5 minutes):
+□ Check application status: status-production.bat
+□ Review error logs for issues
+□ Verify website accessibility
+
+WEEKLY_TASKS (30 minutes):
+□ Backup database and files
+□ Check disk space usage
+□ Review system performance
+□ Update security patches
+
+MONTHLY_TASKS (2 hours):
+□ Update Node.js dependencies: npm audit fix
+□ Clean old log files
+□ Review user accounts and permissions
+□ Test backup restoration process
+□ Performance optimization review
+
+# ====================================================
+# SUCCESS CRITERIA
+# ====================================================
+
+DEPLOYMENT_IS_SUCCESSFUL_WHEN:
+✅ Website loads at http://your-domain-or-ip
+✅ Login page appears with proper styling and logo
+✅ Admin can login with admin/admin123 credentials
+✅ Students can register new accounts
+✅ Students can submit leave applications
+✅ Teachers can view and approve/reject applications
+✅ File uploads work (students can attach documents)
+✅ Email notifications work (if configured)
+✅ All management scripts function properly
+✅ Application auto-restarts after server reboot
+✅ Database stores and retrieves data correctly
+
+USER_EXPERIENCE_GOALS:
+👥 Students find the system easy to use
+📱 Works well on both desktop and mobile devices
+⚡ Pages load quickly (under 3 seconds)
+💾 Data is never lost (reliable database)
+🔐 Secure login and data protection
+📧 Timely notifications for status updates
+
+# ====================================================
+# SUPPORT AND DOCUMENTATION
+# ====================================================
+
+INCLUDED_DOCUMENTATION:
+📖 SIMPLE_DEPLOYMENT_GUIDE.md    # Step-by-step for beginners
+📖 REVERSE_PROXY_GUIDE.md        # Nginx configuration details
+📖 WINDOWS_HOSTING_GUIDE.md      # Advanced hosting options
+📖 SYSTEM_REQUIREMENTS.txt       # This file
+📖 REQUIREMENTS.txt              # NPM package dependencies
+
+MANAGEMENT_TOOLS:
+🎛️  Desktop shortcuts for easy management
+📝 Batch scripts for common tasks
+📊 Status monitoring scripts
+🔄 Automatic restart capabilities
+📋 Log file monitoring
+
+GETTING_HELP:
+🌐 Official documentation in project files
+💬 Comments in all script files explain what they do
+📧 Error messages are descriptive and actionable
+🔍 Status scripts show detailed information
+📱 Management commands have built-in help
+
+# ====================================================
+# FINAL CHECKLIST BEFORE GOING LIVE
+# ====================================================
+
+TECHNICAL_READINESS:
+□ All software installed and tested
+□ Database created and schema imported
+□ Application starts and stops properly
+□ Website accessible from other computers
+□ SSL certificate installed (if using HTTPS)
+□ Backups configured and tested
+□ Monitoring tools set up
+□ Performance tested with multiple users
+
+SECURITY_READINESS:
+□ Default passwords changed
+□ Firewall properly configured
+□ User accounts created with appropriate permissions
+□ Audit logging enabled
+□ Security updates applied
+□ Backup encryption enabled (if required)
+
+USER_READINESS:
+□ User training completed
+□ User accounts created for teachers/admins
+□ Leave types and policies configured in system
+□ Email templates customized (if using email)
+□ Help documentation provided to end users
+□ Support process established
+
+OPERATIONAL_READINESS:
+□ Maintenance schedule planned
+□ Monitoring and alerting configured
+□ Backup verification process established
+□ Incident response plan created
+□ Performance baselines recorded
+□ Documentation updated with any customizations
+
+🎉 CONGRATULATIONS! 🎉
+When all boxes are checked, your Leave Portal is ready for production use!
+
+Your college will have a modern, efficient system for managing student leave requests,
+saving time for both students and administrative staff.
+
+Students can apply online anytime, teachers can review efficiently, and everything
+is stored securely with proper audit trails for institutional requirements.

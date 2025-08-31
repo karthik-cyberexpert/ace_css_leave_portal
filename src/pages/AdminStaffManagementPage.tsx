@@ -22,6 +22,7 @@ const staffSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters."),
   email: z.string().email("Invalid email address."),
   username: z.string().min(3, "Username must be at least 3 characters."),
+  mobile: z.string().min(10, "Mobile number must be at least 10 digits.").optional().or(z.literal('')),
   password: z.string().min(6, "Password must be at least 6 characters.").optional().or(z.literal('')),
   is_admin: z.boolean().default(false),
   is_tutor: z.boolean().default(false),
@@ -33,7 +34,7 @@ const staffSchema = z.object({
 type StaffFormValues = z.infer<typeof staffSchema>;
 
 const AdminStaffManagementPage = () => {
-  const { staff, addStaff, updateStaff, deleteStaff, students, assignBatchToTutor, role, profile, refreshData } = useAppContext();
+  const { staff, addStaff, updateStaff, students, assignBatchToTutor, role, profile, refreshData } = useAppContext();
   const { getAvailableBatches } = useBatchContext();
   const [staffToDelete, setStaffToDelete] = useState<string | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -45,7 +46,7 @@ const AdminStaffManagementPage = () => {
 
   const form = useForm<StaffFormValues>({
     resolver: zodResolver(staffSchema),
-    defaultValues: { name: '', email: '', username: '', password: '', is_admin: false, is_tutor: false },
+    defaultValues: { name: '', email: '', username: '', mobile: '', password: '', is_admin: false, is_tutor: false },
   });
 
   useEffect(() => {
@@ -55,12 +56,13 @@ const AdminStaffManagementPage = () => {
           name: editingStaff.name,
           email: editingStaff.email,
           username: editingStaff.username,
+          mobile: editingStaff.mobile || '',
           password: '',
           is_admin: editingStaff.is_admin,
           is_tutor: editingStaff.is_tutor,
         });
       } else {
-        form.reset({ name: '', email: '', username: '', password: '', is_admin: false, is_tutor: false });
+        form.reset({ name: '', email: '', username: '', mobile: '', password: '', is_admin: false, is_tutor: false });
       }
     }
   }, [editingStaff, isDialogOpen, form]);
@@ -77,8 +79,8 @@ const AdminStaffManagementPage = () => {
 
   const handleDeleteConfirm = () => {
     if (staffToDelete) {
-      deleteStaff(staffToDelete);
-      showSuccess('Staff member removed successfully!');
+      // Delete functionality disabled for security
+      showError("Delete functionality is disabled for security reasons.");
       setStaffToDelete(null);
     }
   };
@@ -200,8 +202,8 @@ const AdminStaffManagementPage = () => {
                       <TableCell className="font-medium">{member.name}</TableCell>
                       <TableCell>{member.email}</TableCell>
                       <TableCell className="text-center space-x-2">
-                        {member.is_admin && <Badge variant="default">Admin</Badge>}
-                        {member.is_tutor && <Badge variant="secondary">Tutor</Badge>}
+                        {Boolean(member.is_admin) && <Badge variant="default">Admin</Badge>}
+                        {Boolean(member.is_tutor) && <Badge variant="secondary">Tutor</Badge>}
                       </TableCell>
                       <TableCell className="text-center">
                         {member.assigned_batch && member.assigned_semester ? (
@@ -214,8 +216,8 @@ const AdminStaffManagementPage = () => {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-2">
-                          {/* Only show assignment controls for tutors and not for current user if they are admin */}
-                          {member.is_tutor && !(member.is_admin && profile?.id === member.id) && (
+                          {/* Only show assignment controls for tutors who are not admins */}
+                          {Boolean(member.is_tutor) && !Boolean(member.is_admin) && (
                             <>
                               {/* If tutor already has an assignment, show remove button */}
                               {member.assigned_batch && member.assigned_semester ? (
@@ -325,6 +327,9 @@ const AdminStaffManagementPage = () => {
               <FormField control={form.control} name="username" render={({ field }) => (
                 <FormItem><FormLabel>Username</FormLabel><FormControl><Input placeholder="jane.smith" {...field} /></FormControl><FormMessage /></FormItem>
               )} />
+              <FormField control={form.control} name="mobile" render={({ field }) => (
+                <FormItem><FormLabel>Mobile Number</FormLabel><FormControl><Input placeholder="1234567890" {...field} /></FormControl><FormMessage /></FormItem>
+              )} />
               <FormField control={form.control} name="password" render={({ field }) => (
                 <FormItem><FormLabel>Password</FormLabel><div className="relative"><FormControl><Input type={showPassword ? 'text' : 'password'} placeholder={editingStaff ? 'Leave blank to keep current password' : '••••••••'} {...field} /></FormControl><Button type="button" variant="ghost" size="icon" className="absolute right-1 top-1/2 h-7 w-7 -translate-y-1/2 text-gray-500 hover:bg-transparent" onClick={() => setShowPassword(!showPassword)}>{showPassword ? <EyeOff size={18} /> : <Eye size={18} />}</Button></div><FormMessage /></FormItem>
               )} />
@@ -356,3 +361,6 @@ const AdminStaffManagementPage = () => {
 };
 
 export default AdminStaffManagementPage;
+
+
+

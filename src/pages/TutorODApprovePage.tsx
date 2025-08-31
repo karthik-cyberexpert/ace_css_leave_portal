@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import TutorLayout from '@/components/TutorLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -9,7 +9,7 @@ import { showSuccess } from '@/utils/toast';
 import { cn } from '@/lib/utils';
 import { useAppContext, ODRequest, RequestStatus, CertificateStatus } from '@/context/AppContext';
 import { Badge } from '@/components/ui/badge';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, differenceInDays } from 'date-fns';
 import { Eye } from 'lucide-react';
 
 const TutorODApprovePage = () => {
@@ -28,22 +28,48 @@ const TutorODApprovePage = () => {
   };
 
   const handleRequestAction = async (id: string, newStatus: RequestStatus) => {
-    await updateODRequestStatus(id, newStatus);
-    showSuccess(`Request has been ${newStatus.toLowerCase()}!`);
-    setSelectedRequest(null);
+    try {
+      await updateODRequestStatus(id, newStatus);
+      showSuccess(`Request has been ${newStatus.toLowerCase()}!`);
+      setSelectedRequest(null);
+    } catch (error: any) {
+      console.error('Error updating request status:', error);
+      // Don't close dialog on error so user can see what happened
+    }
   };
 
   const handleCancellationAction = async (id: string, approve: boolean) => {
-    await approveRejectODCancellation(id, approve);
-    setSelectedRequest(null);
+    try {
+      await approveRejectODCancellation(id, approve);
+      setSelectedRequest(null);
+    } catch (error: any) {
+      console.error('Error processing cancellation:', error);
+      // Don't close dialog on error so user can see what happened
+    }
   };
 
   const handleVerification = async (isApproved: boolean) => {
     if (!verifyRequest) return;
-    await verifyODCertificate(verifyRequest.id, isApproved);
-    showSuccess(`Certificate has been ${isApproved ? 'approved' : 'rejected'}.`);
-    setVerifyRequest(null);
+    try {
+      await verifyODCertificate(verifyRequest.id, isApproved);
+      showSuccess(`Certificate has been ${isApproved ? 'approved' : 'rejected'}.`);
+      setVerifyRequest(null);
+    } catch (error: any) {
+      console.error('Error verifying certificate:', error);
+      // Don't close dialog on error so user can see what happened
+    }
   };
+
+  // Auto-clear selectedRequest if its status becomes non-actionable
+  useEffect(() => {
+    if (selectedRequest && 
+        selectedRequest.status !== 'Pending' && 
+        selectedRequest.status !== 'Retried' && 
+        selectedRequest.status !== 'Cancellation Pending') {
+      console.log('Auto-clearing selectedRequest due to status change:', selectedRequest.status);
+      setSelectedRequest(null);
+    }
+  }, [selectedRequest]);
 
   const getStatusBadge = (status: RequestStatus, certStatus?: CertificateStatus) => {
     const statusText = certStatus ? `${status} (${certStatus})` : status;
@@ -62,6 +88,35 @@ const TutorODApprovePage = () => {
     return <span className={cn("px-3 py-1 rounded-full text-xs font-semibold", colorClasses[status as keyof typeof colorClasses] || 'bg-gray-100 text-gray-800')}>{statusText}</span>;
   };
 
+  const getDurationTypeLabel = (durationType: string, totalDays: number | string) => {
+    // Convert totalDays to number for comparison
+    const numericTotalDays = parseFloat(String(totalDays));
+    
+    // If total_days is 0.5, it's definitely a half-day regardless of durationType
+    if (numericTotalDays === 0.5) {
+      switch (durationType) {
+        case 'half_day_forenoon':
+          return 'Half Day (Morning)';
+        case 'half_day_afternoon':
+          return 'Half Day (Afternoon)';
+        default:
+          return 'Half Day';
+      }
+    }
+    
+    // For other values, use the duration type or default to Full Day
+    switch (durationType) {
+      case 'full_day':
+        return 'Full Day';
+      case 'half_day_forenoon':
+        return 'Half Day (Morning)';
+      case 'half_day_afternoon':
+        return 'Half Day (Afternoon)';
+      default:
+        return 'Full Day';
+    }
+  };
+
   return (
     <TutorLayout>
       <Card>
@@ -74,6 +129,10 @@ const TutorODApprovePage = () => {
                   <TableHead>Student</TableHead>
                   <TableHead className="text-center">Batch</TableHead>
                   <TableHead className="text-center">Semester</TableHead>
+                  <TableHead>Start Date</TableHead>
+                  <TableHead>End Date</TableHead>
+                  <TableHead className="text-right">Total Days</TableHead>
+                  <TableHead className="text-center">Duration Type</TableHead>
                   <TableHead>Purpose</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Certificate</TableHead>
@@ -91,6 +150,12 @@ const TutorODApprovePage = () => {
                       </TableCell>
                       <TableCell className="text-center">{studentInfo.batch}-{studentInfo.batch !== 'N/A' ? parseInt(studentInfo.batch) + 4 : 'N/A'}</TableCell>
                       <TableCell className="text-center">{studentInfo.semester}</TableCell>
+                      <TableCell>{format(parseISO(request.start_date), 'MMMM d yyyy')}</TableCell>
+                      <TableCell>{format(parseISO(request.end_date), 'MMMM d yyyy')}</TableCell>
+                      <TableCell className="text-right">{request.total_days}</TableCell>
+                      <TableCell className="text-center text-sm">
+                        {getDurationTypeLabel((request as any).duration_type || 'full_day', request.total_days)}
+                      </TableCell>
                       <TableCell>{request.purpose}</TableCell>
                     <TableCell>{getStatusBadge(request.status, request.certificate_status)}</TableCell>
                     <TableCell>
@@ -111,17 +176,12 @@ onClick={() => setViewCertificate(request.certificate_url!)}
                       </div>
                     </TableCell>
                     <TableCell className="text-center space-x-2">
-                      {request.status === 'Approved' && (
-                        <Button 
-                          variant="destructive" 
-                          size="sm" 
-                          onClick={() => handleRequestAction(request.id, 'Rejected')}
-                        >
-                          Reject
-                        </Button>
-                      )}
+                      {/* Tutors cannot reject OD requests - only forward them */}
                       {(request.status === 'Pending' || request.status === 'Retried' || request.status === 'Cancellation Pending') && <Button variant="outline" size="sm" onClick={() => setSelectedRequest(request)}>Review</Button>}
                       {request.certificate_status === 'Pending Verification' && <Button variant="default" size="sm" onClick={() => setVerifyRequest(request)}>Verify Cert</Button>}
+                      {request.status === 'Approved' && (
+                        <span className="text-xs text-muted-foreground">Approved</span>
+                      )}
                     </TableCell>
                     </TableRow>
                   );
@@ -133,7 +193,7 @@ onClick={() => setViewCertificate(request.certificate_url!)}
       </Card>
 
       {/* Review Dialog */}
-      <Dialog open={!!selectedRequest} onOpenChange={(isOpen) => !isOpen && setSelectedRequest(null)}>
+      <Dialog open={!!selectedRequest && (selectedRequest.status === 'Pending' || selectedRequest.status === 'Retried' || selectedRequest.status === 'Cancellation Pending')} onOpenChange={(isOpen) => !isOpen && setSelectedRequest(null)}>
         <DialogContent>
           {selectedRequest && (
             <>
@@ -144,7 +204,7 @@ onClick={() => setViewCertificate(request.certificate_url!)}
               <div className="grid gap-4 py-4">
                 <div className="flex flex-col space-y-1">
                   <span className="text-sm font-medium text-muted-foreground">Date</span>
-{format(parseISO(selectedRequest.start_date), 'MMMM d yyyy')} to {format(parseISO(selectedRequest.end_date), 'MMMM d yyyy')} ({selectedRequest.total_days} days)
+                  <p>{format(parseISO(selectedRequest.start_date), 'MMMM d yyyy')} to {format(parseISO(selectedRequest.end_date), 'MMMM d yyyy')} ({selectedRequest.total_days} days)</p>
                 </div>
                 <div className="flex flex-col space-y-1">
                   <span className="text-sm font-medium text-muted-foreground">Purpose</span>
@@ -184,8 +244,8 @@ onClick={() => setViewCertificate(request.certificate_url!)}
                   </>
                 ) : (
                   <>
-                    <Button variant="destructive" onClick={() => handleRequestAction(selectedRequest.id, 'Rejected')}>Reject</Button>
-                    <Button className="bg-green-500 hover:bg-green-600 text-white" onClick={() => handleRequestAction(selectedRequest.id, 'Approved')}>Approve</Button>
+                    {/* Tutors can only forward OD requests, not reject them */}
+                    <Button className="bg-blue-500 hover:bg-blue-600 text-white" onClick={() => handleRequestAction(selectedRequest.id, 'Forwarded')}>Forward to Admin</Button>
                   </>
                 )}
               </DialogFooter>

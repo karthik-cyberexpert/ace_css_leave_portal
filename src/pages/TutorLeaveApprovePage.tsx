@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import TutorLayout from '@/components/TutorLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import {
@@ -28,8 +28,8 @@ const TutorLeaveApprovePage = () => {
   const [selectedRequest, setSelectedRequest] = useState<LeaveRequest | null>(null);
 
   const tutorLeaveRequests = useMemo(() => {
-    return leaveRequests.filter(req => req.tutor_id === currentTutor.id);
-  }, [leaveRequests, currentTutor.id]);
+    return leaveRequests.filter(req => req.tutor_id === currentTutor?.id);
+  }, [leaveRequests, currentTutor?.id]);
 
   const getStudentInfo = (studentId: string) => {
     const student = students.find(s => s.id === studentId);
@@ -37,18 +37,68 @@ const TutorLeaveApprovePage = () => {
   };
 
   const handleRequestAction = async (id: string, newStatus: RequestStatus) => {
-    await updateLeaveRequestStatus(id, newStatus);
-    showSuccess(`Request has been ${newStatus.toLowerCase()}!`);
-    setSelectedRequest(null); // Close the dialog
+    try {
+      await updateLeaveRequestStatus(id, newStatus);
+      showSuccess(`Request has been ${newStatus.toLowerCase()}!`);
+      setSelectedRequest(null); // Close the dialog
+    } catch (error: any) {
+      console.error('Error updating request status:', error);
+      // Don't close dialog on error so user can see what happened
+    }
   };
 
   const handleCancellationAction = async (id: string, approve: boolean) => {
-    await approveRejectLeaveCancellation(id, approve);
-    setSelectedRequest(null);
+    try {
+      await approveRejectLeaveCancellation(id, approve);
+      setSelectedRequest(null);
+    } catch (error: any) {
+      console.error('Error processing cancellation:', error);
+      // Don't close dialog on error so user can see what happened
+    }
   };
 
   const handleReviewClick = (request: LeaveRequest) => {
     setSelectedRequest(request);
+  };
+
+  // Auto-clear selectedRequest if its status becomes non-actionable
+  useEffect(() => {
+    if (selectedRequest && 
+        selectedRequest.status !== 'Pending' && 
+        selectedRequest.status !== 'Retried' && 
+        selectedRequest.status !== 'Cancellation Pending') {
+      console.log('Auto-clearing selectedRequest due to status change:', selectedRequest.status);
+      setSelectedRequest(null);
+    }
+  }, [selectedRequest?.status]); // Only depend on the status, not the entire object
+
+  const getDurationTypeLabel = (durationType: string, totalDays: number | string) => {
+    // Convert totalDays to number for comparison
+    const numericTotalDays = parseFloat(String(totalDays));
+    
+    // If total_days is 0.5, it's definitely a half-day regardless of durationType
+    if (numericTotalDays === 0.5) {
+      switch (durationType) {
+        case 'half_day_forenoon':
+          return 'Half Day (Morning)';
+        case 'half_day_afternoon':
+          return 'Half Day (Afternoon)';
+        default:
+          return 'Half Day';
+      }
+    }
+    
+    // For other values, use the duration type or default to Full Day
+    switch (durationType) {
+      case 'full_day':
+        return 'Full Day';
+      case 'half_day_forenoon':
+        return 'Half Day (Morning)';
+      case 'half_day_afternoon':
+        return 'Half Day (Afternoon)';
+      default:
+        return 'Full Day';
+    }
   };
 
   const getStatusBadge = (status: RequestStatus) => {
@@ -82,6 +132,7 @@ const TutorLeaveApprovePage = () => {
                   <TableHead>Start Date</TableHead>
                   <TableHead>End Date</TableHead>
                   <TableHead className="text-right">Total Days</TableHead>
+                  <TableHead className="text-center">Duration Type</TableHead>
                   <TableHead className="text-center">Status</TableHead>
                   <TableHead className="text-center">Actions</TableHead>
                 </TableRow>
@@ -99,19 +150,17 @@ const TutorLeaveApprovePage = () => {
                       <TableCell className="text-center">{studentInfo.semester}</TableCell>
                       <TableCell>{format(parseISO(request.start_date), 'MMMM d yyyy')}</TableCell>
                       <TableCell>{format(parseISO(request.end_date), 'MMMM d yyyy')}</TableCell>
-                    <TableCell className="text-right">{request.total_days}</TableCell>
+                    <TableCell className="text-right">{typeof request.total_days === 'number' ? request.total_days.toFixed(1) : request.total_days}</TableCell>
+                    <TableCell className="text-center text-sm">
+                      {getDurationTypeLabel((request as any).duration_type || 'full_day', request.total_days)}
+                    </TableCell>
                     <TableCell className="text-center">
                       {getStatusBadge(request.status)}
                     </TableCell>
                     <TableCell className="text-center">
+                      {/* Tutors cannot reject approved requests - they should have been handled in dialog */}
                       {request.status === 'Approved' ? (
-                        <Button 
-                          variant="destructive" 
-                          size="sm" 
-                          onClick={() => handleRequestAction(request.id, 'Rejected')}
-                        >
-                          Reject
-                        </Button>
+                        <span className="text-xs text-muted-foreground">Approved</span>
                       ) : (request.status === 'Pending' || request.status === 'Retried' || request.status === 'Cancellation Pending') ? (
                         <Button variant="outline" size="sm" onClick={() => handleReviewClick(request)}>
                           Review
@@ -129,7 +178,7 @@ const TutorLeaveApprovePage = () => {
         </CardContent>
       </Card>
 
-      <Dialog open={!!selectedRequest} onOpenChange={(isOpen) => !isOpen && setSelectedRequest(null)}>
+      <Dialog open={!!selectedRequest && (selectedRequest.status === 'Pending' || selectedRequest.status === 'Retried' || selectedRequest.status === 'Cancellation Pending')} onOpenChange={(isOpen) => !isOpen && setSelectedRequest(null)}>
         <DialogContent className="sm:max-w-[425px]">
           {selectedRequest && (
             <>
@@ -191,18 +240,16 @@ const TutorLeaveApprovePage = () => {
                     </>
                   ) : selectedRequest.total_days > 2 ? (
                     <>
-                      <Button
-                        variant="destructive"
-                        onClick={() => handleRequestAction(selectedRequest.id, 'Rejected')}
-                      >
-                        Reject
-                      </Button>
+                      {/* Tutors cannot reject leave requests > 2 days, only forward them */}
                       <Button
                         className="bg-blue-500 hover:bg-blue-600 text-white"
                         onClick={() => handleRequestAction(selectedRequest.id, 'Forwarded')}
                       >
-                        Forward
+                        Forward to Admin
                       </Button>
+                      <div className="text-xs text-muted-foreground mt-2">
+                        Note: Requests longer than 2 days must be forwarded to admin for approval/rejection.
+                      </div>
                     </>
                   ) : (
                     <>

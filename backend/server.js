@@ -10,11 +10,26 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import dotenv from 'dotenv';
 import { dbConfig, jwtSecret } from './config/database.js';
+import { sendLoginNotification } from './utils/loginEmailService.js';
+import { testEmailConnection, sendTestEmail } from './utils/emailService.js';
 
 // ES module path resolution
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Load environment variables from .env file
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
+
+// Debug environment loading
+console.log('Environment loading debug:');
+console.log('  .env path:', path.resolve(__dirname, '../.env'));
+console.log('  NODE_ENV:', process.env.NODE_ENV || 'not set');
+console.log('  DB_PASSWORD loaded:', process.env.DB_PASSWORD ? '[SET]' : '[NOT SET]');
+if (process.env.DB_PASSWORD) {
+  console.log('  DB_PASSWORD value:', process.env.DB_PASSWORD.substring(0, 3) + '***');
+}
 
 // Create uploads directories if they don't exist
 const uploadsDir = path.join(__dirname, 'uploads', 'profile-photos');
@@ -92,13 +107,65 @@ const certificateUpload = multer({
 });
 
 const app = express();
-// Configure CORS to allow file uploads
-app.use(cors({
-  origin: true, // Allow all origins for development
+// Dynamic CORS configuration for development/production
+function buildCorsOrigins() {
+  const publicIp = process.env.PUBLIC_IP || process.env.DOMAIN || process.env.SERVER_IP || 'localhost';
+  const protocol = process.env.ACCESS_PROTOCOL || 'http';
+  const frontendPort = process.env.FRONTEND_PORT || '8085';
+  const backendPort = process.env.BACKEND_PORT || process.env.PORT || '3008';
+  
+  const origins = [
+    `${protocol}://${publicIp}:${frontendPort}`,
+    `${protocol}://${publicIp}:${backendPort}`,
+    `${protocol}://${publicIp}`,
+    // Development origins
+    'http://localhost:8085',
+    'http://localhost:3008',
+    'http://localhost:3009',
+    'http://127.0.0.1:8085',
+    'http://127.0.0.1:3008',
+    'http://127.0.0.1:3009',
+    // Local network
+    'http://192.168.46.89:8085',
+    'http://192.168.46.89:3008'
+  ];
+  
+  // If CORS_ORIGIN is explicitly set, use it as additional origins
+  if (process.env.CORS_ORIGIN) {
+    origins.push(...process.env.CORS_ORIGIN.split(',').map(origin => origin.trim()));
+  }
+  
+  // Remove duplicates
+  return [...new Set(origins)];
+}
+
+const corsOptions = {
+  origin: function (origin, callback) {
+    // In development, allow requests with no origin (mobile apps, curl, etc.)
+    if (!origin) return callback(null, true);
+    
+    const allowedOrigins = buildCorsOrigins();
+    
+    // Check if origin is allowed
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      console.warn(`CORS: Blocked request from origin: ${origin}`);
+      console.log(`CORS: Allowed origins:`, allowedOrigins.slice(0, 10)); // Show first 10 for debugging
+      // In development, be more lenient
+      if (process.env.NODE_ENV !== 'production') {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS policy'));
+      }
+    }
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
-}));
+};
+
+app.use(cors(corsOptions));
 
 // IMPORTANT: Don't use express.json() globally as it can interfere with file uploads
 // We'll add it selectively to non-file-upload routes
@@ -359,7 +426,221 @@ app.get('/api/certificate/:requestId/:filename', authenticateToken, async (req, 
   }
 });
 
-const port = 3002;
+// Enhanced Report Generation Endpoints
+// =================================
+
+// Generate comprehensive report data
+app.get('/api/reports/data', express.json(), authenticateToken, async (req, res) => {
+  try {
+    const { 
+      batch = 'all', 
+      semester = 'all', 
+      startDate, 
+      endDate, 
+      format = 'json',
+      type = 'daily'
+    } = req.query;
+
+    // Check user permissions
+    const [user] = await query('SELECT is_admin, is_tutor, id FROM users WHERE id = ?', [req.user.id]);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    let reportData = [];
+    let metadata = {
+      generatedAt: new Date().toISOString(),
+      generatedBy: req.user.id,
+      filters: { batch, semester, startDate, endDate, type },
+      totalRecords: 0
+    };
+
+    if (type === 'daily' || type === 'summary') {
+      // Get students based on filters
+      let studentsQuery = `
+        SELECT s.*, u.name as student_name, u.email, u.phone
+        FROM students s 
+        JOIN users u ON s.id = u.id
+        WHERE 1=1
+      `;
+      let studentsParams = [];
+
+      // Filter by tutor if not admin
+      if (!user.is_admin && user.is_tutor) {
+        studentsQuery += ' AND s.tutor_id = ?';
+        studentsParams.push(req.user.id);
+      }
+
+      // Filter by batch if specified
+      if (batch !== 'all') {
+        studentsQuery += ' AND s.batch = ?';
+        studentsParams.push(batch);
+      }
+
+      const students = await query(studentsQuery, studentsParams);
+      const studentIds = students.map(s => s.id);
+
+      if (type === 'daily' && startDate && endDate) {
+        // Generate daily report data
+        const start = new Date(startDate);
+        const end = new Date(endDate);
+        const daysDiff = Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1;
+        
+        reportData = [];
+        for (let i = 0; i < daysDiff; i++) {
+          const currentDate = new Date(start);
+          currentDate.setDate(start.getDate() + i);
+          const dateStr = currentDate.toISOString().split('T')[0];
+          
+          // Get leave requests for this date
+          const leaveQuery = `
+            SELECT COUNT(DISTINCT lr.student_id) as count
+            FROM leave_requests lr
+            WHERE lr.status = 'Approved'
+            AND lr.start_date <= ? AND lr.end_date >= ?
+            ${studentIds.length > 0 ? `AND lr.student_id IN (${studentIds.map(() => '?').join(',')})` : ''}
+          `;
+          const leaveParams = [dateStr, dateStr, ...studentIds];
+          const [leaveResult] = await query(leaveQuery, leaveParams);
+
+          // Get OD requests for this date
+          const odQuery = `
+            SELECT COUNT(DISTINCT odr.student_id) as count
+            FROM od_requests odr
+            WHERE odr.status = 'Approved'
+            AND odr.start_date <= ? AND odr.end_date >= ?
+            ${studentIds.length > 0 ? `AND odr.student_id IN (${studentIds.map(() => '?').join(',')})` : ''}
+          `;
+          const odParams = [dateStr, dateStr, ...studentIds];
+          const [odResult] = await query(odQuery, odParams);
+
+          reportData.push({
+            date: dateStr,
+            studentsOnLeave: leaveResult.count || 0,
+            studentsOnOD: odResult.count || 0,
+            totalAbsent: (leaveResult.count || 0) + (odResult.count || 0)
+          });
+        }
+      } else {
+        // Generate summary report data
+        const tutorsQuery = 'SELECT id, name FROM users WHERE is_tutor = 1';
+        const tutors = await query(tutorsQuery);
+        const tutorsMap = new Map(tutors.map(t => [t.id, t.name]));
+
+        reportData = students.map(student => ({
+          studentId: student.id,
+          studentName: student.student_name || student.name,
+          registerNumber: student.register_number,
+          batch: student.batch,
+          semester: student.semester,
+          tutorName: tutorsMap.get(student.tutor_id) || 'N/A',
+          totalLeaveTaken: student.leave_taken || 0,
+          email: student.email || 'N/A',
+          phone: student.phone || 'N/A'
+        }));
+      }
+    }
+
+    metadata.totalRecords = reportData.length;
+
+    // Return data based on format
+    if (format === 'csv') {
+      // Convert to CSV format
+      const Papa = await import('papaparse');
+      const csv = Papa.unparse(reportData);
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="report-${Date.now()}.csv"`);
+      return res.send(csv);
+    }
+
+    res.json({
+      success: true,
+      metadata,
+      data: reportData
+    });
+
+  } catch (error) {
+    console.error('Report generation error:', error);
+    res.status(500).json({ error: 'Failed to generate report data' });
+  }
+});
+
+// Get report statistics
+app.get('/api/reports/stats', express.json(), authenticateToken, async (req, res) => {
+  try {
+    const { batch = 'all', semester = 'all' } = req.query;
+
+    // Check user permissions
+    const [user] = await query('SELECT is_admin, is_tutor FROM users WHERE id = ?', [req.user.id]);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    let whereClause = '1=1';
+    let params = [];
+
+    // Filter by tutor if not admin
+    if (!user.is_admin && user.is_tutor) {
+      whereClause += ' AND s.tutor_id = ?';
+      params.push(req.user.id);
+    }
+
+    // Filter by batch
+    if (batch !== 'all') {
+      whereClause += ' AND s.batch = ?';
+      params.push(batch);
+    }
+
+    // Get basic statistics
+    const totalStudentsQuery = `SELECT COUNT(*) as count FROM students s WHERE ${whereClause}`;
+    const [totalStudentsResult] = await query(totalStudentsQuery, params);
+
+    const totalLeavesQuery = `
+      SELECT COUNT(*) as count FROM leave_requests lr 
+      JOIN students s ON lr.student_id = s.id 
+      WHERE lr.status = 'Approved' AND ${whereClause}
+    `;
+    const [totalLeavesResult] = await query(totalLeavesQuery, params);
+
+    const totalODsQuery = `
+      SELECT COUNT(*) as count FROM od_requests odr 
+      JOIN students s ON odr.student_id = s.id 
+      WHERE odr.status = 'Approved' AND ${whereClause}
+    `;
+    const [totalODsResult] = await query(totalODsQuery, params);
+
+    // Get current month statistics
+    const currentMonth = new Date().toISOString().slice(0, 7); // YYYY-MM format
+    const monthlyLeavesQuery = `
+      SELECT COUNT(*) as count FROM leave_requests lr 
+      JOIN students s ON lr.student_id = s.id 
+      WHERE lr.status = 'Approved' 
+      AND lr.start_date LIKE ?
+      AND ${whereClause}
+    `;
+    const [monthlyLeavesResult] = await query(monthlyLeavesQuery, [`${currentMonth}%`, ...params]);
+
+    res.json({
+      success: true,
+      data: {
+        totalStudents: totalStudentsResult.count,
+        totalLeaves: totalLeavesResult.count,
+        totalODs: totalODsResult.count,
+        monthlyLeaves: monthlyLeavesResult.count,
+        averageLeavesPerStudent: totalStudentsResult.count > 0 
+          ? (totalLeavesResult.count / totalStudentsResult.count).toFixed(2) 
+          : '0.00'
+      }
+    });
+
+  } catch (error) {
+    console.error('Stats generation error:', error);
+    res.status(500).json({ error: 'Failed to generate statistics' });
+  }
+});
+
+const port = process.env.PORT || 3008;
+const host = '0.0.0.0'; // Bind to all network interfaces for production access
 
 // Create a connection pool
 const pool = mysql.createPool(dbConfig);
@@ -958,11 +1239,63 @@ app.put('/batches/:id', authenticateToken, async (req, res) => {
 app.delete('/batches/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
-    await query('DELETE FROM batches WHERE id = ?', [id]);
+    
+    // Check if there are students associated with this batch
+    const [studentsInBatch] = await query('SELECT COUNT(*) as count FROM students WHERE batch = ?', [id]);
+    
+    if (studentsInBatch.count > 0) {
+      return res.status(400).json({ 
+        error: 'Cannot delete batch', 
+        details: `This batch has ${studentsInBatch.count} students associated with it. Please reassign or remove students before deleting the batch.` 
+      });
+    }
+    
+    // Check if there are leave requests associated with this batch
+    const [leaveRequestsInBatch] = await query(
+      'SELECT COUNT(*) as count FROM leave_requests lr JOIN students s ON lr.student_id = s.id WHERE s.batch = ?', 
+      [id]
+    );
+    
+    if (leaveRequestsInBatch.count > 0) {
+      return res.status(400).json({ 
+        error: 'Cannot delete batch', 
+        details: `This batch has ${leaveRequestsInBatch.count} leave requests associated with it. Please archive or handle these requests before deleting the batch.` 
+      });
+    }
+    
+    // Check if there are OD requests associated with this batch
+    const [odRequestsInBatch] = await query(
+      'SELECT COUNT(*) as count FROM od_requests or JOIN students s ON or.student_id = s.id WHERE s.batch = ?', 
+      [id]
+    );
+    
+    if (odRequestsInBatch.count > 0) {
+      return res.status(400).json({ 
+        error: 'Cannot delete batch', 
+        details: `This batch has ${odRequestsInBatch.count} OD requests associated with it. Please archive or handle these requests before deleting the batch.` 
+      });
+    }
+    
+    // If no associated data, proceed with deletion
+    const [result] = await query('DELETE FROM batches WHERE id = ?', [id]);
+    
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'Batch not found' });
+    }
+    
     res.json({ message: 'Batch deleted successfully' });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Failed to delete batch', details: error.message });
+    console.error('Error deleting batch:', error);
+    
+    // Handle specific MySQL errors
+    if (error.code === 'ER_ROW_IS_REFERENCED_2') {
+      res.status(400).json({ 
+        error: 'Cannot delete batch', 
+        details: 'This batch is referenced by other records in the system. Please remove all associated data first.' 
+      });
+    } else {
+      res.status(500).json({ error: 'Failed to delete batch', details: error.message });
+    }
   }
 });
 
@@ -1109,8 +1442,9 @@ app.put('/staff/:id/profile', authenticateToken, async (req, res) => {
   }
 });
 
-// Delete student
-app.delete('/students/:id', authenticateToken, async (req, res) => {
+// Delete student - DISABLED FOR SECURITY
+/* COMMENTED OUT TO PREVENT STUDENT DELETION
+// app.delete('/students/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     await query('DELETE FROM students WHERE id = ?', [id]);
@@ -1121,9 +1455,11 @@ app.delete('/students/:id', authenticateToken, async (req, res) => {
     res.status(500).json({ error: 'Failed to delete student' });
   }
 });
+*/
 
-// Delete staff
-app.delete('/staff/:id', authenticateToken, async (req, res) => {
+// Delete staff - DISABLED FOR SECURITY
+/* COMMENTED OUT TO PREVENT STAFF DELETION
+// app.delete('/staff/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     await query('DELETE FROM staff WHERE id = ?', [id]);
@@ -1134,6 +1470,7 @@ app.delete('/staff/:id', authenticateToken, async (req, res) => {
     res.status(500).json({ error: 'Failed to delete staff' });
   }
 });
+*/
 
 // Get leave requests
 app.get('/leave-requests', authenticateToken, async (req, res) => {
@@ -1149,8 +1486,17 @@ app.get('/leave-requests', authenticateToken, async (req, res) => {
 // Create leave request with date validation
 app.post('/leave-requests', authenticateToken, async (req, res) => {
   try {
-    const { startDate, endDate, totalDays, subject, description } = req.body;
+    const { startDate, endDate, totalDays, subject, description, duration_type } = req.body;
     const id = uuidv4();
+    
+    // Debug logging
+    console.log('📝 Leave Request Data:', {
+      startDate,
+      endDate,
+      totalDays,
+      duration_type,
+      subject: subject?.substring(0, 20) + '...'
+    });
 
     // Check for overlapping leave or OD requests
     const overlapCheck = await query(
@@ -1178,8 +1524,8 @@ app.post('/leave-requests', authenticateToken, async (req, res) => {
     const [tutor] = await query('SELECT * FROM staff WHERE id = ?', [student.tutor_id]);
 
     await query(
-      'INSERT INTO leave_requests (id, student_id, student_name, student_register_number, tutor_id, tutor_name, start_date, end_date, total_days, subject, description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [id, req.user.id, student.name, student.register_number, student.tutor_id, tutor.name, startDate, endDate, totalDays, subject, description]
+      'INSERT INTO leave_requests (id, student_id, student_name, student_register_number, tutor_id, tutor_name, start_date, end_date, total_days, duration_type, subject, description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [id, req.user.id, student.name, student.register_number, student.tutor_id, tutor.name, startDate, endDate, totalDays, duration_type || 'full_day', subject, description]
     );
 
     // Create notifications for tutor and admin
@@ -1246,6 +1592,44 @@ app.put('/leave-requests/:id/status', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Student not found' });
     }
     
+    // Get current user info to check permissions
+    const [userProfile] = await query('SELECT is_admin, is_tutor FROM users WHERE id = ?', [req.user.id]);
+    if (!userProfile) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    // Business rule: Tutors can only reject leave requests <= 2 days
+    // For > 2 days, tutors can only forward (not reject)
+    // Only admins can reject requests of any length
+    if (userProfile.is_tutor && !userProfile.is_admin && status === 'Rejected') {
+      if (originalRequest.total_days > 2) {
+        return res.status(403).json({ 
+          error: 'Tutors cannot reject leave requests longer than 2 days. You can only forward such requests to admin.' 
+        });
+      }
+    }
+    
+    // Date validation: Prevent retry or cancellation if end date has passed
+    const requestEndDate = new Date(originalRequest.end_date);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    requestEndDate.setHours(0, 0, 0, 0);
+    const dateHasPassed = today > requestEndDate;
+    
+    if (dateHasPassed) {
+      if (status === 'Retried' && originalRequest.status === 'Rejected') {
+        return res.status(400).json({ 
+          error: 'Cannot retry this request because the leave end date has already passed.' 
+        });
+      }
+      if (status === 'Cancellation Pending' && 
+          (originalRequest.status === 'Pending' || originalRequest.status === 'Approved' || originalRequest.status === 'Forwarded')) {
+        return res.status(400).json({ 
+          error: 'Cannot request cancellation because the leave end date has already passed.' 
+        });
+      }
+    }
+    
     let updateData = {
       status: status,
       cancel_reason: cancelReason || null
@@ -1301,8 +1685,17 @@ app.get('/od-requests', authenticateToken, async (req, res) => {
 // Create OD request with date validation
 app.post('/od-requests', authenticateToken, async (req, res) => {
   try {
-    const { startDate, endDate, totalDays, purpose, destination, description } = req.body;
+    const { startDate, endDate, totalDays, purpose, destination, description, duration_type } = req.body;
     const id = uuidv4();
+    
+    // Debug logging
+    console.log('🏢 OD Request Data:', {
+      startDate,
+      endDate,
+      totalDays,
+      duration_type,
+      purpose: purpose?.substring(0, 20) + '...'
+    });
 
     // Check for overlapping leave or OD requests
     const leaveOverlapCheck = await query(
@@ -1339,8 +1732,8 @@ app.post('/od-requests', authenticateToken, async (req, res) => {
     }
 
     await query(
-      'INSERT INTO od_requests (id, student_id, student_name, student_register_number, tutor_id, tutor_name, start_date, end_date, total_days, purpose, destination, description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [id, req.user.id, student.name, student.register_number, student.tutor_id, tutor.name, startDate, endDate, totalDays, purpose, destination, description]
+      'INSERT INTO od_requests (id, student_id, student_name, student_register_number, tutor_id, tutor_name, start_date, end_date, total_days, duration_type, purpose, destination, description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [id, req.user.id, student.name, student.register_number, student.tutor_id, tutor.name, startDate, endDate, totalDays, duration_type || 'full_day', purpose, destination, description]
     );
 
     // Create notifications for tutor and admin
@@ -1388,6 +1781,47 @@ app.put('/od-requests/:id/status', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     const { status, cancelReason } = req.body;
+    
+    // Get the original request to check current status
+    const [originalRequest] = await query('SELECT * FROM od_requests WHERE id = ?', [id]);
+    if (!originalRequest) {
+      return res.status(404).json({ error: 'OD request not found' });
+    }
+    
+    // Get current user info to check permissions
+    const [userProfile] = await query('SELECT is_admin, is_tutor FROM users WHERE id = ?', [req.user.id]);
+    if (!userProfile) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    // Business rule: Tutors cannot reject OD requests, they can only forward them
+    // Only admins can reject OD requests
+    if (userProfile.is_tutor && !userProfile.is_admin && status === 'Rejected') {
+      return res.status(403).json({ 
+        error: 'Tutors cannot reject OD requests. You can only forward OD requests to admin.' 
+      });
+    }
+    
+    // Date validation: Prevent retry or cancellation if end date has passed
+    const requestEndDate = new Date(originalRequest.end_date);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    requestEndDate.setHours(0, 0, 0, 0);
+    const dateHasPassed = today > requestEndDate;
+    
+    if (dateHasPassed) {
+      if (status === 'Retried' && originalRequest.status === 'Rejected') {
+        return res.status(400).json({ 
+          error: 'Cannot retry this request because the OD end date has already passed.' 
+        });
+      }
+      if (status === 'Cancellation Pending' && 
+          (originalRequest.status === 'Pending' || originalRequest.status === 'Approved' || originalRequest.status === 'Forwarded')) {
+        return res.status(400).json({ 
+          error: 'Cannot request cancellation because the OD end date has already passed.' 
+        });
+      }
+    }
     
     // Set upload deadline and certificate status only after the OD has ended
     let updateQuery = 'UPDATE od_requests SET status = ?, cancel_reason = ?';
@@ -1752,47 +2186,49 @@ async function processODCertificateReminders() {
   }
 }
 
-// Function to calculate dynamic leave taken based on unique calendar days
+// Enhanced function to calculate leave taken - properly handles half-day leaves
 async function calculateLeaveTaken(studentId) {
   try {
-    // Debug: Log all leave requests for this student
-    const allLeaves = await query(
-      `SELECT id, status, start_date, end_date, total_days, created_at
+    // Get all approved leave requests with duration type for proper calculation
+    const leaveRequests = await query(
+      `SELECT total_days, duration_type, start_date, end_date
        FROM leave_requests
-       WHERE student_id = ?
-       ORDER BY created_at DESC`,
+       WHERE student_id = ? AND status = 'Approved'
+       AND start_date <= CURDATE()`,
       [studentId]
     );
-    console.log(`Debug - All leave requests for student ${studentId}:`, allLeaves);
-
-    // Calculate unique calendar days on leave up to today
-    // This handles overlapping leave requests correctly by counting distinct days
-    const [uniqueLeaveDays] = await query(
-      `SELECT COUNT(DISTINCT leave_date) as leaveTaken
-       FROM (
-         SELECT DATE(start_date + INTERVAL (n.num) DAY) as leave_date
-         FROM leave_requests lr
-         CROSS JOIN (
-           SELECT 0 as num UNION SELECT 1 UNION SELECT 2 UNION SELECT 3 UNION SELECT 4 
-           UNION SELECT 5 UNION SELECT 6 UNION SELECT 7 UNION SELECT 8 UNION SELECT 9
-           UNION SELECT 10 UNION SELECT 11 UNION SELECT 12 UNION SELECT 13 UNION SELECT 14
-           UNION SELECT 15 UNION SELECT 16 UNION SELECT 17 UNION SELECT 18 UNION SELECT 19
-           UNION SELECT 20 UNION SELECT 21 UNION SELECT 22 UNION SELECT 23 UNION SELECT 24
-           UNION SELECT 25 UNION SELECT 26 UNION SELECT 27 UNION SELECT 28 UNION SELECT 29
-           UNION SELECT 30
-         ) n
-         WHERE lr.student_id = ?
-         AND lr.status = 'Approved'
-         AND DATE(start_date + INTERVAL (n.num) DAY) <= DATE(end_date)
-         AND DATE(start_date + INTERVAL (n.num) DAY) <= CURDATE()
-       ) unique_dates`
-    , [studentId]);
-
-    console.log(`Debug - Unique leave days for student ${studentId}: ${uniqueLeaveDays.leaveTaken} days`);
-    return uniqueLeaveDays.leaveTaken;
+    
+    let totalLeave = 0;
+    
+    for (const request of leaveRequests) {
+      let leaveDaysForThisRequest = 0;
+      
+      if (request.duration_type === 'half_day_forenoon' || request.duration_type === 'half_day_afternoon') {
+        // For half-day requests, calculate 0.5 days per day in the date range
+        const startDate = new Date(request.start_date);
+        const endDate = new Date(request.end_date);
+        const timeDifference = endDate.getTime() - startDate.getTime();
+        const daysDifference = Math.ceil(timeDifference / (1000 * 3600 * 24)) + 1;
+        leaveDaysForThisRequest = daysDifference * 0.5;
+      } else {
+        // For full-day requests, use total_days as is (should be integer)
+        leaveDaysForThisRequest = parseFloat(request.total_days) || 0;
+      }
+      
+      totalLeave += leaveDaysForThisRequest;
+    }
+    
+    // Only log in development mode to prevent console spam
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`Leave calculation for student ${studentId}: ${totalLeave} days (from ${leaveRequests.length} requests)`);
+    }
+    
+    // Return the total as a float, formatted to 1 decimal place
+    return Math.round(totalLeave * 10) / 10;
   } catch (error) {
-    console.error('Error calculating leave taken:', error);
-    throw error;
+    console.error('Error calculating leave taken for student', studentId, ':', error.message);
+    // Return 0 instead of throwing to prevent cascade failures
+    return 0;
   }
 }
 
@@ -2156,11 +2592,15 @@ app.get('/users/email-by-username/:username', async (req, res) => {
   }
 });
 
-// Login with username or email
+// Login with username or email with OTP VERIFICATION
 app.post('/auth/login', async (req, res) => {
   try {
     const { identifier, password } = req.body;
     let user;
+    
+    console.log(`🔐 === LOGIN ATTEMPT ===`);
+    console.log(`Identifier: ${identifier}`);
+    console.log(`IP: ${req.ip}`);
     
     // Check if identifier is email or username
     if (identifier.includes('@')) {
@@ -2175,8 +2615,11 @@ app.post('/auth/login', async (req, res) => {
     }
     
     if (!user || !await bcrypt.compare(password, user.password_hash)) {
+      console.log(`❌ Invalid credentials for: ${identifier}`);
       return res.status(401).json({ error: 'Invalid username or password' });
     }
+    
+    console.log(`✅ Credentials verified for user: ${user.id}`);
     
     // Invalidate all existing sessions for this user (single session enforcement)
     await invalidateUserSessions(user.id);
@@ -2184,17 +2627,100 @@ app.post('/auth/login', async (req, res) => {
     // Clean up expired sessions
     await cleanupExpiredSessions();
     
-    // Create new token and session
-    const token = jwt.sign({ id: user.id }, jwtSecret, { expiresIn: '24h' });
+    // Create new token and session (but OTP not verified yet)
+    const token = jwt.sign({ id: user.id, is_admin: user.is_admin, is_tutor: user.is_tutor }, jwtSecret, { expiresIn: '24h' });
     await createSession(user.id, token);
+    
+    // Reset OTP verification status for new login
+    const { default: otpManager } = await import('./utils/otpUtils.js');
+    await otpManager.resetOTPVerification(user.id);
+    
+    // Get user details for the email notification
+    let userName = user.email; // Default to email
+    if (user.is_admin || user.is_tutor) {
+      // For staff, get their name from staff table
+      try {
+        const [staff] = await query('SELECT name FROM staff WHERE id = ?', [user.id]);
+        if (staff) userName = staff.name;
+      } catch (staffError) {
+        console.warn('Could not get staff name:', staffError);
+      }
+    } else {
+      // For students, get their name from students table
+      try {
+        const [student] = await query('SELECT name FROM students WHERE id = ?', [user.id]);
+        if (student) userName = student.name;
+      } catch (studentError) {
+        console.warn('Could not get student name:', studentError);
+      }
+    }
+    
+    // Send login notification email (non-blocking)
+    setImmediate(async () => {
+      console.log('🔄 Starting login notification process...');
+      console.log('📧 Target email:', user.email);
+      console.log('👤 User name:', userName);
+      
+      try {
+        // Check environment variables are available
+        console.log('🔧 Environment check:');
+        console.log('   EMAIL_USER:', process.env.EMAIL_USER ? '✅ Set' : '❌ Missing');
+        console.log('   EMAIL_PASSWORD:', process.env.EMAIL_PASSWORD ? '✅ Set' : '❌ Missing');
+        
+        if (!process.env.EMAIL_USER || !process.env.EMAIL_PASSWORD) {
+          throw new Error('Email configuration missing - EMAIL_USER or EMAIL_PASSWORD not set');
+        }
+        
+        const loginDetails = {
+          ipAddress: req.ip || req.connection.remoteAddress || req.headers['x-forwarded-for'] || 'Unknown',
+          userAgent: req.headers['user-agent'] || 'Unknown'
+        };
+        
+        console.log('🌐 Login details:');
+        console.log('   IP Address:', loginDetails.ipAddress);
+        console.log('   User Agent:', loginDetails.userAgent.substring(0, 50) + '...');
+        
+        console.log('📨 Attempting to send email notification...');
+        const emailResult = await sendLoginNotification(user.email, userName, loginDetails);
+        
+        if (emailResult && emailResult.success) {
+          console.log('✅ Login notification email sent successfully!');
+          console.log('   Message ID:', emailResult.messageId);
+          console.log('   Sent to:', user.email);
+        } else {
+          console.error('❌ Email sending failed:', emailResult?.error || 'Unknown error');
+        }
+        
+      } catch (emailError) {
+        console.error('❌ DETAILED EMAIL ERROR:');
+        console.error('   Error message:', emailError.message);
+        console.error('   Error stack:', emailError.stack);
+        console.error('   Error code:', emailError.code);
+        
+        // Additional debugging info
+        if (emailError.code === 'EAUTH') {
+          console.error('🔐 AUTHENTICATION ERROR - Check Gmail app password!');
+        } else if (emailError.code === 'ECONNREFUSED') {
+          console.error('🔌 CONNECTION REFUSED - Check internet/firewall!');
+        } else if (emailError.code === 'ETIMEDOUT') {
+          console.error('⏰ TIMEOUT ERROR - Network/DNS issue!');
+        }
+        
+        // Don't block the login process if email fails
+      }
+    });
+    
+    console.log(`🔐 Login successful for user: ${user.id}, OTP verification required`);
+    console.log(`🔐 === LOGIN COMPLETE ===`);
     
     res.json({ 
       token, 
-      user: { id: user.id, email: user.email },
-      message: 'Login successful. Any previous sessions have been terminated.'
+      user: { id: user.id, email: user.email, userName: userName },
+      requiresOTP: true,
+      message: 'Login successful. Please complete OTP verification to access your account.'
     });
   } catch (error) {
-    console.error(error);
+    console.error('❌ Login error:', error);
     res.status(500).json({ error: 'Failed to login' });
   }
 });
@@ -2656,6 +3182,24 @@ app.get('/debug/student/:id/leave-calculation', authenticateToken, async (req, r
   }
 });
 
+// =====================================================================================
+// OTP VERIFICATION SYSTEM INTEGRATION
+// =====================================================================================
+// Import and setup OTP routes
+import otpAuthRoutes from './routes/otpAuth.js';
+import { requireOTPVerification } from './middleware/otpAuth.js';
+
+// OTP Authentication Routes (requires JWT but not OTP verification)
+app.use('/api/otp', otpAuthRoutes);
+
+// Apply OTP verification middleware to protected routes
+// Note: Update existing routes to use requireOTPVerification instead of authenticateToken
+// where OTP verification is required
+
+console.log('✅ OTP Verification System Integrated');
+console.log('📧 OTP routes available at: /api/otp/*');
+console.log('🔐 OTP verification required for protected routes');
+
 // Create test tutor endpoint
 app.post('/create-test-tutor', async (req, res) => {
   try {
@@ -2708,7 +3252,9 @@ app.post('/create-test-tutor', async (req, res) => {
 });
 
 // Start the server
-app.listen(port, () => {
-  console.log(`Server is running on http://localhost:${port}`);
+app.listen(port, host, () => {
+  console.log(`Server is running on http://${host}:${port}`);
+  console.log(`Production server available at http://210.212.246.131:${port}`);
+  console.log(`Server running on public IP: 210.212.246.131:${port}`);
 });
 

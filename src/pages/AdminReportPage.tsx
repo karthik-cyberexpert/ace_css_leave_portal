@@ -1,20 +1,14 @@
-import React, { useState, useMemo, useEffect } from 'react';
+﻿import React, { useState, useMemo, useEffect } from 'react';
 import { useBatchContext } from '@/context/BatchContext';
 import AdminLayout from '@/components/AdminLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { eachDayOfInterval, format, isWithinInterval, parseISO, startOfDay, endOfDay, subMonths } from 'date-fns';
+import { eachDayOfInterval, format, parseISO } from 'date-fns';
 import { DailyLeaveChart } from '@/components/DailyLeaveChart';
 import { useAppContext } from '@/context/AppContext';
-import { CalendarDays, X, Users, Clock, TrendingUp, Download, Calendar } from 'lucide-react';
+import { Download } from 'lucide-react';
 import { DateRangePicker } from '@/components/ui/date-range-picker';
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 import Papa from 'papaparse';
 
@@ -46,14 +40,12 @@ const AdminReportPage = () => {
   // Clear custom dates when changing batch/semester
   const handleBatchChange = (batch: string) => {
     setSelectedBatch(batch);
-    // Clear dates when changing batch
     setStartDate('');
     setEndDate('');
   };
   
   const handleSemesterChange = (semester: string) => {
     setSelectedSemester(semester);
-    // Clear dates when changing semester
     setStartDate('');
     setEndDate('');
   };
@@ -74,14 +66,9 @@ const AdminReportPage = () => {
     }
     
     const today = new Date();
-    let minDate: string;
-    let maxDate: string;
-    let prevSemesterEndDate: Date | null = null;
-    
     const startDate = new Date(range.start);
     startDate.setHours(0, 0, 0, 0);
     
-    // Update maxDate to today if it's beyond current date
     const calculatedMaxDate = today < new Date(range.end) ? today : new Date(range.end);
     return {
       minDate: startDate.toISOString().split('T')[0],
@@ -121,7 +108,6 @@ const AdminReportPage = () => {
 
   const semesters = useMemo(() => {
     if (selectedBatch === 'all') return ['all'];
-    // Show all 8 semesters for any selected batch
     const availableSemesters = [1, 2, 3, 4, 5, 6, 7, 8];
     return ['all', ...availableSemesters];
   }, [selectedBatch]);
@@ -144,54 +130,123 @@ const AdminReportPage = () => {
     }
   }, [selectedBatch, semesters, getSemesterDateRange]);
 
-  // Download functionality
-  const downloadReport = (format: 'xlsx' | 'csv' | 'pdf') => {
-    if (dailyChartData.length === 0) {
-      alert('No data available for download. Please select a batch and semester.');
-      return;
+  // Enhanced download functionality that works with all data scenarios
+  const downloadReport = (exportFormat: 'xlsx' | 'csv') => {
+    let dataToDownload = [];
+    let reportTitle = '';
+    let reportType = 'daily';
+
+    if (selectedBatch !== 'all') {
+      if (selectedSemester !== 'all' || (startDate && endDate)) {
+        if (dailyChartData.length > 0) {
+          dataToDownload = dailyChartData;
+        } else {
+          const { minDate: constraintMin, maxDate: constraintMax } = getDateConstraints();
+          let dateRange = { start: new Date(), end: new Date() };
+          
+          if (startDate && endDate) {
+            dateRange = { start: new Date(startDate), end: new Date(endDate) };
+          } else if (constraintMin && constraintMax) {
+            dateRange = { start: new Date(constraintMin), end: new Date(constraintMax) };
+          } else {
+            const now = new Date();
+            dateRange = { 
+              start: new Date(now.getFullYear(), now.getMonth(), 1),
+              end: now
+            };
+          }
+          
+          const days = eachDayOfInterval(dateRange);
+          dataToDownload = days.map(day => ({
+            date: format(day, 'MMM d'),
+            studentsOnLeave: 0,
+            studentsOnOD: 0
+          }));
+        }
+        
+        reportTitle = startDate && endDate 
+          ? `Daily Leave & OD Report for Batch ${selectedBatch}-${parseInt(selectedBatch) + 4} (${format(new Date(startDate), 'MMM d, yyyy')} - ${format(new Date(endDate), 'MMM d, yyyy')})`
+          : `Daily Leave & OD Report for Batch ${selectedBatch}-${parseInt(selectedBatch) + 4}, Semester ${selectedSemester}`;
+      } else {
+        const studentsInBatch = students.filter(s => s.batch === selectedBatch);
+        dataToDownload = studentsInBatch.map(student => {
+          const tutor = getTutors().find(t => t.id === student.tutor_id);
+          return {
+            'Student Name': student.name,
+            'Register Number': student.register_number,
+            'Batch': `${student.batch}-${parseInt(student.batch) + 4}`,
+            'Semester': student.semester,
+            'Tutor': tutor?.name || 'N/A',
+            'Total Leave Taken': student.leave_taken || 0,
+            'Phone': student.mobile || 'N/A',
+            'Email': student.email || 'N/A'
+          };
+        });
+        reportTitle = `Student Summary Report for Batch ${selectedBatch}-${parseInt(selectedBatch) + 4}`;
+        reportType = 'summary';
+      }
+    } else {
+      dataToDownload = students.map(student => {
+        const tutor = getTutors().find(t => t.id === student.tutor_id);
+        return {
+          'Student Name': student.name,
+          'Register Number': student.register_number,
+          'Batch': `${student.batch}-${parseInt(student.batch) + 4}`,
+          'Semester': student.semester,
+          'Tutor': tutor?.name || 'N/A',
+          'Total Leave Taken': student.leave_taken || 0,
+          'Phone': student.mobile || 'N/A',
+          'Email': student.email || 'N/A'
+        };
+      });
+      reportTitle = 'All Students Summary Report';
+      reportType = 'summary';
     }
 
-    const reportTitle = startDate && endDate 
-      ? `Daily Leave & OD Report for Batch ${selectedBatch}-${parseInt(selectedBatch) + 4} (${format(new Date(startDate), 'MMM d, yyyy')} - ${format(new Date(endDate), 'MMM d, yyyy')})`
-      : `Daily Leave & OD Report for Batch ${selectedBatch}-${parseInt(selectedBatch) + 4}, Semester ${selectedSemester}`;
+    if (dataToDownload.length === 0) {
+      if (reportType === 'daily') {
+        dataToDownload = [{
+          date: format(new Date(), 'MMM d'),
+          studentsOnLeave: 0,
+          studentsOnOD: 0
+        }];
+      } else {
+        dataToDownload = [{
+          'Student Name': 'No Data Available',
+          'Register Number': 'N/A',
+          'Batch': 'N/A',
+          'Semester': 'N/A',
+          'Tutor': 'N/A',
+          'Total Leave Taken': 0,
+          'Phone': 'N/A',
+          'Email': 'N/A'
+        }];
+      }
+    }
 
-    switch (format) {
+    const timestamp = format(new Date(), 'yyyy-MM-dd_HH-mm-ss');
+    const finalTitle = `${reportTitle}_${timestamp}`;
+
+    switch (exportFormat) {
       case 'xlsx':
-        const ws = XLSX.utils.json_to_sheet(dailyChartData);
+        const ws = XLSX.utils.json_to_sheet(dataToDownload);
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, 'Report');
-        XLSX.writeFile(wb, `${reportTitle}.xlsx`);
+        XLSX.writeFile(wb, `${finalTitle}.xlsx`);
         break;
 
       case 'csv':
-        const csv = Papa.unparse(dailyChartData);
+        const csv = Papa.unparse(dataToDownload);
         const csvBlob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
         const csvUrl = URL.createObjectURL(csvBlob);
         const csvLink = document.createElement('a');
         csvLink.setAttribute('href', csvUrl);
-        csvLink.setAttribute('download', `${reportTitle}.csv`);
+        csvLink.setAttribute('download', `${finalTitle}.csv`);
+        csvLink.style.display = 'none';
+        document.body.appendChild(csvLink);
         csvLink.click();
+        document.body.removeChild(csvLink);
         URL.revokeObjectURL(csvUrl);
-        break;
-
-      case 'pdf':
-        const doc = new jsPDF();
-        doc.setFontSize(16);
-        doc.text(reportTitle, 20, 20);
-        
-        const tableData = dailyChartData.map(item => [
-          item.date,
-          item.studentsOnLeave.toString(),
-          item.studentsOnOD.toString()
-        ]);
-        
-        (doc as any).autoTable({
-          head: [['Date', 'Students on Leave', 'Students on OD']],
-          body: tableData,
-          startY: 30,
-        });
-        
-        doc.save(`${reportTitle}.pdf`);
         break;
 
       default:
@@ -208,7 +263,6 @@ const AdminReportPage = () => {
         endDate
       });
       
-      // Check if we have valid filters
       if (selectedBatch === 'all') {
         addDebugInfo('chartData_result', 'No batch selected');
         return [];
@@ -217,17 +271,15 @@ const AdminReportPage = () => {
       let interval: { start: Date; end: Date } | null = null;
       
       if (startDate && endDate) {
-        // Use custom date range if both dates are provided
         const customStart = new Date(startDate);
         const customEnd = new Date(endDate);
-        customEnd.setHours(23, 59, 59, 999); // End of day
+        customEnd.setHours(23, 59, 59, 999);
         
         if (customStart <= customEnd) {
           interval = { start: customStart, end: customEnd };
           addDebugInfo('interval_custom', interval);
         }
       } else if (selectedSemester !== 'all') {
-        // Use semester date range as fallback
         const semester = parseInt(selectedSemester);
         const range = semesterDateRanges[semester];
         
@@ -255,7 +307,6 @@ const AdminReportPage = () => {
         return [];
       }
 
-      // Get students in the selected batch
       const studentsInBatch = students.filter(s => s.batch === selectedBatch);
       const batchStudentIds = new Set(studentsInBatch.map(s => s.id));
       
@@ -272,7 +323,6 @@ const AdminReportPage = () => {
         const studentsOnLeave = new Set<string>();
         const studentsOnOD = new Set<string>();
         
-        // Process leave requests
         leaveRequests.forEach(req => {
           if (req.status === 'Approved' && batchStudentIds.has(req.student_id)) {
             const leaveStart = parseISO(req.start_date);
@@ -293,7 +343,6 @@ const AdminReportPage = () => {
           }
         });
         
-        // Process OD requests
         odRequests.forEach(req => {
           if (req.status === 'Approved' && batchStudentIds.has(req.student_id)) {
             const odStart = parseISO(req.start_date);
@@ -329,67 +378,6 @@ const AdminReportPage = () => {
       return [];
     }
   }, [selectedBatch, selectedSemester, startDate, endDate, semesterDateRanges, leaveRequests, odRequests, students]);
-
-  // Get student status for current date
-  const getStudentStatusForDate = useMemo(() => {
-    if (selectedBatch === 'all' || selectedSemester === 'all') return [];
-
-    const studentsInBatch = students.filter(s => s.batch === selectedBatch);
-    const targetDate = new Date(currentDate);
-    targetDate.setHours(0, 0, 0, 0);
-
-    return studentsInBatch.map(student => {
-      let status = 'Present';
-      let requestType = '';
-      let requestId = '';
-
-      // Check leave requests
-      const leaveRequest = leaveRequests.find(req => {
-        if (req.student_id !== student.id || req.status !== 'Approved') return false;
-        
-        const leaveStart = new Date(req.start_date);
-        leaveStart.setHours(0, 0, 0, 0);
-        const leaveEnd = new Date(req.end_date);
-        leaveEnd.setHours(23, 59, 59, 999);
-        
-        return targetDate >= leaveStart && targetDate <= leaveEnd;
-      });
-
-      // Check OD requests
-      const odRequest = odRequests.find(req => {
-        if (req.student_id !== student.id || req.status !== 'Approved') return false;
-        
-        const odStart = new Date(req.start_date);
-        odStart.setHours(0, 0, 0, 0);
-        const odEnd = new Date(req.end_date);
-        odEnd.setHours(23, 59, 59, 999);
-        
-        return targetDate >= odStart && targetDate <= odEnd;
-      });
-
-      if (leaveRequest) {
-        status = 'On Leave';
-        requestType = 'Leave';
-        requestId = leaveRequest.id;
-      } else if (odRequest) {
-        status = 'On OD';
-        requestType = 'OD';
-        requestId = odRequest.id;
-      }
-
-      // Get tutor name
-      const tutor = tutors.find(t => t.id === student.tutor_id);
-
-      return {
-        ...student,
-        status,
-        requestType,
-        requestId,
-        tutorName: tutor?.name || 'N/A'
-      };
-    }).filter(student => student.status !== 'Present'); // Only show absent/OD students
-  }, [selectedBatch, selectedSemester, currentDate, students, leaveRequests, odRequests, tutors]);
-
 
   return (
     <AdminLayout>
@@ -447,23 +435,17 @@ const AdminReportPage = () => {
           )}
         </div>
         
-        {/* Download buttons - separate row */}
-        {selectedBatch !== 'all' && selectedSemester !== 'all' && (
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" size="sm" onClick={() => downloadReport('xlsx')}>
-              <Download className="h-4 w-4 mr-2" />
-              Download XLSX
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => downloadReport('csv')}>
-              <Download className="h-4 w-4 mr-2" />
-              Download CSV
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => downloadReport('pdf')}>
-              <Download className="h-4 w-4 mr-2" />
-              Download PDF
-            </Button>
-          </div>
-        )}
+        {/* Download buttons - always available */}
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" size="sm" onClick={() => downloadReport('xlsx')}>
+            <Download className="h-4 w-4 mr-2" />
+            Download XLSX
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => downloadReport('csv')}>
+            <Download className="h-4 w-4 mr-2" />
+            Download CSV
+          </Button>
+        </div>
         
         {selectedBatch !== 'all' && selectedSemester !== 'all' ? (
           <DailyLeaveChart 
@@ -487,54 +469,7 @@ const AdminReportPage = () => {
             </CardHeader>
           </Card>
         )}
-        
-        {/* Student Status Table */}
-        {selectedBatch !== 'all' && selectedSemester !== 'all' && getStudentStatusForDate.length > 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Student Status for {format(new Date(currentDate), 'MMMM d, yyyy')}</CardTitle>
-              <CardDescription>
-                View current leave and OD status for students in Batch {selectedBatch}-{parseInt(selectedBatch) + 4}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Student Name</TableHead>
-                      <TableHead>Register Number</TableHead>
-                      <TableHead className="text-center">Batch</TableHead>
-                      <TableHead className="text-center">Semester</TableHead>
-                      <TableHead>Tutor Name</TableHead>
-                      <TableHead className="text-center">Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {getStudentStatusForDate.map((student) => (
-                      <TableRow key={student.id} className="transition-colors hover:bg-muted/50">
-                        <TableCell className="font-medium">{student.name}</TableCell>
-                        <TableCell>{student.register_number}</TableCell>
-                        <TableCell className="text-center">{student.batch}-{parseInt(student.batch) + 4}</TableCell>
-                        <TableCell className="text-center">{student.semester}</TableCell>
-                        <TableCell>{student.tutorName}</TableCell>
-                        <TableCell className="text-center">
-                          <Badge 
-                            variant={student.status === 'Present' ? 'default' : student.status === 'On Leave' ? 'destructive' : 'secondary'}
-                          >
-                            {student.status}
-                          </Badge>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
-        )}
       </div>
-
     </AdminLayout>
   );
 };

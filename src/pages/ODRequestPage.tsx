@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { DatePicker } from '@/components/ui/datepicker';
 import { showSuccess } from '@/utils/toast';
 import Layout from '@/components/Layout';
@@ -21,6 +22,9 @@ const odRequestSchema = z.object({
   }),
   endDate: z.date({
     required_error: "An end date is required.",
+  }),
+  durationType: z.enum(['full_day', 'half_day_forenoon', 'half_day_afternoon'], {
+    required_error: "Please select an OD duration type.",
   }),
   purpose: z.string().min(5, "Purpose must be at least 5 characters long.").max(100, "Purpose must be 100 characters or less."),
   destination: z.string().min(3, "Place to Visit must be at least 3 characters long.").max(100, "Place to Visit must be 100 characters or less."),
@@ -58,6 +62,7 @@ const ODRequestPage = () => {
   const form = useForm<ODRequestFormValues>({
     resolver: zodResolver(odRequestSchema),
     defaultValues: {
+      durationType: 'full_day',
       purpose: '',
       destination: '',
       description: '',
@@ -66,23 +71,40 @@ const ODRequestPage = () => {
 
   const startDate = form.watch('startDate');
   const endDate = form.watch('endDate');
+  const durationType = form.watch('durationType');
 
   useEffect(() => {
     if (startDate && endDate && endDate >= startDate) {
+      // Calculate total calendar days first
       let days = differenceInCalendarDays(endDate, startDate) + 1;
-      let currentDate = startDate;
-      while (currentDate <= endDate) {
-        if (currentDate.getDay() === 0) {
-          days--;
+      
+      // Subtract Sundays (weekends) from the count
+      let currentDate = new Date(startDate);
+      let sundayCount = 0;
+      
+      for (let i = 0; i < days; i++) {
+        if (currentDate.getDay() === 0) { // Sunday = 0
+          sundayCount++;
         }
-        currentDate = new Date(currentDate);
         currentDate.setDate(currentDate.getDate() + 1);
       }
-      setTotalDays(days);
+      
+      // Working days = total days - sundays
+      const workingDays = days - sundayCount;
+      
+      // Apply duration type calculation
+      if (durationType === 'half_day_forenoon' || durationType === 'half_day_afternoon') {
+        // Half-day calculation: working days * 0.5
+        const halfDayTotal = workingDays * 0.5;
+        setTotalDays(halfDayTotal);
+      } else {
+        // Full day calculation: use working days as-is
+        setTotalDays(workingDays);
+      }
     } else {
       setTotalDays(0);
     }
-  }, [startDate, endDate]);
+  }, [startDate, endDate, durationType]);
 
   const onSubmit = async (data: ODRequestFormValues) => {
     setIsSubmitting(true);
@@ -93,6 +115,7 @@ const ODRequestPage = () => {
       start_date: format(data.startDate, 'yyyy-MM-dd'),
       end_date: format(data.endDate, 'yyyy-MM-dd'),
       total_days: totalDays,
+      duration_type: data.durationType,
     };
     try {
       await addODRequest(requestData as any);
@@ -149,15 +172,43 @@ const ODRequestPage = () => {
                 />
               </div>
 
+              <FormField
+                control={form.control}
+                name="durationType"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>OD Duration Type</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select OD duration type" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="full_day">Full Day</SelectItem>
+                        <SelectItem value="half_day_forenoon">Half Day (Forenoon)</SelectItem>
+                        <SelectItem value="half_day_afternoon">Half Day (Afternoon)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
               <div className="space-y-2">
                 <FormLabel htmlFor="totalDays">Total Number of Days</FormLabel>
                 <Input
                   id="totalDays"
-                  type="number"
-                  value={totalDays}
+                  type="text"
+                  value={totalDays === 0.5 ? '0.5' : totalDays.toString()}
                   readOnly
-                  className="bg-gray-100 dark:bg-black text-white cursor-not-allowed"
+                  className="bg-gray-100 dark:bg-black text-black dark:text-white cursor-not-allowed"
                 />
+                <p className="text-sm text-muted-foreground">
+                  {durationType === 'half_day_forenoon' && 'Half day OD (Forenoon: 9:00 AM to 1:00 PM)'}
+                  {durationType === 'half_day_afternoon' && 'Half day OD (Afternoon: 1:00 PM to 5:00 PM)'}
+                  {durationType === 'full_day' && 'Full day OD (9:00 AM to 5:00 PM)'}
+                </p>
               </div>
 
               <FormField

@@ -87,7 +87,7 @@ const TutorStudentManagementPage = () => {
                     <TableCell>{student.register_number}</TableCell>
                     <TableCell className="text-center">{student.batch}-{parseInt(student.batch) + 4}</TableCell>
                     <TableCell className="text-center">{student.semester}</TableCell>
-                    <TableCell className="text-right">{student.leave_taken}</TableCell>
+                    <TableCell className="text-right">{typeof student.leave_taken === 'number' ? student.leave_taken.toFixed(1) : student.leave_taken}</TableCell>
                     <TableCell className="text-right space-x-2">
                       <Button variant="outline" size="icon" onClick={() => handleEdit(student)} className="transition-transform hover:scale-110 hover:bg-accent">
                         <Pencil className="h-4 w-4" />

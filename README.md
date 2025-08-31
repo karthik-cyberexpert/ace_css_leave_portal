@@ -102,12 +102,12 @@ A comprehensive leave management system for educational institutions, enabling s
    npm run dev-full
    
    # Or start individually
-   npm run server    # Backend only (port 3002)
+   npm run server    # Backend only (port 3009)
    ```
 
 6. **Access the Application**
-   - Frontend: http://localhost:8080
-   - Backend API: http://localhost:3002
+   - Frontend: http://localhost:8085
+   - Backend API: http://localhost:3009
 
 ### Default Admin Account
 - **Username**: admin

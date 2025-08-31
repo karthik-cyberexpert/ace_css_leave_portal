@@ -1,5 +1,5 @@
 import React from 'react';
-import { useNavigate, useLocation } from 'react-router-dom'; // Import useLocation
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAppContext } from '@/context/AppContext';
 
 interface ProtectedRouteProps {
@@ -8,35 +8,20 @@ interface ProtectedRouteProps {
 }
 
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles }) => {
-  const { profile, loading, role } = useAppContext(); // `loading` now refers to `loadingInitial`
+  const { profile, loading, role } = useAppContext();
   const navigate = useNavigate();
-  const location = useLocation(); // Get current location
+  const location = useLocation();
 
+  // Handle authentication redirect
   React.useEffect(() => {
-    // Only redirect if not already on login page and not loading, and no profile
     if (!loading && !profile && location.pathname !== '/login' && location.pathname !== '/') {
       navigate('/login');
     }
   }, [loading, profile, navigate, location.pathname]);
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p>Loading...</p>
-      </div>
-    );
-  }
-
-  // If not loading, but still no profile or role, it means authentication failed or user is not logged in.
-  // The useEffect above should handle redirecting to login.
-  // This block ensures that if for some reason we are here without a profile after loading, we don't render children.
-  if (!profile || !role) {
-    return null; 
-  }
-
-  if (allowedRoles && !allowedRoles.includes(role)) {
-    // Redirect to the appropriate dashboard if the role is mismatched
-    React.useEffect(() => {
+  // Handle role-based redirect - moved outside conditional block
+  React.useEffect(() => {
+    if (!loading && profile && role && allowedRoles && !allowedRoles.includes(role)) {
       switch (role) {
         case 'Student':
           if (location.pathname !== '/dashboard') {
@@ -56,9 +41,25 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles 
         default:
           navigate('/login');
       }
-    }, [role, navigate, location.pathname]);
-    
-    return null; // Return null while redirecting
+    }
+  }, [loading, profile, role, allowedRoles, location.pathname, navigate]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p>Loading...</p>
+      </div>
+    );
+  }
+
+  // If not loading, but still no profile or role, don't render children
+  if (!profile || !role) {
+    return null; 
+  }
+
+  // If role is not allowed, don't render children while redirecting
+  if (allowedRoles && !allowedRoles.includes(role)) {
+    return null;
   }
 
   return <>{children}</>;

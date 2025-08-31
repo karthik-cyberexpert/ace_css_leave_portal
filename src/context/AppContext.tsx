@@ -4,8 +4,8 @@ import { format, addDays, isBefore, parseISO, differenceInDays } from 'date-fns'
 import { showError, showSuccess } from '@/utils/toast';
 import apiClient from '@/utils/apiClient';
 
-// API Client Configuration
-const API_BASE_URL = 'http://localhost:3002';
+// API Client Configuration - Production Ready (Public IP Only)
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://210.212.246.131:3009';
 
 type Session = {
   access_token: string;
@@ -142,6 +142,14 @@ export type NewStudentData = {
   password?: string;
 };
 
+// --- SESSION MANAGEMENT ---
+interface SessionManager {
+  lastActivity: number;
+  timeoutId: NodeJS.Timeout | null;
+  isActive: boolean;
+  INACTIVITY_TIMEOUT: number; // 15 minutes in milliseconds
+}
+
 // --- CONTEXT DEFINITION ---
 interface IAppContext {
   session: Session | null;
@@ -149,6 +157,7 @@ interface IAppContext {
   profile: Profile | null;
   role: 'Admin' | 'Tutor' | 'Student' | null;
   loading: boolean;
+  sessionManager: SessionManager;
   students: Student[]; // All students (including inactive) - for reports
   activeStudents: Student[]; // Only active students - for general use
   staff: Staff[];
@@ -199,6 +208,14 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loadingInitial, setLoadingInitial] = useState(true);
+  
+  // Session management state
+  const [sessionManager, setSessionManager] = useState<SessionManager>({
+    lastActivity: Date.now(),
+    timeoutId: null,
+    isActive: true,
+    INACTIVITY_TIMEOUT: 15 * 60 * 1000 // 15 minutes in milliseconds
+  });
 
   const [students, setStudents] = useState<Student[]>([]);
   const [staff, setStaff] = useState<Staff[]>([]);
@@ -306,7 +323,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       }
       console.error('Polling error:', error);
     }
-  }, [lastFetchTime]);
+  }, [lastFetchTime]); // Include lastFetchTime but ensure it doesn't cause circular updates
 
   // Fetch data based on user profile and role (initial load)
   const fetchDataForProfile = useCallback(async (userProfile: Profile) => {
@@ -443,14 +460,18 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     if (profile && session) {
       // Start polling every 10 seconds for real-time updates
       const interval = setInterval(() => {
-        pollData(profile, true); // Silent polling
+        if (profile) { // Double-check profile exists
+          pollData(profile, true); // Silent polling
+        }
       }, 10000); // 10 seconds
       
       setPollingInterval(interval);
       
       // Also poll when the user focuses on the window
       const handleFocus = () => {
-        pollData(profile, true);
+        if (profile) { // Double-check profile exists
+          pollData(profile, true);
+        }
       };
       
       window.addEventListener('focus', handleFocus);
@@ -466,7 +487,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         setPollingInterval(null);
       }
     }
-  }, [profile, session, pollData]); // Removed pollingInterval from dependencies
+  }, [profile, session]); // Only depend on profile and session, not pollData
 
   useEffect(() => {
     const initializeSessionAndData = async () => {
@@ -932,6 +953,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       }
     } catch (error: any) {
       showError(`Failed to update status: ${error.response?.data?.error || error.message}`);
+      throw error; // Re-throw so UI can handle the error
     }
   };
 
@@ -980,6 +1002,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       setLeaveRequests(prev => prev.map(req => req.id === id ? response.data : req));
     } catch (error: any) {
       showError(`Failed to process cancellation: ${error.response?.data?.error || error.message}`);
+      throw error; // Re-throw so UI can handle the error
     }
   };
 
@@ -1027,6 +1050,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       }
     } catch (error: any) {
       showError(`Failed to update status: ${error.response?.data?.error || error.message}`);
+      throw error; // Re-throw so UI can handle the error
     }
   };
 
@@ -1051,6 +1075,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       setODRequests(prev => prev.map(req => req.id === id ? response.data : req));
     } catch (error: any) {
       showError(`Failed to process cancellation: ${error.response?.data?.error || error.message}`);
+      throw error; // Re-throw so UI can handle the error
     }
   };
 
@@ -1289,6 +1314,11 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         const profileResponse = await apiClient.get('/profile');
         setProfile(profileResponse.data);
       }
+      
+      // Force a complete data refresh to ensure changes are visible to all users (especially admins)
+      if (profile) {
+        await pollData(profile, false); // Use pollData instead of fetchDataForProfile to avoid circular dependency
+      }
     } catch (error: any) {
       showError(`Failed to update profile: ${error.response?.data?.error || error.message}`);
       throw error;
@@ -1327,6 +1357,11 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         // Update profile state
         const profileResponse = await apiClient.get('/profile');
         setProfile(profileResponse.data);
+        
+        // Force a complete data refresh to ensure changes are visible to all users (especially admins)
+        if (profile) {
+          await pollData(profile, false); // Use pollData instead of fetchDataForProfile to avoid circular dependency
+        }
       }
     } catch (error: any) {
       showError(`Failed to update profile: ${error.response?.data?.error || error.message}`);
@@ -1426,8 +1461,167 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [profile, pollData]);
 
+  // Session Management Functions
+  const resetInactivityTimer = useCallback(() => {
+    console.log('Resetting inactivity timer');
+    
+    setSessionManager(prev => {
+      // Clear existing timeout
+      if (prev.timeoutId) {
+        clearTimeout(prev.timeoutId);
+      }
+      
+      // Set new timeout for 15 minutes
+      const timeoutId = setTimeout(async () => {
+        console.log('Session expired due to inactivity');
+        showError('Session expired due to inactivity. Please log in again.');
+          try {
+            await apiClient.post('/auth/logout');
+            localStorage.removeItem('auth_token');
+            localStorage.removeItem('user_profile');
+            setSession(null);
+            setUser(null);
+            setProfile(null);
+            setStudents([]);
+            setStaff([]);
+            setLeaveRequests([]);
+            setODRequests([]);
+            setProfileChangeRequests([]);
+            setCurrentUser(null);
+            setCurrentTutor(null);
+            showSuccess('Logged out successfully due to inactivity!');
+          } catch (error) {
+            console.error('Logout API call failed:', error);
+            // Clear local storage anyway
+            localStorage.removeItem('auth_token');
+            localStorage.removeItem('user_profile');
+            window.location.reload();
+          }
+      }, prev.INACTIVITY_TIMEOUT);
+      
+      return {
+        ...prev,
+        lastActivity: Date.now(),
+        timeoutId: timeoutId,
+        isActive: true
+      };
+    });
+  }, []); // Remove handleLogout dependency to prevent infinite loop
+
+  const updateActivity = useCallback(() => {
+    setSessionManager(prev => {
+      const now = Date.now();
+      const timeSinceLastActivity = now - prev.lastActivity;
+      
+      // Only reset timer if more than 5 seconds has passed (to avoid excessive timer resets)
+      if (timeSinceLastActivity > 5000) {
+        // Clear existing timeout and reset it
+        if (prev.timeoutId) {
+          clearTimeout(prev.timeoutId);
+        }
+        
+        const timeoutId = setTimeout(async () => {
+          console.log('Session expired due to inactivity');
+          showError('Session expired due to inactivity. Please log in again.');
+          try {
+            await apiClient.post('/auth/logout');
+            localStorage.removeItem('auth_token');
+            localStorage.removeItem('user_profile');
+            setSession(null);
+            setUser(null);
+            setProfile(null);
+            setStudents([]);
+            setStaff([]);
+            setLeaveRequests([]);
+            setODRequests([]);
+            setProfileChangeRequests([]);
+            setCurrentUser(null);
+            setCurrentTutor(null);
+            showSuccess('Logged out successfully due to inactivity!');
+          } catch (error) {
+            console.error('Logout API call failed:', error);
+            // Clear local storage anyway
+            localStorage.removeItem('auth_token');
+            localStorage.removeItem('user_profile');
+            window.location.reload();
+          }
+        }, prev.INACTIVITY_TIMEOUT);
+        
+        return {
+          ...prev,
+          lastActivity: now,
+          timeoutId: timeoutId,
+          isActive: true
+        };
+      }
+      
+      return prev; // No change needed
+    });
+  }, []); // Remove handleLogout dependency to prevent infinite loop
+
+  // Session management effects
+  useEffect(() => {
+    if (!session) {
+      // Clear timeout when logged out
+      if (sessionManager.timeoutId) {
+        clearTimeout(sessionManager.timeoutId);
+        setSessionManager(prev => ({ ...prev, timeoutId: null, isActive: false }));
+      }
+      return;
+    }
+
+    // Start session timeout when logged in
+    resetInactivityTimer();
+
+    // Activity detection events
+    const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart', 'click'];
+    
+    events.forEach(event => {
+      document.addEventListener(event, updateActivity, { passive: true });
+    });
+
+    // Page visibility change detection
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        console.log('Page became visible, updating activity');
+        updateActivity();
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    // Note: Removed beforeunload handler to prevent logout on page refresh
+    // Session will persist across page reloads and be handled by the inactivity timer
+
+    // Cleanup function
+    return () => {
+      events.forEach(event => {
+        document.removeEventListener(event, updateActivity);
+      });
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      
+      if (sessionManager.timeoutId) {
+        clearTimeout(sessionManager.timeoutId);
+      }
+    };
+  }, [session]); // Only depend on session to prevent infinite loop
+
+  // Auto-logout on tab close or browser close
+  useEffect(() => {
+    const handleUnload = () => {
+      if (session) {
+        // Clear local session data
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('user_profile');
+      }
+    };
+
+    window.addEventListener('unload', handleUnload);
+    return () => window.removeEventListener('unload', handleUnload);
+  }, [session]);
+
   const value = {
-    session, user, profile, role, loading: loadingInitial,
+    session, user, profile, role, loading: loadingInitial, sessionManager,
     students, activeStudents, staff, leaveRequests, odRequests, profileChangeRequests, currentUser, currentTutor,
     handleLogin, handleLogout,
     addStudent, updateStudent, deleteStudent, bulkAddStudents,
@@ -1451,3 +1645,4 @@ export const useAppContext = () => {
   }
   return context;
 };
+

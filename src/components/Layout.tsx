@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { LayoutDashboard, FileText, Briefcase, ClipboardList, UserCircle, Menu, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -10,6 +10,7 @@ import { Notifications } from '@/components/Notifications';
 import { useAppContext } from '@/context/AppContext';
 import { ThemeToggle } from './theme-toggle';
 import { getBestProfilePicture } from '@/utils/gravatar';
+import Footer from './Footer';
 
 const sidebarNavItems = [
   {
@@ -47,7 +48,6 @@ const sidebarNavItems = [
 const SidebarContent = ({ isMobile = false }: { isMobile?: boolean }) => {
   const location = useLocation();
   const { currentUser } = useAppContext();
-  const LinkComponent = isMobile ? SheetClose : React.Fragment;
   const isUserActive = currentUser?.is_active ?? true;
 
   // Get the best profile picture URL (handles custom uploads and Gravatar)
@@ -73,33 +73,39 @@ const SidebarContent = ({ isMobile = false }: { isMobile?: boolean }) => {
       <nav className="flex flex-col space-y-2">
         {sidebarNavItems.map((item) => {
           const isDisabled = !isUserActive && !item.allowInactive;
-          return (
-            <LinkComponent key={item.href} asChild={!isDisabled}>
-              {isDisabled ? (
-                <Button
-                  variant="ghost"
-                  className="justify-start text-sidebar-foreground opacity-50 cursor-not-allowed"
-                  disabled
-                >
-                  <item.icon className="mr-3 h-5 w-5" />
-                  {item.title}
-                </Button>
-              ) : (
-                <Button
-                  variant="ghost"
-                  className={cn(
-                    "justify-start text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors duration-200",
-                    location.pathname === item.href && "bg-sidebar-accent text-sidebar-accent-foreground"
-                  )}
-                  asChild
-                >
-                  <Link to={item.href} className="flex items-center w-full">
-                    <item.icon className="mr-3 h-5 w-5" />
-                    {item.title}
-                  </Link>
-                </Button>
+          const buttonContent = isDisabled ? (
+            <Button
+              variant="ghost"
+              className="justify-start text-sidebar-foreground opacity-50 cursor-not-allowed"
+              disabled
+            >
+              <item.icon className="mr-3 h-5 w-5" />
+              {item.title}
+            </Button>
+          ) : (
+            <Button
+              variant="ghost"
+              className={cn(
+                "justify-start text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors duration-200",
+                location.pathname === item.href && "bg-sidebar-accent text-sidebar-accent-foreground"
               )}
-            </LinkComponent>
+              asChild
+            >
+              <Link to={item.href} className="flex items-center w-full">
+                <item.icon className="mr-3 h-5 w-5" />
+                {item.title}
+              </Link>
+            </Button>
+          );
+
+          return isMobile ? (
+            <SheetClose key={item.href} asChild={!isDisabled}>
+              {buttonContent}
+            </SheetClose>
+          ) : (
+            <React.Fragment key={item.href}>
+              {buttonContent}
+            </React.Fragment>
           );
         })}
       </nav>
@@ -150,6 +156,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
         <main className="flex-1 p-4 sm:p-6 md:p-8 overflow-auto">
           {children}
         </main>
+        <Footer />
       </div>
     </div>
   );

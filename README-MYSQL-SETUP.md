@@ -68,7 +68,7 @@ npm run dev
 
 ## API Endpoints
 
-The backend server runs on `http://localhost:3002` and provides the following endpoints:
+The backend server runs on `http://localhost:3009` and provides the following endpoints:
 
 - `GET /test-db` - Test database connection
 
@@ -112,7 +112,7 @@ The application uses the following main tables:
 
 ## Troubleshooting
 
-1. **Port 3002 in use**: Change the port in `backend/server.js`
+1. **port 3009 in use**: Change the port in `backend/server.js`
 2. **Database connection failed**: Check MySQL credentials in `backend/config/database.js`
 3. **CORS issues**: Backend includes CORS middleware for local development
 4. **Migration errors**: Ensure you have proper MySQL permissions for CREATE and ALTER operations

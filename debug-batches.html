@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Batch API Debug</title>
+</head>
+<body>
+    <h1>Batch API Debug</h1>
+    <button onclick="testBatchAPI()">Test Batch API</button>
+    <div id="result"></div>
+    
+    <script>
+        async function testBatchAPI() {
+            const resultDiv = document.getElementById('result');
+            
+            try {
+                // Get auth token from localStorage (assuming it exists)
+                const token = localStorage.getItem('auth_token');
+                console.log('Auth token:', token ? 'Present' : 'Missing');
+                
+                if (!token) {
+                    resultDiv.innerHTML = '<p style="color: red;">No auth token found in localStorage. Please login first.</p>';
+                    return;
+                }
+                
+                // Test batch API
+                const response = await fetch('http://localhost:3009/batches', {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                console.log('Response status:', response.status);
+                console.log('Response headers:', response.headers);
+                
+                if (response.ok) {
+                    const batches = await response.json();
+                    console.log('Batches:', batches);
+                    resultDiv.innerHTML = `
+                        <h3>Success! Found ${batches.length} batches:</h3>
+                        <pre>${JSON.stringify(batches, null, 2)}</pre>
+                    `;
+                } else {
+                    const errorText = await response.text();
+                    console.error('Error response:', errorText);
+                    resultDiv.innerHTML = `
+                        <h3 style="color: red;">Error ${response.status}:</h3>
+                        <pre>${errorText}</pre>
+                    `;
+                }
+            } catch (error) {
+                console.error('Network error:', error);
+                resultDiv.innerHTML = `
+                    <h3 style="color: red;">Network Error:</h3>
+                    <pre>${error.message}</pre>
+                `;
+            }
+        }
+    </script>
+</body>
+</html>

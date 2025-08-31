@@ -10,6 +10,7 @@ import { Notifications } from '@/components/Notifications';
 import { useAppContext } from '@/context/AppContext';
 import { ThemeToggle } from './theme-toggle';
 import { getBestProfilePicture } from '@/utils/gravatar';
+import Footer from './Footer';
 
 const sidebarNavItems = [
   { title: "Dashboard", href: "/admin-dashboard", icon: LayoutDashboard },
@@ -25,7 +26,6 @@ const sidebarNavItems = [
 const SidebarContent = ({ isMobile = false }: { isMobile?: boolean }) => {
   const location = useLocation();
   const { profile, user } = useAppContext();
-  const LinkComponent = isMobile ? SheetClose : React.Fragment;
 
   const displayName = (profile?.first_name && profile?.last_name) 
     ? `${profile.first_name} ${profile.last_name}` 
@@ -34,35 +34,54 @@ const SidebarContent = ({ isMobile = false }: { isMobile?: boolean }) => {
   // Use getBestProfilePicture to get either custom image or Gravatar fallback
   const avatarSrc = getBestProfilePicture(profile?.profile_photo, user?.email);
 
+  const profileLink = (
+    <Link to="/admin-profile" className="flex items-center space-x-3 p-4 mb-6 hover:bg-sidebar-accent rounded-lg transition-colors">
+      <Avatar className="h-10 w-10">
+        <AvatarImage src={avatarSrc} alt="Admin" />
+        <AvatarFallback><Shield className="h-6 w-6" /></AvatarFallback>
+      </Avatar>
+      <span className="font-semibold text-lg text-foreground">{displayName}</span>
+    </Link>
+  );
+
   return (
     <>
-      <Link to="/admin-profile" className="flex items-center space-x-3 p-4 mb-6 hover:bg-sidebar-accent rounded-lg transition-colors">
-        <Avatar className="h-10 w-10">
-          <AvatarImage src={avatarSrc} alt="Admin" />
-          <AvatarFallback><Shield className="h-6 w-6" /></AvatarFallback>
-        </Avatar>
-        <span className="font-semibold text-lg text-foreground">{displayName}</span>
-      </Link>
+      {isMobile ? (
+        <SheetClose asChild>
+          {profileLink}
+        </SheetClose>
+      ) : (
+        profileLink
+      )}
       <Separator className="bg-sidebar-border mb-6" />
       <nav className="flex flex-col space-y-2">
         {sidebarNavItems.map((item) => {
-          return (
-            <LinkComponent key={item.href} {...(isMobile ? { asChild: true } : {})}>
-              <Button
-                variant="ghost"
-                className={cn(
-                  "justify-start text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors duration-200",
-                  location.pathname === item.href && "bg-sidebar-accent text-sidebar-accent-foreground"
-                )}
-                asChild
-              >
-                <Link to={item.href} className="flex items-center w-full">
-                  <item.icon className="mr-3 h-5 w-5" />
-                  {item.title}
-                </Link>
-              </Button>
-            </LinkComponent>
+          const buttonElement = (
+            <Button
+              key={item.href}
+              variant="ghost"
+              className={cn(
+                "justify-start text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors duration-200",
+                location.pathname === item.href && "bg-sidebar-accent text-sidebar-accent-foreground"
+              )}
+              asChild
+            >
+              <Link to={item.href} className="flex items-center w-full">
+                <item.icon className="mr-3 h-5 w-5" />
+                {item.title}
+              </Link>
+            </Button>
           );
+
+          if (isMobile) {
+            return (
+              <SheetClose key={item.href} asChild>
+                {buttonElement}
+              </SheetClose>
+            );
+          }
+
+          return buttonElement;
         })}
       </nav>
     </>
@@ -91,7 +110,7 @@ const AdminLayout = ({ children }: { children: React.ReactNode }) => {
               <SheetTrigger asChild>
                 <Button variant="outline" size="icon"><Menu className="h-6 w-6" /></Button>
               </SheetTrigger>
-              <SheetContent side="left" className="w-64 bg-sidebar text-sidebar-foreground border-r-0 p-0">
+              <SheetContent side="left" className="w-64 bg-sidebar text-sidebar-foreground border-r-0 p-4">
                 <SidebarContent isMobile />
               </SheetContent>
             </Sheet>
@@ -112,6 +131,7 @@ const AdminLayout = ({ children }: { children: React.ReactNode }) => {
         <main className="flex-1 p-4 sm:p-6 md:p-8 overflow-auto">
           {children}
         </main>
+        <Footer />
       </div>
     </div>
   );

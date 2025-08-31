@@ -10,6 +10,7 @@ import { Notifications } from '@/components/Notifications';
 import { useAppContext } from '@/context/AppContext';
 import { ThemeToggle } from './theme-toggle';
 import { getBestProfilePicture } from '@/utils/gravatar';
+import Footer from './Footer';
 
 const sidebarNavItems = [
   { title: "Dashboard", href: "/tutor-dashboard", icon: LayoutDashboard },
@@ -113,6 +114,7 @@ const TutorLayout = ({ children }: { children: React.ReactNode }) => {
         <main className="flex-1 p-4 sm:p-6 md:p-8 overflow-auto">
           {children}
         </main>
+        <Footer />
       </div>
     </div>
   );
