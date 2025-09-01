@@ -18,7 +18,9 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
-import { showSuccess } from '@/utils/toast';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import { showSuccess, showError } from '@/utils/toast';
 import { cn } from '@/lib/utils';
 import { useAppContext, LeaveRequest, RequestStatus } from '@/context/AppContext';
 import { format, parseISO } from 'date-fns';
@@ -26,6 +28,8 @@ import { format, parseISO } from 'date-fns';
 const TutorLeaveApprovePage = () => {
   const { leaveRequests, updateLeaveRequestStatus, currentTutor, approveRejectLeaveCancellation, students } = useAppContext();
   const [selectedRequest, setSelectedRequest] = useState<LeaveRequest | null>(null);
+  const [rejectionReason, setRejectionReason] = useState('');
+  const [showRejectionInput, setShowRejectionInput] = useState(false);
 
   const tutorLeaveRequests = useMemo(() => {
     return leaveRequests.filter(req => req.tutor_id === currentTutor?.id);
@@ -38,13 +42,31 @@ const TutorLeaveApprovePage = () => {
 
   const handleRequestAction = async (id: string, newStatus: RequestStatus) => {
     try {
-      await updateLeaveRequestStatus(id, newStatus);
+      if (newStatus === 'Rejected') {
+        await updateLeaveRequestStatus(id, newStatus, rejectionReason);
+      } else {
+        await updateLeaveRequestStatus(id, newStatus);
+      }
       showSuccess(`Request has been ${newStatus.toLowerCase()}!`);
       setSelectedRequest(null); // Close the dialog
+      setRejectionReason('');
+      setShowRejectionInput(false);
     } catch (error: any) {
       console.error('Error updating request status:', error);
       // Don't close dialog on error so user can see what happened
     }
+  };
+
+  const handleRejectClick = () => {
+    setShowRejectionInput(true);
+  };
+
+  const handleRejectionSubmit = () => {
+    if (!rejectionReason.trim()) {
+      showError('Please provide a reason for rejection.');
+      return;
+    }
+    handleRequestAction(selectedRequest!.id, 'Rejected');
   };
 
   const handleCancellationAction = async (id: string, approve: boolean) => {
@@ -178,7 +200,13 @@ const TutorLeaveApprovePage = () => {
         </CardContent>
       </Card>
 
-      <Dialog open={!!selectedRequest && (selectedRequest.status === 'Pending' || selectedRequest.status === 'Retried' || selectedRequest.status === 'Cancellation Pending')} onOpenChange={(isOpen) => !isOpen && setSelectedRequest(null)}>
+      <Dialog open={!!selectedRequest && (selectedRequest.status === 'Pending' || selectedRequest.status === 'Retried' || selectedRequest.status === 'Cancellation Pending')} onOpenChange={(isOpen) => {
+        if (!isOpen) {
+          setSelectedRequest(null);
+          setRejectionReason('');
+          setShowRejectionInput(false);
+        }
+      }}>
         <DialogContent className="sm:max-w-[425px]">
           {selectedRequest && (
             <>
@@ -217,6 +245,19 @@ const TutorLeaveApprovePage = () => {
                     <p>{selectedRequest.cancel_reason}</p>
                   </div>
                 )}
+                {showRejectionInput && (
+                  <div className="space-y-2">
+                    <Label htmlFor="rejection-reason">Reason for Rejection*</Label>
+                    <Textarea 
+                      id="rejection-reason" 
+                      placeholder="Please provide a reason for rejecting this request..." 
+                      value={rejectionReason} 
+                      onChange={(e) => setRejectionReason(e.target.value)} 
+                      rows={3} 
+                      className="resize-none"
+                    />
+                  </div>
+                )}
               </div>
               <DialogFooter className="flex-col-reverse sm:flex-row sm:justify-between sm:space-x-2">
                 <Button variant="outline" onClick={() => setSelectedRequest(null)}>
@@ -253,18 +294,41 @@ const TutorLeaveApprovePage = () => {
                     </>
                   ) : (
                     <>
-                      <Button
-                        variant="destructive"
-                        onClick={() => handleRequestAction(selectedRequest.id, 'Rejected')}
-                      >
-                        Reject
-                      </Button>
-                      <Button
-                        className="bg-green-500 hover:bg-green-600 text-white"
-                        onClick={() => handleRequestAction(selectedRequest.id, 'Approved')}
-                      >
-                        Approve
-                      </Button>
+                      {showRejectionInput ? (
+                        <>
+                          <Button
+                            variant="outline"
+                            onClick={() => {
+                              setShowRejectionInput(false);
+                              setRejectionReason('');
+                            }}
+                          >
+                            Cancel Rejection
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            onClick={handleRejectionSubmit}
+                            disabled={!rejectionReason.trim()}
+                          >
+                            Confirm Rejection
+                          </Button>
+                        </>
+                      ) : (
+                        <>
+                          <Button
+                            variant="destructive"
+                            onClick={handleRejectClick}
+                          >
+                            Reject
+                          </Button>
+                          <Button
+                            className="bg-green-500 hover:bg-green-600 text-white"
+                            onClick={() => handleRequestAction(selectedRequest.id, 'Approved')}
+                          >
+                            Approve
+                          </Button>
+                        </>
+                      )}
                     </>
                   )}
                 </div>

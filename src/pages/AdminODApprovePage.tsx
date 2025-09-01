@@ -5,7 +5,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { CertificateViewer } from '@/components/CertificateViewer';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { showSuccess } from '@/utils/toast';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import { showSuccess, showError } from '@/utils/toast';
 import { useAppContext, ODRequest, RequestStatus, CertificateStatus } from '@/context/AppContext';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
@@ -17,11 +19,46 @@ const AdminODApprovePage = () => {
   const [selectedRequest, setSelectedRequest] = useState<ODRequest | null>(null);
   const [verifyRequest, setVerifyRequest] = useState<ODRequest | null>(null);
   const [viewCertificate, setViewCertificate] = useState<string | null>(null);
+  const [rejectionReason, setRejectionReason] = useState('');
+  const [showRejectionInput, setShowRejectionInput] = useState(false);
+  const [isRevocation, setIsRevocation] = useState(false);
+  const [certRejectionReason, setCertRejectionReason] = useState('');
+  const [showCertRejectionInput, setShowCertRejectionInput] = useState(false);
 
   const handleRequestAction = async (id: string, newStatus: 'Approved' | 'Rejected') => {
-    await updateODRequestStatus(id, newStatus);
-    showSuccess(`Request has been ${newStatus.toLowerCase()}!`);
-    setSelectedRequest(null);
+    try {
+      if (newStatus === 'Rejected') {
+        await updateODRequestStatus(id, newStatus, rejectionReason);
+      } else {
+        await updateODRequestStatus(id, newStatus);
+      }
+      showSuccess(`Request has been ${newStatus.toLowerCase()}!`);
+      setSelectedRequest(null);
+      setRejectionReason('');
+      setShowRejectionInput(false);
+      setIsRevocation(false);
+    } catch (error: any) {
+      console.error('Error updating request status:', error);
+      // Don't close dialog on error so user can see what happened
+    }
+  };
+
+  const handleRejectClick = () => {
+    setIsRevocation(false);
+    setShowRejectionInput(true);
+  };
+
+  const handleRevokeClick = () => {
+    setIsRevocation(true);
+    setShowRejectionInput(true);
+  };
+
+  const handleRejectionSubmit = () => {
+    if (!rejectionReason.trim()) {
+      showError(`Please provide a reason for ${isRevocation ? 'revocation' : 'rejection'}.`);
+      return;
+    }
+    handleRequestAction(selectedRequest!.id, 'Rejected');
   };
 
   const handleCancellationAction = async (id: string, approve: boolean) => {
@@ -39,6 +76,20 @@ const AdminODApprovePage = () => {
     verifyODCertificate(verifyRequest.id, isApproved);
     showSuccess(`Certificate has been ${isApproved ? 'approved' : 'rejected'}.`);
     setVerifyRequest(null);
+    setCertRejectionReason('');
+    setShowCertRejectionInput(false);
+  };
+
+  const handleCertRejectClick = () => {
+    setShowCertRejectionInput(true);
+  };
+
+  const handleCertRejectionSubmit = () => {
+    if (!certRejectionReason.trim()) {
+      showError('Please provide a reason for rejecting the certificate.');
+      return;
+    }
+    handleVerification(false);
   };
 
   const getStatusBadge = (status: RequestStatus, certStatus?: CertificateStatus) => {
@@ -169,7 +220,10 @@ onClick={() => setViewCertificate(request.certificate_url!)}
                         <Button 
                           variant="destructive" 
                           size="sm" 
-                          onClick={() => handleRequestAction(request.id, 'Rejected')}
+                          onClick={() => {
+                            setSelectedRequest(request);
+                            handleRevokeClick();
+                          }}
                         >
                           Revoke
                         </Button>
@@ -192,7 +246,14 @@ onClick={() => setViewCertificate(request.certificate_url!)}
       </Card>
 
       {/* Review Dialog */}
-      <Dialog open={!!selectedRequest} onOpenChange={(isOpen) => !isOpen && setSelectedRequest(null)}>
+      <Dialog open={!!selectedRequest} onOpenChange={(isOpen) => {
+        if (!isOpen) {
+          setSelectedRequest(null);
+          setRejectionReason('');
+          setShowRejectionInput(false);
+          setIsRevocation(false);
+        }
+      }}>
         <DialogContent>
           {selectedRequest && (
             <>
@@ -233,17 +294,55 @@ onClick={() => setViewCertificate(request.certificate_url!)}
                     <p>{selectedRequest.cancel_reason}</p>
                   </div>
                 )}
+                {showRejectionInput && (
+                  <div className="space-y-2">
+                    <Label htmlFor="rejection-reason">Reason for {isRevocation ? 'Revocation' : 'Rejection'}*</Label>
+                    <Textarea 
+                      id="rejection-reason" 
+                      placeholder={`Please provide a reason for ${isRevocation ? 'revoking this approved request' : 'rejecting this request'}...`}
+                      value={rejectionReason} 
+                      onChange={(e) => setRejectionReason(e.target.value)} 
+                      rows={3} 
+                      className="resize-none"
+                    />
+                  </div>
+                )}
               </div>
               <DialogFooter>
-                <Button variant="outline" onClick={() => setSelectedRequest(null)}>Cancel</Button>
+                <Button variant="outline" onClick={() => {
+                  setSelectedRequest(null);
+                  setRejectionReason('');
+                  setShowRejectionInput(false);
+                  setIsRevocation(false);
+                }}>Cancel</Button>
                 {selectedRequest.status === 'Cancellation Pending' ? (
                   <>
                     <Button variant="destructive" onClick={() => handleCancellationAction(selectedRequest.id, false)}>Reject Cancellation</Button>
                     <Button className="bg-green-500 hover:bg-green-600 text-white" onClick={() => handleCancellationAction(selectedRequest.id, true)}>Approve Cancellation</Button>
                   </>
+                ) : showRejectionInput ? (
+                  <>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setShowRejectionInput(false);
+                        setRejectionReason('');
+                        setIsRevocation(false);
+                      }}
+                    >
+                      Cancel {isRevocation ? 'Revocation' : 'Rejection'}
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      onClick={handleRejectionSubmit}
+                      disabled={!rejectionReason.trim()}
+                    >
+                      Confirm {isRevocation ? 'Revocation' : 'Rejection'}
+                    </Button>
+                  </>
                 ) : (
                   <>
-                    <Button variant="destructive" onClick={() => handleRequestAction(selectedRequest.id, 'Rejected')}>Reject</Button>
+                    <Button variant="destructive" onClick={handleRejectClick}>Reject</Button>
                     <Button className="bg-green-500 hover:bg-green-600 text-white" onClick={() => handleRequestAction(selectedRequest.id, 'Approved')}>Approve</Button>
                   </>
                 )}
@@ -254,7 +353,13 @@ onClick={() => setViewCertificate(request.certificate_url!)}
       </Dialog>
 
       {/* Verification Dialog */}
-      <Dialog open={!!verifyRequest} onOpenChange={(isOpen) => !isOpen && setVerifyRequest(null)}>
+      <Dialog open={!!verifyRequest} onOpenChange={(isOpen) => {
+        if (!isOpen) {
+          setVerifyRequest(null);
+          setCertRejectionReason('');
+          setShowCertRejectionInput(false);
+        }
+      }}>
         <DialogContent>
           {verifyRequest && (
             <>
@@ -279,11 +384,51 @@ onClick={() => setViewCertificate(verifyRequest.certificate_url!)}
                 ) : (
                   <p className="text-sm text-red-600">No certificate uploaded yet.</p>
                 )}
+                {showCertRejectionInput && (
+                  <div className="space-y-2">
+                    <Label htmlFor="cert-rejection-reason">Reason for Certificate Rejection*</Label>
+                    <Textarea 
+                      id="cert-rejection-reason" 
+                      placeholder="Please provide a reason for rejecting this certificate..." 
+                      value={certRejectionReason} 
+                      onChange={(e) => setCertRejectionReason(e.target.value)} 
+                      rows={3} 
+                      className="resize-none"
+                    />
+                  </div>
+                )}
               </div>
               <DialogFooter>
-                <Button variant="outline" onClick={() => setVerifyRequest(null)}>Cancel</Button>
-                <Button variant="destructive" onClick={() => handleVerification(false)}>Reject</Button>
-                <Button onClick={() => handleVerification(true)}>Approve</Button>
+                <Button variant="outline" onClick={() => {
+                  setVerifyRequest(null);
+                  setCertRejectionReason('');
+                  setShowCertRejectionInput(false);
+                }}>Cancel</Button>
+                {showCertRejectionInput ? (
+                  <>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setShowCertRejectionInput(false);
+                        setCertRejectionReason('');
+                      }}
+                    >
+                      Cancel Rejection
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      onClick={handleCertRejectionSubmit}
+                      disabled={!certRejectionReason.trim()}
+                    >
+                      Confirm Rejection
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button variant="destructive" onClick={handleCertRejectClick}>Reject</Button>
+                    <Button onClick={() => handleVerification(true)}>Approve</Button>
+                  </>
+                )}
               </DialogFooter>
             </>
           )}

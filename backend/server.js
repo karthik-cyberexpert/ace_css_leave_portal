@@ -522,22 +522,59 @@ app.get('/api/reports/data', express.json(), authenticateToken, async (req, res)
           });
         }
       } else {
-        // Generate summary report data
+        // Generate detailed summary report data with actual leave and OD counts
         const tutorsQuery = 'SELECT id, name FROM users WHERE is_tutor = 1';
         const tutors = await query(tutorsQuery);
         const tutorsMap = new Map(tutors.map(t => [t.id, t.name]));
 
-        reportData = students.map(student => ({
-          studentId: student.id,
-          studentName: student.student_name || student.name,
-          registerNumber: student.register_number,
-          batch: student.batch,
-          semester: student.semester,
-          tutorName: tutorsMap.get(student.tutor_id) || 'N/A',
-          totalLeaveTaken: student.leave_taken || 0,
-          email: student.email || 'N/A',
-          phone: student.phone || 'N/A'
+        // Calculate detailed data for each student
+        const detailedReportData = await Promise.all(students.map(async (student) => {
+          // Calculate total approved leave days for this student
+          const leaveCountQuery = `
+            SELECT 
+              COUNT(*) as total_leave_requests,
+              COALESCE(SUM(
+                CASE 
+                  WHEN duration_type IN ('half_day_forenoon', 'half_day_afternoon') 
+                  THEN DATEDIFF(end_date, start_date) + 1 * 0.5
+                  ELSE total_days
+                END
+              ), 0) as total_leave_days
+            FROM leave_requests
+            WHERE student_id = ? AND status = 'Approved'
+          `;
+          const [leaveResult] = await query(leaveCountQuery, [student.id]);
+
+          // Calculate total approved OD days for this student
+          const odCountQuery = `
+            SELECT 
+              COUNT(*) as total_od_requests,
+              COALESCE(SUM(
+                CASE 
+                  WHEN duration_type IN ('half_day_forenoon', 'half_day_afternoon') 
+                  THEN DATEDIFF(end_date, start_date) + 1 * 0.5
+                  ELSE total_days
+                END
+              ), 0) as total_od_days
+            FROM od_requests
+            WHERE student_id = ? AND status = 'Approved'
+          `;
+          const [odResult] = await query(odCountQuery, [student.id]);
+
+          return {
+            'Name': student.student_name || student.name,
+            'Register Number': student.register_number,
+            'Batch': `${student.batch}-${parseInt(student.batch) + 4}`,
+            'Semester': student.semester,
+            'Total Leave Count': parseFloat(leaveResult.total_leave_days || 0).toFixed(1),
+            'Total OD Count': parseFloat(odResult.total_od_days || 0).toFixed(1),
+            'Tutor': tutorsMap.get(student.tutor_id) || 'N/A',
+            'Email': student.email || 'N/A',
+            'Phone': student.phone || 'N/A'
+          };
         }));
+
+        reportData = detailedReportData;
       }
     }
 
@@ -1598,6 +1635,15 @@ app.put('/leave-requests/:id/status', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
     
+    // Enforce rejection reason for admin/tutor rejections
+    if (status === 'Rejected' && (userProfile.is_admin || userProfile.is_tutor)) {
+      if (!cancelReason || !cancelReason.trim()) {
+        return res.status(400).json({ 
+          error: 'Rejection reason is required when rejecting requests.' 
+        });
+      }
+    }
+
     // Business rule: Tutors can only reject leave requests <= 2 days
     // For > 2 days, tutors can only forward (not reject)
     // Only admins can reject requests of any length
@@ -1794,6 +1840,15 @@ app.put('/od-requests/:id/status', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
     
+    // Enforce rejection reason for admin rejections (tutors can't reject OD requests)
+    if (status === 'Rejected' && userProfile.is_admin) {
+      if (!cancelReason || !cancelReason.trim()) {
+        return res.status(400).json({ 
+          error: 'Rejection reason is required when rejecting requests.' 
+        });
+      }
+    }
+
     // Business rule: Tutors cannot reject OD requests, they can only forward them
     // Only admins can reject OD requests
     if (userProfile.is_tutor && !userProfile.is_admin && status === 'Rejected') {

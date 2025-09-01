@@ -5,7 +5,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { CertificateViewer } from '@/components/CertificateViewer';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { showSuccess } from '@/utils/toast';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import { showSuccess, showError } from '@/utils/toast';
 import { cn } from '@/lib/utils';
 import { useAppContext, ODRequest, RequestStatus, CertificateStatus } from '@/context/AppContext';
 import { Badge } from '@/components/ui/badge';
@@ -17,6 +19,8 @@ const TutorODApprovePage = () => {
   const [selectedRequest, setSelectedRequest] = useState<ODRequest | null>(null);
   const [verifyRequest, setVerifyRequest] = useState<ODRequest | null>(null);
   const [viewCertificate, setViewCertificate] = useState<string | null>(null);
+  const [certRejectionReason, setCertRejectionReason] = useState('');
+  const [showCertRejectionInput, setShowCertRejectionInput] = useState(false);
 
   const tutorODRequests = useMemo(() => {
     return odRequests.filter(req => req.tutor_id === currentTutor.id);
@@ -54,10 +58,24 @@ const TutorODApprovePage = () => {
       await verifyODCertificate(verifyRequest.id, isApproved);
       showSuccess(`Certificate has been ${isApproved ? 'approved' : 'rejected'}.`);
       setVerifyRequest(null);
+      setCertRejectionReason('');
+      setShowCertRejectionInput(false);
     } catch (error: any) {
       console.error('Error verifying certificate:', error);
       // Don't close dialog on error so user can see what happened
     }
+  };
+
+  const handleCertRejectClick = () => {
+    setShowCertRejectionInput(true);
+  };
+
+  const handleCertRejectionSubmit = () => {
+    if (!certRejectionReason.trim()) {
+      showError('Please provide a reason for rejecting the certificate.');
+      return;
+    }
+    handleVerification(false);
   };
 
   // Auto-clear selectedRequest if its status becomes non-actionable
@@ -255,7 +273,13 @@ onClick={() => setViewCertificate(request.certificate_url!)}
       </Dialog>
 
       {/* Verification Dialog */}
-      <Dialog open={!!verifyRequest} onOpenChange={(isOpen) => !isOpen && setVerifyRequest(null)}>
+      <Dialog open={!!verifyRequest} onOpenChange={(isOpen) => {
+        if (!isOpen) {
+          setVerifyRequest(null);
+          setCertRejectionReason('');
+          setShowCertRejectionInput(false);
+        }
+      }}>
         <DialogContent>
           {verifyRequest && (
             <>
@@ -280,11 +304,51 @@ onClick={() => setViewCertificate(verifyRequest.certificate_url!)}
                 ) : (
                   <p className="text-sm text-red-600">No certificate uploaded yet.</p>
                 )}
+                {showCertRejectionInput && (
+                  <div className="space-y-2">
+                    <Label htmlFor="cert-rejection-reason">Reason for Certificate Rejection*</Label>
+                    <Textarea 
+                      id="cert-rejection-reason" 
+                      placeholder="Please provide a reason for rejecting this certificate..." 
+                      value={certRejectionReason} 
+                      onChange={(e) => setCertRejectionReason(e.target.value)} 
+                      rows={3} 
+                      className="resize-none"
+                    />
+                  </div>
+                )}
               </div>
               <DialogFooter>
-                <Button variant="outline" onClick={() => setVerifyRequest(null)}>Cancel</Button>
-                <Button variant="destructive" onClick={() => handleVerification(false)}>Reject</Button>
-                <Button onClick={() => handleVerification(true)}>Approve</Button>
+                <Button variant="outline" onClick={() => {
+                  setVerifyRequest(null);
+                  setCertRejectionReason('');
+                  setShowCertRejectionInput(false);
+                }}>Cancel</Button>
+                {showCertRejectionInput ? (
+                  <>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setShowCertRejectionInput(false);
+                        setCertRejectionReason('');
+                      }}
+                    >
+                      Cancel Rejection
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      onClick={handleCertRejectionSubmit}
+                      disabled={!certRejectionReason.trim()}
+                    >
+                      Confirm Rejection
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button variant="destructive" onClick={handleCertRejectClick}>Reject</Button>
+                    <Button onClick={() => handleVerification(true)}>Approve</Button>
+                  </>
+                )}
               </DialogFooter>
             </>
           )}

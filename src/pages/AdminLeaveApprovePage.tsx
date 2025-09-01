@@ -4,7 +4,9 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { showSuccess } from '@/utils/toast';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import { showSuccess, showError } from '@/utils/toast';
 import { cn } from '@/lib/utils';
 import { useAppContext, LeaveRequest, RequestStatus } from '@/context/AppContext';
 import { format, parseISO, differenceInDays } from 'date-fns';
@@ -12,11 +14,44 @@ import { format, parseISO, differenceInDays } from 'date-fns';
 const AdminLeaveApprovePage = () => {
   const { leaveRequests, updateLeaveRequestStatus, approveRejectLeaveCancellation, students } = useAppContext();
   const [selectedRequest, setSelectedRequest] = useState<LeaveRequest | null>(null);
+  const [rejectionReason, setRejectionReason] = useState('');
+  const [showRejectionInput, setShowRejectionInput] = useState(false);
+  const [isRevocation, setIsRevocation] = useState(false);
 
   const handleRequestAction = async (id: string, newStatus: 'Approved' | 'Rejected') => {
-    await updateLeaveRequestStatus(id, newStatus);
-    showSuccess(`Request has been ${newStatus.toLowerCase()}!`);
-    setSelectedRequest(null);
+    try {
+      if (newStatus === 'Rejected') {
+        await updateLeaveRequestStatus(id, newStatus, rejectionReason);
+      } else {
+        await updateLeaveRequestStatus(id, newStatus);
+      }
+      showSuccess(`Request has been ${newStatus.toLowerCase()}!`);
+      setSelectedRequest(null);
+      setRejectionReason('');
+      setShowRejectionInput(false);
+      setIsRevocation(false);
+    } catch (error: any) {
+      console.error('Error updating request status:', error);
+      // Don't close dialog on error so user can see what happened
+    }
+  };
+
+  const handleRejectClick = () => {
+    setIsRevocation(false);
+    setShowRejectionInput(true);
+  };
+
+  const handleRevokeClick = () => {
+    setIsRevocation(true);
+    setShowRejectionInput(true);
+  };
+
+  const handleRejectionSubmit = () => {
+    if (!rejectionReason.trim()) {
+      showError(`Please provide a reason for ${isRevocation ? 'revocation' : 'rejection'}.`);
+      return;
+    }
+    handleRequestAction(selectedRequest!.id, 'Rejected');
   };
 
   const handleCancellationAction = async (id: string, approve: boolean) => {
@@ -138,7 +173,10 @@ const AdminLeaveApprovePage = () => {
                         <Button 
                           variant="destructive" 
                           size="sm" 
-                          onClick={() => handleRequestAction(request.id, 'Rejected')}
+                          onClick={() => {
+                            setSelectedRequest(request);
+                            handleRevokeClick();
+                          }}
                         >
                           Revoke
                         </Button>
@@ -159,7 +197,14 @@ const AdminLeaveApprovePage = () => {
         </CardContent>
       </Card>
 
-      <Dialog open={!!selectedRequest} onOpenChange={(isOpen) => !isOpen && setSelectedRequest(null)}>
+      <Dialog open={!!selectedRequest} onOpenChange={(isOpen) => {
+        if (!isOpen) {
+          setSelectedRequest(null);
+          setRejectionReason('');
+          setShowRejectionInput(false);
+          setIsRevocation(false);
+        }
+      }}>
         <DialogContent>
           {selectedRequest && (
             <>
@@ -196,17 +241,55 @@ const AdminLeaveApprovePage = () => {
                     <p>{selectedRequest.cancel_reason}</p>
                   </div>
                 )}
+                {showRejectionInput && (
+                  <div className="space-y-2">
+                    <Label htmlFor="rejection-reason">Reason for {isRevocation ? 'Revocation' : 'Rejection'}*</Label>
+                    <Textarea 
+                      id="rejection-reason" 
+                      placeholder={`Please provide a reason for ${isRevocation ? 'revoking this approved request' : 'rejecting this request'}...`}
+                      value={rejectionReason} 
+                      onChange={(e) => setRejectionReason(e.target.value)} 
+                      rows={3} 
+                      className="resize-none"
+                    />
+                  </div>
+                )}
               </div>
               <DialogFooter>
-                <Button variant="outline" onClick={() => setSelectedRequest(null)}>Cancel</Button>
+                <Button variant="outline" onClick={() => {
+                  setSelectedRequest(null);
+                  setRejectionReason('');
+                  setShowRejectionInput(false);
+                  setIsRevocation(false);
+                }}>Cancel</Button>
                 {selectedRequest.status === 'Cancellation Pending' ? (
                   <>
                     <Button variant="destructive" onClick={() => handleCancellationAction(selectedRequest.id, false)}>Reject Cancellation</Button>
                     <Button className="bg-green-500 hover:bg-green-600 text-white" onClick={() => handleCancellationAction(selectedRequest.id, true)}>Approve Cancellation</Button>
                   </>
+                ) : showRejectionInput ? (
+                  <>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setShowRejectionInput(false);
+                        setRejectionReason('');
+                        setIsRevocation(false);
+                      }}
+                    >
+                      Cancel {isRevocation ? 'Revocation' : 'Rejection'}
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      onClick={handleRejectionSubmit}
+                      disabled={!rejectionReason.trim()}
+                    >
+                      Confirm {isRevocation ? 'Revocation' : 'Rejection'}
+                    </Button>
+                  </>
                 ) : (
                   <>
-                    <Button variant="destructive" onClick={() => handleRequestAction(selectedRequest.id, 'Rejected')}>Reject</Button>
+                    <Button variant="destructive" onClick={handleRejectClick}>Reject</Button>
                     <Button className="bg-green-500 hover:bg-green-600 text-white" onClick={() => handleRequestAction(selectedRequest.id, 'Approved')}>Approve</Button>
                   </>
                 )}

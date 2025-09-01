@@ -138,13 +138,15 @@ export class EnhancedReportGenerator {
       }));
     }
 
-    // Default summary structure
+    // Enhanced default summary structure with detailed columns
     return [{
-      'Student Name': 'No Data Available',
+      'Name': 'No Data Available',
       'Register Number': 'N/A',
       'Batch': filters.batch || 'N/A',
       'Semester': filters.semester || 'N/A',
-      'Total Leave Taken': 0,
+      'Total Leave Count': '0.0',
+      'Total OD Count': '0.0',
+      'Tutor': 'N/A',
       'Email': 'N/A',
       'Phone': 'N/A'
     }];

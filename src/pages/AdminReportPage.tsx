@@ -131,97 +131,110 @@ const AdminReportPage = () => {
   }, [selectedBatch, semesters, getSemesterDateRange]);
 
   // Enhanced download functionality that works with all data scenarios
-  const downloadReport = (exportFormat: 'xlsx' | 'csv') => {
+  const downloadReport = async (exportFormat: 'xlsx' | 'csv') => {
     let dataToDownload = [];
     let reportTitle = '';
-    let reportType = 'daily';
+    let reportType = 'summary'; // Default to summary for detailed student reports
 
-    if (selectedBatch !== 'all') {
-      if (selectedSemester !== 'all' || (startDate && endDate)) {
-        if (dailyChartData.length > 0) {
-          dataToDownload = dailyChartData;
-        } else {
-          const { minDate: constraintMin, maxDate: constraintMax } = getDateConstraints();
-          let dateRange = { start: new Date(), end: new Date() };
-          
-          if (startDate && endDate) {
-            dateRange = { start: new Date(startDate), end: new Date(endDate) };
-          } else if (constraintMin && constraintMax) {
-            dateRange = { start: new Date(constraintMin), end: new Date(constraintMax) };
-          } else {
-            const now = new Date();
-            dateRange = { 
-              start: new Date(now.getFullYear(), now.getMonth(), 1),
-              end: now
-            };
-          }
-          
-          const days = eachDayOfInterval(dateRange);
-          dataToDownload = days.map(day => ({
-            date: format(day, 'MMM d'),
-            studentsOnLeave: 0,
-            studentsOnOD: 0
-          }));
-        }
-        
-        reportTitle = startDate && endDate 
-          ? `Daily Leave & OD Report for Batch ${selectedBatch}-${parseInt(selectedBatch) + 4} (${format(new Date(startDate), 'MMM d, yyyy')} - ${format(new Date(endDate), 'MMM d, yyyy')})`
-          : `Daily Leave & OD Report for Batch ${selectedBatch}-${parseInt(selectedBatch) + 4}, Semester ${selectedSemester}`;
-      } else {
-        const studentsInBatch = students.filter(s => s.batch === selectedBatch);
-        dataToDownload = studentsInBatch.map(student => {
-          const tutor = getTutors().find(t => t.id === student.tutor_id);
-          return {
-            'Student Name': student.name,
-            'Register Number': student.register_number,
-            'Batch': `${student.batch}-${parseInt(student.batch) + 4}`,
-            'Semester': student.semester,
-            'Tutor': tutor?.name || 'N/A',
-            'Total Leave Taken': student.leave_taken || 0,
-            'Phone': student.mobile || 'N/A',
-            'Email': student.email || 'N/A'
-          };
-        });
-        reportTitle = `Student Summary Report for Batch ${selectedBatch}-${parseInt(selectedBatch) + 4}`;
-        reportType = 'summary';
-      }
-    } else {
-      dataToDownload = students.map(student => {
+    try {
+      // Always generate detailed student reports with leave and OD counts
+      const studentsInBatch = selectedBatch !== 'all' 
+        ? students.filter(s => s.batch === selectedBatch)
+        : students;
+
+      // Calculate detailed data for each student including leave and OD counts
+      dataToDownload = await Promise.all(studentsInBatch.map(async (student) => {
         const tutor = getTutors().find(t => t.id === student.tutor_id);
+        
+        // Calculate total leave count for this student
+        const studentLeaveRequests = leaveRequests.filter(
+          req => req.student_id === student.id && req.status === 'Approved'
+        );
+        const totalLeaveCount = studentLeaveRequests.reduce((total, req) => {
+          // Handle half-day leaves properly
+          if (req.duration_type === 'half_day_forenoon' || req.duration_type === 'half_day_afternoon') {
+            const startDate = new Date(req.start_date);
+            const endDate = new Date(req.end_date);
+            const daysDiff = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+            return total + (daysDiff * 0.5);
+          }
+          return total + (parseFloat(req.total_days) || 0);
+        }, 0);
+
+        // Calculate total OD count for this student
+        const studentODRequests = odRequests.filter(
+          req => req.student_id === student.id && req.status === 'Approved'
+        );
+        const totalODCount = studentODRequests.reduce((total, req) => {
+          // Handle half-day ODs properly
+          if (req.duration_type === 'half_day_forenoon' || req.duration_type === 'half_day_afternoon') {
+            const startDate = new Date(req.start_date);
+            const endDate = new Date(req.end_date);
+            const daysDiff = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+            return total + (daysDiff * 0.5);
+          }
+          return total + (parseFloat(req.total_days) || 0);
+        }, 0);
+
         return {
-          'Student Name': student.name,
+          'Name': student.name,
           'Register Number': student.register_number,
           'Batch': `${student.batch}-${parseInt(student.batch) + 4}`,
           'Semester': student.semester,
+          'Total Leave Count': totalLeaveCount.toFixed(1),
+          'Total OD Count': totalODCount.toFixed(1),
           'Tutor': tutor?.name || 'N/A',
-          'Total Leave Taken': student.leave_taken || 0,
-          'Phone': student.mobile || 'N/A',
-          'Email': student.email || 'N/A'
+          'Email': student.email || 'N/A',
+          'Phone': student.mobile || 'N/A'
+        };
+      }));
+
+      // Set appropriate report title
+      if (selectedBatch !== 'all') {
+        reportTitle = `Detailed Student Report for Batch ${selectedBatch}-${parseInt(selectedBatch) + 4}`;
+      } else {
+        reportTitle = 'Detailed Student Report for All Batches';
+      }
+    } catch (error) {
+      console.error('Error generating detailed report:', error);
+      // Fallback to basic student data if calculation fails
+      const studentsInBatch = selectedBatch !== 'all' 
+        ? students.filter(s => s.batch === selectedBatch)
+        : students;
+      
+      dataToDownload = studentsInBatch.map(student => {
+        const tutor = getTutors().find(t => t.id === student.tutor_id);
+        return {
+          'Name': student.name,
+          'Register Number': student.register_number,
+          'Batch': `${student.batch}-${parseInt(student.batch) + 4}`,
+          'Semester': student.semester,
+          'Total Leave Count': '0.0',
+          'Total OD Count': '0.0',
+          'Tutor': tutor?.name || 'N/A',
+          'Email': student.email || 'N/A',
+          'Phone': student.mobile || 'N/A'
         };
       });
-      reportTitle = 'All Students Summary Report';
-      reportType = 'summary';
+      
+      reportTitle = selectedBatch !== 'all'
+        ? `Detailed Student Report for Batch ${selectedBatch}-${parseInt(selectedBatch) + 4}`
+        : 'Detailed Student Report for All Batches';
     }
 
+    // Handle empty data case
     if (dataToDownload.length === 0) {
-      if (reportType === 'daily') {
-        dataToDownload = [{
-          date: format(new Date(), 'MMM d'),
-          studentsOnLeave: 0,
-          studentsOnOD: 0
-        }];
-      } else {
-        dataToDownload = [{
-          'Student Name': 'No Data Available',
-          'Register Number': 'N/A',
-          'Batch': 'N/A',
-          'Semester': 'N/A',
-          'Tutor': 'N/A',
-          'Total Leave Taken': 0,
-          'Phone': 'N/A',
-          'Email': 'N/A'
-        }];
-      }
+      dataToDownload = [{
+        'Name': 'No Data Available',
+        'Register Number': 'N/A',
+        'Batch': 'N/A',
+        'Semester': 'N/A',
+        'Total Leave Count': '0.0',
+        'Total OD Count': '0.0',
+        'Tutor': 'N/A',
+        'Email': 'N/A',
+        'Phone': 'N/A'
+      }];
     }
 
     const timestamp = format(new Date(), 'yyyy-MM-dd_HH-mm-ss');
@@ -231,7 +244,7 @@ const AdminReportPage = () => {
       case 'xlsx':
         const ws = XLSX.utils.json_to_sheet(dataToDownload);
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, 'Report');
+        XLSX.utils.book_append_sheet(wb, ws, 'Student Report');
         XLSX.writeFile(wb, `${finalTitle}.xlsx`);
         break;
 
