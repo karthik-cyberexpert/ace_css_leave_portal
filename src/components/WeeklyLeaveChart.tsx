@@ -18,14 +18,14 @@ interface WeeklyLeaveChartProps {
 }
 
 const batchColors = [
-  '#8884d8', // Blue
-  '#82ca9d', // Green
-  '#ffc658', // Orange
-  '#ff7c7c', // Light Red
-  '#8dd1e1', // Light Blue
-  '#d084d0', // Purple
-  '#87d068', // Light Green
-  '#ffb347'  // Peach
+  '#3b82f6', // Professional Blue
+  '#10b981', // Professional Emerald
+  '#f59e0b', // Professional Amber
+  '#ef4444', // Professional Red
+  '#8b5cf6', // Professional Violet
+  '#06b6d4', // Professional Cyan
+  '#84cc16', // Professional Lime
+  '#f97316'  // Professional Orange
 ];
 
 const WeeklyLeaveChart = ({ 
@@ -44,14 +44,14 @@ const WeeklyLeaveChart = ({
   const customTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
       return (
-        <div className="bg-white p-3 border border-gray-200 rounded-lg shadow-lg">
-          <p className="font-semibold text-gray-800">{`${label}`}</p>
+        <div className="bg-white p-3 border border-slate-200 rounded-lg shadow-lg">
+          <p className="font-semibold text-slate-800">{`${label}`}</p>
           {payload.map((entry: any, index: number) => (
             <p key={index} style={{ color: entry.color }} className="text-sm">
               {`${entry.name}: ${entry.value} students`}
             </p>
           ))}
-          <p className="text-xs text-gray-500 mt-1">
+          <p className="text-xs text-slate-500 mt-1">
             Total: {payload.reduce((sum: number, entry: any) => sum + entry.value, 0)} students
           </p>
         </div>

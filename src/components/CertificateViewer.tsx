@@ -89,7 +89,7 @@ export const CertificateViewer: React.FC<CertificateViewerProps> = ({
   const renderContent = () => {
     if (!certificateUrl) {
       return (
-        <div className="flex items-center justify-center h-64 text-gray-500">
+        <div className="flex items-center justify-center h-64 text-slate-500">
           No certificate available
         </div>
       );
@@ -108,7 +108,7 @@ export const CertificateViewer: React.FC<CertificateViewerProps> = ({
       return (
         <div className="flex flex-col items-center space-y-4">
           {!imageLoaded && !imageError && (
-            <div className="flex items-center justify-center h-64 text-gray-500">
+            <div className="flex items-center justify-center h-64 text-slate-500">
               Loading image...
             </div>
           )}
@@ -154,7 +154,7 @@ export const CertificateViewer: React.FC<CertificateViewerProps> = ({
     // For other file types, show download option
     return (
       <div className="flex flex-col items-center justify-center h-64 space-y-4">
-        <p className="text-gray-500">Certificate file format not supported for preview</p>
+        <p className="text-slate-500">Certificate file format not supported for preview</p>
         <Button onClick={handleDownload} variant="outline">
           <Download className="w-4 h-4 mr-2" />
           Download Certificate

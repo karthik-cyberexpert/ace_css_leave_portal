@@ -187,11 +187,11 @@ export const ReportTestDialog: React.FC<ReportTestDialogProps> = ({ open, onOpen
   const getStatusIcon = (status: 'success' | 'error' | 'pending') => {
     switch (status) {
       case 'success':
-        return <CheckCircle className="h-4 w-4 text-green-500" />;
+        return <CheckCircle className="h-4 w-4 text-emerald-500" />;
       case 'error':
         return <XCircle className="h-4 w-4 text-red-500" />;
       case 'pending':
-        return <div className="h-4 w-4 rounded-full border-2 border-blue-500 border-t-transparent animate-spin" />;
+        return <div className="h-4 w-4 rounded-full border-2 border-blue-600 border-t-transparent animate-spin" />;
     }
   };
 
@@ -271,11 +271,11 @@ export const ReportTestDialog: React.FC<ReportTestDialogProps> = ({ open, onOpen
             <div className="space-y-2">
               <h4 className="font-semibold">Test Results:</h4>
               {testResults.map((result, index) => (
-                <div key={index} className="flex items-center gap-3 p-2 bg-gray-50 rounded-md">
+                <div key={index} className="flex items-center gap-3 p-2 bg-slate-50 rounded-md">
                   {getStatusIcon(result.status)}
                   <div className="flex-1">
                     <div className="font-medium">{result.test}</div>
-                    <div className="text-sm text-gray-600">
+                    <div className="text-sm text-slate-600">
                       {result.message}
                       {result.duration && ` (${result.duration}ms)`}
                     </div>

@@ -372,7 +372,7 @@ export const BulkAddStudentsDialog: React.FC<BulkAddStudentsDialogProps> = ({ op
                   console.log('Current file state:', file?.name || 'No file in state');
                 }}
               />
-              <div className="text-xs text-gray-500 mt-1">
+              <div className="text-xs text-slate-500 mt-1">
                 Accepted formats: CSV, XLSX, JSON (Max size: 10MB)
               </div>
             </div>
@@ -381,18 +381,18 @@ export const BulkAddStudentsDialog: React.FC<BulkAddStudentsDialogProps> = ({ op
             </Button>
           </div>
           {file ? (
-            <div className="text-sm text-green-600 mb-4 bg-green-50 border border-green-200 rounded p-2">
+            <div className="text-sm text-emerald-600 mb-4 bg-emerald-50 border border-emerald-200 rounded p-2">
               ✅ Selected file: <span className="font-medium">{file.name}</span> ({file.size < 1024 ? `${file.size} bytes` : `${Math.round(file.size / 1024)} KB`})
             </div>
           ) : (
-            <div className="text-sm text-gray-500 mb-4">
+            <div className="text-sm text-slate-500 mb-4">
               No file selected. Please choose a CSV, XLSX, or JSON file.
             </div>
           )}
 
           {processingStatus && (
             <div className="text-sm bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded p-3 mb-4">
-              <CheckCircle className="h-4 w-4 inline mr-2 text-blue-500 dark:text-blue-400" />
+              <CheckCircle className="h-4 w-4 inline mr-2 text-blue-600 dark:text-blue-400" />
               <span className="text-blue-700 dark:text-blue-300">{processingStatus}</span>
             </div>
           )}
