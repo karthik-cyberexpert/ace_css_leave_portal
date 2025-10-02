@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, CheckCircle, Briefcase, ClipboardList, Shield, Users, UserCog, Menu, LogOut, Calendar } from 'lucide-react';
+import { LayoutDashboard, CheckCircle, Briefcase, ClipboardList, Shield, Users, UserCog, Menu, LogOut, Calendar, CalendarDays } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -17,6 +17,7 @@ const sidebarNavItems = [
   { title: "Leave Requests", href: "/admin-leave-requests", icon: CheckCircle },
   { title: "OD Requests", href: "/admin-od-requests", icon: Briefcase },
   { title: "Batch Management", href: "/admin-batch-management", icon: Calendar },
+  { title: "Schedule Days", href: "/admin-schedule-days", icon: CalendarDays },
   { title: "Reports", href: "/admin-reports", icon: ClipboardList },
   { title: "Students", href: "/admin-students", icon: Users },
   { title: "Staff", href: "/admin-staff", icon: UserCog },
@@ -90,6 +91,7 @@ const SidebarContent = ({ isMobile = false }: { isMobile?: boolean }) => {
 
 const AdminLayout = ({ children }: { children: React.ReactNode }) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { handleLogout } = useAppContext();
 
   const onLogout = async () => {
@@ -128,7 +130,7 @@ const AdminLayout = ({ children }: { children: React.ReactNode }) => {
             </Button>
           </div>
         </header>
-        <main className="flex-1 p-4 sm:p-6 md:p-8 overflow-auto animate-slide-up">
+        <main key={location.pathname} className="flex-1 p-4 sm:p-6 md:p-8 overflow-auto animate-slide-up">
           {children}
         </main>
         <Footer />

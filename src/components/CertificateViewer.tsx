@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Download, X } from 'lucide-react';
+import { getServerFileUrl } from '@/config/urls';
 
 interface CertificateViewerProps {
   open: boolean;
@@ -77,13 +78,8 @@ export const CertificateViewer: React.FC<CertificateViewerProps> = ({
     
     // The certificateUrl from database already includes '/uploads/' prefix
     // Backend serves static files from /uploads route
-    // So we just need to prepend the server URL
-    if (certificateUrl.startsWith('/uploads/')) {
-      return `http://localhost:3002${certificateUrl}`;
-    }
-    
-    // If it doesn't start with /uploads/, add it
-    return `http://localhost:3002/uploads/${certificateUrl}`;
+    // Use centralized URL configuration
+    return getServerFileUrl(certificateUrl);
   };
 
   const renderContent = () => {

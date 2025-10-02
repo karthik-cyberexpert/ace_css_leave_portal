@@ -1,3 +1,5 @@
+import { getServerFileUrl } from '@/config/urls';
+
 /**
  * Simple MD5 hash implementation for browser compatibility
  * @param str - String to hash
@@ -241,9 +243,9 @@ export const getBestProfilePicture = (
 ): string | null => {
   // First priority: custom uploaded image
   if (customImageUrl) {
-    // If it's a relative URL starting with /uploads/, prepend the server base URL
-    if (customImageUrl.startsWith('/uploads/')) {
-      return `http://localhost:3002${customImageUrl}`;
+    // Use centralized URL configuration for server files
+    if (customImageUrl.startsWith('/uploads/') || !customImageUrl.startsWith('http')) {
+      return getServerFileUrl(customImageUrl);
     }
     return customImageUrl;
   }

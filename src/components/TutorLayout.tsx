@@ -73,12 +73,22 @@ const SidebarContent = ({ isMobile = false }: { isMobile?: boolean }) => {
 
 const TutorLayout = ({ children }: { children: React.ReactNode }) => {
   const navigate = useNavigate();
-  const { handleLogout } = useAppContext();
+  const { handleLogout, currentTutor, user } = useAppContext();
 
   const onLogout = async () => {
     await handleLogout();
     navigate('/login');
   };
+
+  // Add safety check to ensure children render properly
+  const safeChildren = React.useMemo(() => {
+    try {
+      return children;
+    } catch (error) {
+      console.error('Error rendering children in TutorLayout:', error);
+      return <div className="p-8 text-center text-red-600">Error loading content. Please refresh the page.</div>;
+    }
+  }, [children]);
 
   return (
     <div className="flex min-h-screen bg-gradient-to-br from-background via-muted/30 to-secondary/30 animate-fade-in">
@@ -112,7 +122,7 @@ const TutorLayout = ({ children }: { children: React.ReactNode }) => {
           </div>
         </header>
         <main className="flex-1 p-4 sm:p-6 md:p-8 overflow-auto animate-slide-up">
-          {children}
+          {safeChildren}
         </main>
         <Footer />
       </div>

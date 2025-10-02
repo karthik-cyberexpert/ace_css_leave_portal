@@ -12,9 +12,10 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { DatePicker } from '@/components/ui/datepicker';
-import { showSuccess } from '@/utils/toast';
+import { showSuccess, showError } from '@/utils/toast';
 import Layout from '@/components/Layout';
 import { useAppContext } from '@/context/AppContext';
+import apiClient from '@/utils/apiClient';
 
 const odRequestSchema = z.object({
   startDate: z.date({
@@ -49,6 +50,7 @@ const ODRequestPage = () => {
   const { addODRequest, currentUser } = useAppContext();
   const [totalDays, setTotalDays] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [exceptionDays, setExceptionDays] = useState<string[]>([]);
 
   if (!currentUser?.is_active) {
     return (
@@ -72,6 +74,39 @@ const ODRequestPage = () => {
   const startDate = form.watch('startDate');
   const endDate = form.watch('endDate');
   const durationType = form.watch('durationType');
+
+  // Fetch exception days on component mount
+  useEffect(() => {
+    const fetchExceptionDays = async () => {
+      try {
+        const response = await apiClient.get('/api/exception-days');
+        console.log('Raw exception days response:', response.data);
+        
+        // Convert exception days to array of date strings for easier checking
+        // The correct field name is 'date', not 'exception_date'
+        const exceptionDatesArray = response.data.map((day: any) => {
+          // Ensure date is in YYYY-MM-DD format
+          const dateStr = day.date ? format(new Date(day.date), 'yyyy-MM-dd') : null;
+          console.log('Processing exception day:', { original: day.date, formatted: dateStr });
+          return dateStr;
+        }).filter(date => date !== null);
+        
+        setExceptionDays(exceptionDatesArray);
+        console.log('Final exception days array:', exceptionDatesArray);
+      } catch (error: any) {
+        // Handle 403 error (Forbidden) - students might not have access to exception days endpoint
+        if (error.response?.status === 403) {
+          console.log('Students do not have access to exception days endpoint. Backend will handle validation during form submission.');
+          setExceptionDays([]); // Set empty array - backend will validate
+        } else {
+          console.error('Failed to fetch exception days:', error);
+          setExceptionDays([]); // Set empty array on error to prevent issues
+        }
+      }
+    };
+
+    fetchExceptionDays();
+  }, []);
 
   useEffect(() => {
     if (startDate && endDate && endDate >= startDate) {
@@ -108,12 +143,40 @@ const ODRequestPage = () => {
 
   const onSubmit = async (data: ODRequestFormValues) => {
     setIsSubmitting(true);
+    
+    // Only perform client-side exception day check if we have exception days data
+    if (exceptionDays.length > 0) {
+      // Check if any of the selected dates are exception days
+      const startDateStr = format(data.startDate, 'yyyy-MM-dd');
+      const endDateStr = format(data.endDate, 'yyyy-MM-dd');
+      
+      // Generate array of all dates in the range
+      const dateRange = [];
+      let currentDate = new Date(data.startDate);
+      const endDate = new Date(data.endDate);
+      
+      while (currentDate <= endDate) {
+        dateRange.push(format(currentDate, 'yyyy-MM-dd'));
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+      
+      // Check if any date in range is an exception day
+      const conflictingDates = dateRange.filter(date => exceptionDays.includes(date));
+      
+      if (conflictingDates.length > 0) {
+        showError(`Cannot apply for OD on the following exception days: ${conflictingDates.join(', ')}. Please select different dates.`);
+        setIsSubmitting(false);
+        return;
+      }
+    }
+    // If we don't have exception days data, the backend will validate and return appropriate errors
+
     const requestData = {
       purpose: data.purpose,
       destination: data.destination,
       description: data.description,
-      start_date: format(data.startDate, 'yyyy-MM-dd'),
-      end_date: format(data.endDate, 'yyyy-MM-dd'),
+      start_date: startDateStr,
+      end_date: endDateStr,
       total_days: totalDays,
       duration_type: data.durationType,
     };
@@ -147,9 +210,25 @@ const ODRequestPage = () => {
                     <FormItem className="flex flex-col">
                       <FormLabel>Start Date</FormLabel>
                       <DatePicker
+                        key={`start-date-${exceptionDays.length}`}
                         date={field.value}
                         setDate={field.onChange}
-                        disabled={(date) => date <= new Date(new Date().setHours(0, 0, 0, 0))}
+                        disabled={(date) => {
+                          const today = new Date();
+                          today.setHours(0, 0, 0, 0);
+                          
+                          // Disable past dates
+                          if (date <= today) return true;
+                          
+                          // Check if date is an exception day
+                          const dateStr = format(date, 'yyyy-MM-dd');
+                          const isExceptionDay = exceptionDays.includes(dateStr);
+                          console.log('OD Date picker check:', { date: dateStr, isException: isExceptionDay, exceptionDays });
+                          
+                          if (isExceptionDay) return true;
+                          
+                          return false;
+                        }}
                       />
                       <FormMessage />
                     </FormItem>
@@ -162,9 +241,26 @@ const ODRequestPage = () => {
                     <FormItem className="flex flex-col">
                       <FormLabel>End Date</FormLabel>
                       <DatePicker
+                        key={`end-date-${exceptionDays.length}`}
                         date={field.value}
                         setDate={field.onChange}
-                        disabled={(date) => startDate ? date < startDate : date < new Date(new Date().setHours(0, 0, 0, 0))}
+                        disabled={(date) => {
+                          const today = new Date();
+                          today.setHours(0, 0, 0, 0);
+                          
+                          // Disable dates before start date or before today
+                          const minDate = startDate || today;
+                          if (date < minDate) return true;
+                          
+                          // Check if date is an exception day
+                          const dateStr = format(date, 'yyyy-MM-dd');
+                          const isExceptionDay = exceptionDays.includes(dateStr);
+                          console.log('OD End date picker check:', { date: dateStr, isException: isExceptionDay, exceptionDays });
+                          
+                          if (isExceptionDay) return true;
+                          
+                          return false;
+                        }}
                       />
                       <FormMessage />
                     </FormItem>

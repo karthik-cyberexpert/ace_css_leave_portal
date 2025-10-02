@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Edit, Check, X, Loader2 } from 'lucide-react';
 import { showError, showSuccess } from '@/utils/toast';
 import { useAppContext } from '@/context/AppContext';
+import { API_BASE_URL } from '@/config/urls';
 import axios from 'axios';
 
 interface EditableProfileFieldProps {
@@ -167,7 +168,7 @@ userType,
         // Also send to backend for logging
         const notificationMessage = `${label} changed from '${value}' to '${newValue}' by ${userName}. Reason: ${reason}`;
         const apiClient = axios.create({
-          baseURL: 'http://localhost:3002',
+          baseURL: API_BASE_URL,
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
             'Content-Type': 'application/json'

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAppContext } from '@/context/AppContext';
 
@@ -11,6 +11,13 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles 
   const { profile, loading, role } = useAppContext();
   const navigate = useNavigate();
   const location = useLocation();
+  const lastRedirectPath = useRef<string>('');
+
+  // Stabilize allowedRoles array to prevent infinite re-renders
+  const stableAllowedRoles = useMemo(() => {
+    if (!allowedRoles || allowedRoles.length === 0) return null;
+    return [...allowedRoles].sort(); // Create a stable copy
+  }, [allowedRoles?.length, allowedRoles?.join(',')]);
 
   // Handle authentication redirect
   React.useEffect(() => {
@@ -19,30 +26,40 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles 
     }
   }, [loading, profile, navigate, location.pathname]);
 
-  // Handle role-based redirect - moved outside conditional block
+  // Handle role-based redirect - only redirect if role is not allowed
   React.useEffect(() => {
-    if (!loading && profile && role && allowedRoles && !allowedRoles.includes(role)) {
-      switch (role) {
-        case 'Student':
-          if (location.pathname !== '/dashboard') {
+    // Only proceed if we have a profile, role, and allowedRoles defined
+    if (!loading && profile && role && stableAllowedRoles && stableAllowedRoles.length > 0) {
+      const isRoleAllowed = stableAllowedRoles.includes(role);
+      
+      // Only redirect if the current role is NOT allowed for this route
+      // and we haven't already redirected from this path
+      if (!isRoleAllowed && lastRedirectPath.current !== location.pathname) {
+        lastRedirectPath.current = location.pathname;
+        
+        console.log('Unauthorized access detected, redirecting:', { 
+          role, 
+          allowedRoles: stableAllowedRoles, 
+          pathname: location.pathname 
+        });
+        
+        // Redirect to appropriate dashboard based on user's role
+        switch (role) {
+          case 'Student':
             navigate('/dashboard', { replace: true });
-          }
-          break;
-        case 'Tutor':
-          if (location.pathname !== '/tutor-dashboard') {
+            break;
+          case 'Tutor':
             navigate('/tutor-dashboard', { replace: true });
-          }
-          break;
-        case 'Admin':
-          if (location.pathname !== '/admin-dashboard') {
+            break;
+          case 'Admin':
             navigate('/admin-dashboard', { replace: true });
-          }
-          break;
-        default:
-          navigate('/login');
+            break;
+          default:
+            navigate('/login', { replace: true });
+        }
       }
     }
-  }, [loading, profile, role, allowedRoles, location.pathname, navigate]);
+  }, [loading, profile, role, stableAllowedRoles, location.pathname, navigate]);
 
   if (loading) {
     return (
@@ -58,7 +75,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles 
   }
 
   // If role is not allowed, don't render children while redirecting
-  if (allowedRoles && !allowedRoles.includes(role)) {
+  if (stableAllowedRoles && !stableAllowedRoles.includes(role)) {
     return null;
   }
 

@@ -405,6 +405,173 @@ app.post('/api/auth/logout', authenticateToken, async (req, res) => {
 });
 
 // =====================================================================================
+// EXCEPTION DAYS API ENDPOINTS
+// =====================================================================================
+
+// Get all exception days (Admin only)
+app.get('/api/exception-days', authenticateToken, express.json(), async (req, res) => {
+  try {
+    // Only admins can manage exception days
+    const [user] = await query('SELECT is_admin FROM users WHERE id = ?', [req.user.id]);
+    if (!user || !user.is_admin) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    const exceptionDays = await query(
+      'SELECT * FROM exception_days ORDER BY date DESC'
+    );
+    
+    res.json(exceptionDays);
+  } catch (error) {
+    console.error('Error fetching exception days:', error);
+    res.status(500).json({ error: 'Failed to fetch exception days' });
+  }
+});
+
+// Get exception days for students/tutors (public read access)
+app.get('/api/exception-days/public', authenticateToken, async (req, res) => {
+  try {
+    // All authenticated users can view exception days to avoid applying leave on blocked dates
+    const exceptionDays = await query(
+      'SELECT date, reason FROM exception_days WHERE date >= CURDATE() ORDER BY date ASC'
+    );
+    
+    res.json(exceptionDays);
+  } catch (error) {
+    console.error('Error fetching public exception days:', error);
+    res.status(500).json({ error: 'Failed to fetch exception days' });
+  }
+});
+
+// Create new exception day
+app.post('/api/exception-days', authenticateToken, express.json(), async (req, res) => {
+  try {
+    // Only admins can manage exception days
+    const [user] = await query('SELECT is_admin FROM users WHERE id = ?', [req.user.id]);
+    if (!user || !user.is_admin) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    const { date, reason, description } = req.body;
+    
+    if (!date || !reason) {
+      return res.status(400).json({ error: 'Date and reason are required' });
+    }
+
+    // Check if date already exists
+    const [existingDay] = await query(
+      'SELECT id FROM exception_days WHERE date = ?',
+      [date]
+    );
+    
+    if (existingDay) {
+      return res.status(400).json({ error: 'Exception day already exists for this date' });
+    }
+
+    const id = uuidv4();
+    await query(
+      'INSERT INTO exception_days (id, date, reason, description) VALUES (?, ?, ?, ?)',
+      [id, date, reason, description || null]
+    );
+    
+    // Return the created exception day
+    const [newExceptionDay] = await query(
+      'SELECT * FROM exception_days WHERE id = ?',
+      [id]
+    );
+    
+    res.status(201).json(newExceptionDay);
+  } catch (error) {
+    console.error('Error creating exception day:', error);
+    res.status(500).json({ error: 'Failed to create exception day' });
+  }
+});
+
+// Update exception day
+app.put('/api/exception-days/:id', authenticateToken, express.json(), async (req, res) => {
+  try {
+    // Only admins can manage exception days
+    const [user] = await query('SELECT is_admin FROM users WHERE id = ?', [req.user.id]);
+    if (!user || !user.is_admin) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    const { id } = req.params;
+    const { date, reason, description } = req.body;
+    
+    if (!date || !reason) {
+      return res.status(400).json({ error: 'Date and reason are required' });
+    }
+
+    // Check if exception day exists
+    const [existingDay] = await query(
+      'SELECT id FROM exception_days WHERE id = ?',
+      [id]
+    );
+    
+    if (!existingDay) {
+      return res.status(404).json({ error: 'Exception day not found' });
+    }
+
+    // Check if new date conflicts with other exception days (excluding current one)
+    const [conflictingDay] = await query(
+      'SELECT id FROM exception_days WHERE date = ? AND id != ?',
+      [date, id]
+    );
+    
+    if (conflictingDay) {
+      return res.status(400).json({ error: 'Another exception day already exists for this date' });
+    }
+
+    await query(
+      'UPDATE exception_days SET date = ?, reason = ?, description = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      [date, reason, description || null, id]
+    );
+    
+    // Return the updated exception day
+    const [updatedExceptionDay] = await query(
+      'SELECT * FROM exception_days WHERE id = ?',
+      [id]
+    );
+    
+    res.json(updatedExceptionDay);
+  } catch (error) {
+    console.error('Error updating exception day:', error);
+    res.status(500).json({ error: 'Failed to update exception day' });
+  }
+});
+
+// Delete exception day
+app.delete('/api/exception-days/:id', authenticateToken, async (req, res) => {
+  try {
+    // Only admins can manage exception days
+    const [user] = await query('SELECT is_admin FROM users WHERE id = ?', [req.user.id]);
+    if (!user || !user.is_admin) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    const { id } = req.params;
+    
+    // Check if exception day exists
+    const [existingDay] = await query(
+      'SELECT id FROM exception_days WHERE id = ?',
+      [id]
+    );
+    
+    if (!existingDay) {
+      return res.status(404).json({ error: 'Exception day not found' });
+    }
+
+    await query('DELETE FROM exception_days WHERE id = ?', [id]);
+    
+    res.json({ message: 'Exception day deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting exception day:', error);
+    res.status(500).json({ error: 'Failed to delete exception day' });
+  }
+});
+
+// =====================================================================================
 // ERROR HANDLING
 // =====================================================================================
 

@@ -1,4 +1,4 @@
-﻿import React, { useMemo, useState } from 'react';
+﻿﻿﻿﻿﻿﻿﻿import React, { useMemo, useState } from 'react';
 import TutorLayout from '@/components/TutorLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import {
@@ -12,13 +12,15 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Users, CalendarOff, BarChart2, Download } from 'lucide-react';
+import { Users, CalendarOff, BarChart2, Download, Search } from 'lucide-react';
 import { DateRangePicker } from '@/components/ui/date-range-picker';
+import { Input } from '@/components/ui/input';
 import MonthlyLeaveChart from '@/components/MonthlyLeaveChart';
 import { DailyLeaveChart } from '@/components/DailyLeaveChart';
 import { useAppContext } from '@/context/AppContext';
 import { useBatchContext } from '@/context/BatchContext';
 import { eachDayOfInterval, format, parseISO } from 'date-fns';
+import { formatDateToLocalISO } from '@/utils/dateUtils';
 import * as XLSX from 'xlsx';
 import Papa from 'papaparse';
 
@@ -26,8 +28,11 @@ const TutorReportPage = () => {
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
   
+  // Register number filter state
+  const [registerNumberFilter, setRegisterNumberFilter] = useState<string>('');
+  
   // Use current date for table filtering
-  const currentDate = new Date().toISOString().split('T')[0];
+  const currentDate = formatDateToLocalISO(new Date());
   const { students, leaveRequests, odRequests, currentTutor, loading } = useAppContext();
   const { getSemesterDateRange } = useBatchContext();
   const [selectedBatch, setSelectedBatch] = useState<string>('all');
@@ -38,6 +43,7 @@ const TutorReportPage = () => {
     setStartDate('');
     setEndDate('');
     setSelectedSemester('all');
+    setRegisterNumberFilter(''); // Clear register number filter when changing batch
   };
 
   const handleSemesterChange = (value: string) => {
@@ -64,8 +70,8 @@ const TutorReportPage = () => {
 
     const calculatedMaxDate = today < new Date(range.end) ? today : new Date(range.end);
     return {
-      minDate: startDate.toISOString().split('T')[0],
-      maxDate: calculatedMaxDate.toISOString().split('T')[0],
+      minDate: formatDateToLocalISO(startDate),
+      maxDate: formatDateToLocalISO(calculatedMaxDate),
       prevSemesterEndDate: semester > 1 ? (getSemesterDateRange(selectedBatch, semester - 1)?.end || null) : null,
     };
   };
@@ -95,8 +101,15 @@ const TutorReportPage = () => {
       filteredStudents = filteredStudents.filter(s => s.batch === selectedBatch);
     }
     
+    // Apply register number filter if provided
+    if (registerNumberFilter.trim()) {
+      filteredStudents = filteredStudents.filter(student => 
+        student.register_number.toLowerCase().includes(registerNumberFilter.toLowerCase().trim())
+      );
+    }
+    
     return filteredStudents;
-  }, [students, currentTutor, selectedBatch]);
+  }, [students, currentTutor, selectedBatch, registerNumberFilter]);
 
   const tutorStudentLeaveRequests = useMemo(() => {
     if (!currentTutor) return [];
@@ -144,9 +157,15 @@ const TutorReportPage = () => {
     if (selectedBatch !== 'all' && (selectedSemester !== 'all' || (startDate && endDate))) {
       if (dailyChartData.length > 0) {
         dataToDownload = dailyChartData;
-        reportTitle = startDate && endDate 
+        let titleSuffix = startDate && endDate 
           ? `Daily Leave & OD Report for ${currentTutor?.name || 'Tutor'} - Batch ${selectedBatch}-${parseInt(selectedBatch) + 4}`
           : `Daily Leave & OD Report for ${currentTutor?.name || 'Tutor'} - Batch ${selectedBatch}-${parseInt(selectedBatch) + 4}, Semester ${selectedSemester}`;
+        
+        if (registerNumberFilter.trim()) {
+          titleSuffix += ` (Filtered by Register Number: ${registerNumberFilter.trim()})`;
+        }
+        
+        reportTitle = titleSuffix;
       }
     } else {
       if (tutorStudentData.length > 0) {
@@ -156,11 +175,17 @@ const TutorReportPage = () => {
           'Batch': `${student.batch}-${parseInt(student.batch) + 4}`,
           'Semester': student.semester,
           'Total Leave Taken': student.leave_taken || 0,
-          'Phone': student.phone || 'N/A',
+          'Mobile': student.mobile || 'N/A',
           'Email': student.email || 'N/A'
         }));
       }
-      reportTitle = `Student Report for ${currentTutor?.name || 'Tutor'}`;
+      
+      let titleSuffix = `Student Report for ${currentTutor?.name || 'Tutor'}`;
+      if (registerNumberFilter.trim()) {
+        titleSuffix += ` (Filtered by Register Number: ${registerNumberFilter.trim()})`;
+      }
+      
+      reportTitle = titleSuffix;
     }
 
     const timestamp = format(new Date(), 'yyyy-MM-dd_HH-mm-ss');
@@ -224,7 +249,16 @@ const TutorReportPage = () => {
     }
 
     const studentsInBatch = tutorStudentData.filter(s => s.batch === selectedBatch);
-    const batchStudentIds = new Set(studentsInBatch.map(s => s.id));
+    let filteredStudents = studentsInBatch;
+    
+    // Apply register number filter if provided
+    if (registerNumberFilter.trim()) {
+      filteredStudents = studentsInBatch.filter(student => 
+        student.register_number.toLowerCase().includes(registerNumberFilter.toLowerCase().trim())
+      );
+    }
+    
+    const batchStudentIds = new Set(filteredStudents.map(s => s.id));
     
     const days = eachDayOfInterval(interval);
 
@@ -280,7 +314,7 @@ const TutorReportPage = () => {
     });
     
     return chartData;
-  }, [selectedBatch, selectedSemester, startDate, endDate, semesterDateRanges, leaveRequests, odRequests, tutorStudentData]);
+  }, [selectedBatch, selectedSemester, startDate, endDate, semesterDateRanges, leaveRequests, odRequests, tutorStudentData, registerNumberFilter]);
 
   const totalStudents = tutorStudentData.length;
   const totalLeaves = tutorStudentData.reduce((acc, student) => {
@@ -296,6 +330,13 @@ const TutorReportPage = () => {
     
     if (selectedBatch !== 'all') {
       studentsToShow = studentsToShow.filter(s => s.batch === selectedBatch);
+    }
+    
+    // Apply register number filter if provided
+    if (registerNumberFilter.trim()) {
+      studentsToShow = studentsToShow.filter(student => 
+        student.register_number.toLowerCase().includes(registerNumberFilter.toLowerCase().trim())
+      );
     }
 
     const targetDate = new Date(currentDate);
@@ -345,7 +386,7 @@ const TutorReportPage = () => {
         requestId
       };
     }).filter(student => student.status !== 'Present');
-  }, [currentTutor, selectedBatch, selectedSemester, currentDate, students, leaveRequests, odRequests]);
+  }, [currentTutor, selectedBatch, selectedSemester, currentDate, students, leaveRequests, odRequests, registerNumberFilter]);
 
   return (
     <TutorLayout>
@@ -380,10 +421,27 @@ const TutorReportPage = () => {
           </div>
         </div>
         
-        <div className="flex gap-3">
+        {/* Filter Controls */}
+        <div className="flex flex-col gap-4">
+          {/* Register Number Search */}
+          <div className="flex justify-end">
+            <div className="relative w-full sm:w-64">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+              <Input
+                type="text"
+                placeholder="Search by register number..."
+                value={registerNumberFilter}
+                onChange={(e) => setRegisterNumberFilter(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+          </div>
+          
+          {/* Date Range Filters */}
+          <div className="flex gap-3">
           <DateRangePicker 
             date={startDate ? new Date(startDate) : undefined} 
-            setDate={(date) => setStartDate(date ? date.toISOString().split('T')[0] : '')}
+            setDate={(date) => setStartDate(date ? formatDateToLocalISO(date) : '')}
             placeholder="From Date"
             disabled={selectedBatch === 'all' || selectedSemester === 'all'}
             minDate={minDate ? new Date(minDate) : undefined}
@@ -393,7 +451,7 @@ const TutorReportPage = () => {
           />
           <DateRangePicker 
             date={endDate ? new Date(endDate) : undefined} 
-            setDate={(date) => setEndDate(date ? date.toISOString().split('T')[0] : '')}
+            setDate={(date) => setEndDate(date ? formatDateToLocalISO(date) : '')}
             placeholder="To Date"
             disabled={selectedBatch === 'all' || selectedSemester === 'all'}
             minDate={startDate ? new Date(startDate) : (minDate ? new Date(minDate) : undefined)}
@@ -406,6 +464,7 @@ const TutorReportPage = () => {
             </Button>
           )}
         </div>
+      </div>
         
         <div className="flex justify-end gap-2">
           <Button variant="outline" size="sm" onClick={() => downloadReport('xlsx')}>

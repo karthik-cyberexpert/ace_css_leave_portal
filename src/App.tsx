@@ -1,4 +1,4 @@
-﻿import { Toaster } from "@/components/ui/toaster";
+﻿﻿﻿﻿import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -19,6 +19,7 @@ import AdminLeaveApprovePage from "./pages/AdminLeaveApprovePage";
 import AdminODApprovePage from "./pages/AdminODApprovePage";
 import AdminReportPage from "./pages/AdminReportPage";
 import AdminBatchManagementPage from "./pages/AdminBatchManagementPage";
+import AdminScheduleDaysPage from "./pages/AdminScheduleDaysPage";
 import AdminStudentManagementPage from "./pages/AdminStudentManagementPage";
 import AdminStaffManagementPage from "./pages/AdminStaffManagementPage";
 import { AppProvider } from "./context/AppContext";
@@ -63,15 +64,16 @@ const App = () => (
                 <Route path="/tutor-profile-requests" element={<ProtectedRoute allowedRoles={['Tutor']}><TutorProfileRequestsPage /></ProtectedRoute>} />
 
                 {/* Admin Routes */}
-                <Route path="/admin-dashboard" element={<ProtectedRoute allowedRoles={['Admin']}><AdminDashboardPage /></ProtectedRoute>} />
-                <Route path="/admin-leave-requests" element={<ProtectedRoute allowedRoles={['Admin']}><AdminLeaveApprovePage /></ProtectedRoute>} />
-                <Route path="/admin-od-requests" element={<ProtectedRoute allowedRoles={['Admin']}><AdminODApprovePage /></ProtectedRoute>} />
-                <Route path="/admin-batch-management" element={<ProtectedRoute allowedRoles={['Admin']}><AdminBatchManagementPage /></ProtectedRoute>} />
-                <Route path="/admin-reports" element={<ProtectedRoute allowedRoles={['Admin']}><AdminReportPage /></ProtectedRoute>} />
-                <Route path="/admin-students" element={<ProtectedRoute allowedRoles={['Admin']}><AdminStudentManagementPage /></ProtectedRoute>} />
-                <Route path="/admin-staff" element={<ProtectedRoute allowedRoles={['Admin']}><AdminStaffManagementPage /></ProtectedRoute>} />
-                <Route path="/admin-profile" element={<ProtectedRoute allowedRoles={['Admin']}><StaffProfilePage /></ProtectedRoute>} />
-                <Route path="/admin-profile-requests" element={<ProtectedRoute allowedRoles={['Admin']}><AdminProfileRequestsPage /></ProtectedRoute>} />
+                <Route path="/admin-dashboard" element={<ProtectedRoute key="admin-dashboard" allowedRoles={['Admin']}><AdminDashboardPage /></ProtectedRoute>} />
+                <Route path="/admin-leave-requests" element={<ProtectedRoute key="admin-leave-requests" allowedRoles={['Admin']}><AdminLeaveApprovePage /></ProtectedRoute>} />
+                <Route path="/admin-od-requests" element={<ProtectedRoute key="admin-od-requests" allowedRoles={['Admin']}><AdminODApprovePage /></ProtectedRoute>} />
+                <Route path="/admin-batch-management" element={<ProtectedRoute key="admin-batch-management" allowedRoles={['Admin']}><AdminBatchManagementPage /></ProtectedRoute>} />
+                <Route path="/admin-schedule-days" element={<ProtectedRoute key="admin-schedule-days" allowedRoles={['Admin']}><AdminScheduleDaysPage /></ProtectedRoute>} />
+                <Route path="/admin-reports" element={<ProtectedRoute key="admin-reports" allowedRoles={['Admin']}><AdminReportPage /></ProtectedRoute>} />
+                <Route path="/admin-students" element={<ProtectedRoute key="admin-students" allowedRoles={['Admin']}><AdminStudentManagementPage /></ProtectedRoute>} />
+                <Route path="/admin-staff" element={<ProtectedRoute key="admin-staff" allowedRoles={['Admin']}><AdminStaffManagementPage /></ProtectedRoute>} />
+                <Route path="/admin-profile" element={<ProtectedRoute key="admin-profile" allowedRoles={['Admin']}><StaffProfilePage /></ProtectedRoute>} />
+                <Route path="/admin-profile-requests" element={<ProtectedRoute key="admin-profile-requests" allowedRoles={['Admin']}><AdminProfileRequestsPage /></ProtectedRoute>} />
 
                 <Route path="*" element={<NotFound />} />
               </Routes>

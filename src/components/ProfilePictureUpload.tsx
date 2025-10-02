@@ -37,9 +37,9 @@ const ProfilePictureUpload: React.FC<ProfilePictureUploadProps> = ({
   // Update display image source when currentImageSrc changes
   useEffect(() => {
     if (currentImageSrc) {
-      // If it's a relative URL, prepend the server base URL
-      if (currentImageSrc.startsWith('/uploads/')) {
-        setDisplayImageSrc(`http://localhost:3002${currentImageSrc}`);
+      // Use centralized URL configuration for server files
+      if (currentImageSrc.startsWith('/uploads/') || !currentImageSrc.startsWith('http')) {
+        setDisplayImageSrc(getServerFileUrl(currentImageSrc));
       } else {
         setDisplayImageSrc(currentImageSrc);
       }

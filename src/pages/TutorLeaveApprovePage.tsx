@@ -26,7 +26,7 @@ import { useAppContext, LeaveRequest, RequestStatus } from '@/context/AppContext
 import { format, parseISO } from 'date-fns';
 
 const TutorLeaveApprovePage = () => {
-  const { leaveRequests, updateLeaveRequestStatus, currentTutor, approveRejectLeaveCancellation, students } = useAppContext();
+  const { leaveRequests, updateLeaveRequestStatus, currentTutor, approveRejectLeaveCancellation, students, refreshData } = useAppContext();
   const [selectedRequest, setSelectedRequest] = useState<LeaveRequest | null>(null);
   const [rejectionReason, setRejectionReason] = useState('');
   const [showRejectionInput, setShowRejectionInput] = useState(false);
@@ -48,12 +48,27 @@ const TutorLeaveApprovePage = () => {
         await updateLeaveRequestStatus(id, newStatus);
       }
       showSuccess(`Request has been ${newStatus.toLowerCase()}!`);
-      setSelectedRequest(null); // Close the dialog
+      
+      // Clear form state immediately
       setRejectionReason('');
       setShowRejectionInput(false);
+      
+      // For forward action, refresh the entire page to prevent blank screen
+      if (newStatus === 'Forwarded') {
+        setTimeout(() => {
+          window.location.reload();
+        }, 1000); // Give time for success message to show
+        return;
+      }
+      
+      // Force refresh data to ensure consistency
+      await refreshData();
+      
+      // Don't close dialog immediately - let useEffect handle it based on data change
+      // This prevents race conditions and blank screens
     } catch (error: any) {
       console.error('Error updating request status:', error);
-      // Don't close dialog on error so user can see what happened
+      showError('Failed to update request status. Please try again.');
     }
   };
 
@@ -72,10 +87,12 @@ const TutorLeaveApprovePage = () => {
   const handleCancellationAction = async (id: string, approve: boolean) => {
     try {
       await approveRejectLeaveCancellation(id, approve);
-      setSelectedRequest(null);
+      
+      // Don't close dialog immediately - let useEffect handle it based on data change
+      // This prevents race conditions and blank screens
     } catch (error: any) {
       console.error('Error processing cancellation:', error);
-      // Don't close dialog on error so user can see what happened
+      showError('Failed to process cancellation. Please try again.');
     }
   };
 
@@ -85,14 +102,20 @@ const TutorLeaveApprovePage = () => {
 
   // Auto-clear selectedRequest if its status becomes non-actionable
   useEffect(() => {
-    if (selectedRequest && 
-        selectedRequest.status !== 'Pending' && 
-        selectedRequest.status !== 'Retried' && 
-        selectedRequest.status !== 'Cancellation Pending') {
-      console.log('Auto-clearing selectedRequest due to status change:', selectedRequest.status);
-      setSelectedRequest(null);
+    if (selectedRequest) {
+      // Find the current version of the selected request from the latest data
+      const currentRequest = tutorLeaveRequests.find(req => req.id === selectedRequest.id);
+      
+      if (currentRequest && 
+          currentRequest.status !== 'Pending' && 
+          currentRequest.status !== 'Retried' && 
+          currentRequest.status !== 'Cancellation Pending') {
+        console.log('Auto-clearing selectedRequest due to status change:', currentRequest.status);
+        // Use immediate state update to prevent rendering issues
+        setSelectedRequest(null);
+      }
     }
-  }, [selectedRequest?.status]); // Only depend on the status, not the entire object
+  }, [tutorLeaveRequests, selectedRequest?.id]); // Depend on the full request list and ID
 
   const getDurationTypeLabel = (durationType: string, totalDays: number | string) => {
     // Convert totalDays to number for comparison

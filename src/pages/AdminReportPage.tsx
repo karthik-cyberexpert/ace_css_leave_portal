@@ -1,14 +1,16 @@
-﻿import React, { useState, useMemo, useEffect } from 'react';
+﻿﻿﻿﻿﻿﻿﻿import React, { useState, useMemo, useEffect } from 'react';
 import { useBatchContext } from '@/context/BatchContext';
 import AdminLayout from '@/components/AdminLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { eachDayOfInterval, format, parseISO } from 'date-fns';
+import { formatDateToLocalISO } from '@/utils/dateUtils';
 import { DailyLeaveChart } from '@/components/DailyLeaveChart';
 import { useAppContext } from '@/context/AppContext';
-import { Download } from 'lucide-react';
+import { Download, Search } from 'lucide-react';
 import { DateRangePicker } from '@/components/ui/date-range-picker';
+import { Input } from '@/components/ui/input';
 import * as XLSX from 'xlsx';
 import Papa from 'papaparse';
 
@@ -23,8 +25,11 @@ const AdminReportPage = () => {
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
   
+  // Register number filter state
+  const [registerNumberFilter, setRegisterNumberFilter] = useState<string>('');
+  
   // Use current date for table filtering
-  const currentDate = new Date().toISOString().split('T')[0];
+  const currentDate = formatDateToLocalISO(new Date());
   
   // Debug logging function
   const addDebugInfo = (key: string, value: any) => {
@@ -42,6 +47,7 @@ const AdminReportPage = () => {
     setSelectedBatch(batch);
     setStartDate('');
     setEndDate('');
+    setRegisterNumberFilter(''); // Clear register number filter when changing batch
   };
   
   const handleSemesterChange = (semester: string) => {
@@ -71,40 +77,67 @@ const AdminReportPage = () => {
     
     const calculatedMaxDate = today < new Date(range.end) ? today : new Date(range.end);
     return {
-      minDate: startDate.toISOString().split('T')[0],
-      maxDate: calculatedMaxDate.toISOString().split('T')[0],
+      minDate: formatDateToLocalISO(startDate),
+      maxDate: formatDateToLocalISO(calculatedMaxDate),
       prevSemesterEndDate: semester > 1 ? (getSemesterDateRange(selectedBatch, semester - 1)?.end || null) : null,
     };
   };
 
   const { minDate, maxDate, prevSemesterEndDate } = getDateConstraints();
 
-  const tutors = getTutors();
-
-  // Add effect to log initial data
-  useEffect(() => {
+  // Memoize tutors to prevent recreation on every render
+  const tutors = useMemo(() => {
     try {
-      addDebugInfo('students', students);
-      addDebugInfo('leaveRequests', leaveRequests);
-      addDebugInfo('odRequests', odRequests);
-      addDebugInfo('tutors', tutors);
-      addDebugInfo('availableBatches', getAvailableBatches());
+      return getTutors();
     } catch (error) {
-      addError(`Error logging initial data: ${error}`);
+      console.error(`[AdminReport Error] Error getting tutors: ${error}`);
+      return [];
     }
-  }, [students, leaveRequests, tutors]);
+  }, [getTutors]);
+
+  // Memoize available batches to prevent constant recalculation
+  const availableBatches = useMemo(() => {
+    try {
+      return getAvailableBatches();
+    } catch (error) {
+      console.error(`[AdminReport Error] Error getting available batches: ${error}`);
+      return [];
+    }
+  }, [getAvailableBatches]);
+
+  // Add effect to log initial data - only run once on component mount
+  useEffect(() => {
+    const logInitialData = () => {
+      try {
+        addDebugInfo('students', students);
+        addDebugInfo('leaveRequests', leaveRequests);
+        addDebugInfo('odRequests', odRequests);
+        addDebugInfo('tutors', tutors);
+        addDebugInfo('availableBatches', availableBatches);
+      } catch (error) {
+        addError(`Error logging initial data: ${error}`);
+      }
+    };
+    
+    // Only log if we have all the necessary data
+    if (students && leaveRequests && odRequests) {
+      logInitialData();
+    }
+  }, [students, leaveRequests, odRequests, tutors, availableBatches]);
 
   const batches = useMemo(() => {
     try {
-      const availableBatches = getAvailableBatches().map(b => parseInt(b.id)).sort((a, b) => b - a);
-      const result = ['all', ...availableBatches];
-      addDebugInfo('processedBatches', result);
+      if (!availableBatches || availableBatches.length === 0) {
+        return ['all'];
+      }
+      const processedBatches = availableBatches.map(b => parseInt(b.id)).sort((a, b) => b - a);
+      const result = ['all', ...processedBatches];
       return result;
     } catch (error) {
-      addError(`Error processing batches: ${error}`);
+      console.error(`[AdminReport Error] Error processing batches: ${error}`);
       return ['all'];
     }
-  }, [getAvailableBatches]);
+  }, [availableBatches]);
 
   const semesters = useMemo(() => {
     if (selectedBatch === 'all') return ['all'];
@@ -120,12 +153,10 @@ const AdminReportPage = () => {
       semestersToUse.forEach(semester => {
         const range = getSemesterDateRange(selectedBatch, semester);
         ranges[semester] = range;
-        addDebugInfo(`semesterRange_${selectedBatch}_${semester}`, range);
       });
-      addDebugInfo('allSemesterDateRanges', ranges);
       return ranges;
     } catch (error) {
-      addError(`Error calculating semester date ranges: ${error}`);
+      console.error(`[AdminReport Error] Error calculating semester date ranges: ${error}`);
       return {};
     }
   }, [selectedBatch, semesters, getSemesterDateRange]);
@@ -138,9 +169,16 @@ const AdminReportPage = () => {
 
     try {
       // Always generate detailed student reports with leave and OD counts
-      const studentsInBatch = selectedBatch !== 'all' 
+      let studentsInBatch = selectedBatch !== 'all' 
         ? students.filter(s => s.batch === selectedBatch)
         : students;
+
+      // Apply register number filter if provided
+      if (registerNumberFilter.trim()) {
+        studentsInBatch = studentsInBatch.filter(student => 
+          student.register_number.toLowerCase().includes(registerNumberFilter.toLowerCase().trim())
+        );
+      }
 
       // Calculate detailed data for each student including leave and OD counts
       dataToDownload = await Promise.all(studentsInBatch.map(async (student) => {
@@ -151,14 +189,8 @@ const AdminReportPage = () => {
           req => req.student_id === student.id && req.status === 'Approved'
         );
         const totalLeaveCount = studentLeaveRequests.reduce((total, req) => {
-          // Handle half-day leaves properly
-          if (req.duration_type === 'half_day_forenoon' || req.duration_type === 'half_day_afternoon') {
-            const startDate = new Date(req.start_date);
-            const endDate = new Date(req.end_date);
-            const daysDiff = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-            return total + (daysDiff * 0.5);
-          }
-          return total + (parseFloat(req.total_days) || 0);
+          const days = parseFloat(req.total_days) || 0;
+          return total + days;
         }, 0);
 
         // Calculate total OD count for this student
@@ -166,14 +198,8 @@ const AdminReportPage = () => {
           req => req.student_id === student.id && req.status === 'Approved'
         );
         const totalODCount = studentODRequests.reduce((total, req) => {
-          // Handle half-day ODs properly
-          if (req.duration_type === 'half_day_forenoon' || req.duration_type === 'half_day_afternoon') {
-            const startDate = new Date(req.start_date);
-            const endDate = new Date(req.end_date);
-            const daysDiff = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-            return total + (daysDiff * 0.5);
-          }
-          return total + (parseFloat(req.total_days) || 0);
+          const days = parseFloat(req.total_days) || 0;
+          return total + days;
         }, 0);
 
         return {
@@ -190,17 +216,31 @@ const AdminReportPage = () => {
       }));
 
       // Set appropriate report title
+      let titleSuffix = '';
       if (selectedBatch !== 'all') {
-        reportTitle = `Detailed Student Report for Batch ${selectedBatch}-${parseInt(selectedBatch) + 4}`;
+        titleSuffix = `for Batch ${selectedBatch}-${parseInt(selectedBatch) + 4}`;
       } else {
-        reportTitle = 'Detailed Student Report for All Batches';
+        titleSuffix = 'for All Batches';
       }
+      
+      if (registerNumberFilter.trim()) {
+        titleSuffix += ` (Filtered by Register Number: ${registerNumberFilter.trim()})`;
+      }
+      
+      reportTitle = `Detailed Student Report ${titleSuffix}`;
     } catch (error) {
       console.error('Error generating detailed report:', error);
       // Fallback to basic student data if calculation fails
-      const studentsInBatch = selectedBatch !== 'all' 
+      let studentsInBatch = selectedBatch !== 'all' 
         ? students.filter(s => s.batch === selectedBatch)
         : students;
+      
+      // Apply register number filter if provided
+      if (registerNumberFilter.trim()) {
+        studentsInBatch = studentsInBatch.filter(student => 
+          student.register_number.toLowerCase().includes(registerNumberFilter.toLowerCase().trim())
+        );
+      }
       
       dataToDownload = studentsInBatch.map(student => {
         const tutor = getTutors().find(t => t.id === student.tutor_id);
@@ -217,9 +257,18 @@ const AdminReportPage = () => {
         };
       });
       
-      reportTitle = selectedBatch !== 'all'
-        ? `Detailed Student Report for Batch ${selectedBatch}-${parseInt(selectedBatch) + 4}`
-        : 'Detailed Student Report for All Batches';
+      let titleSuffix = '';
+      if (selectedBatch !== 'all') {
+        titleSuffix = `for Batch ${selectedBatch}-${parseInt(selectedBatch) + 4}`;
+      } else {
+        titleSuffix = 'for All Batches';
+      }
+      
+      if (registerNumberFilter.trim()) {
+        titleSuffix += ` (Filtered by Register Number: ${registerNumberFilter.trim()})`;
+      }
+      
+      reportTitle = `Detailed Student Report ${titleSuffix}`;
     }
 
     // Handle empty data case
@@ -269,15 +318,7 @@ const AdminReportPage = () => {
 
   const dailyChartData = useMemo(() => {
     try {
-      addDebugInfo('chartDataCalculation_start', {
-        selectedBatch,
-        selectedSemester,
-        startDate,
-        endDate
-      });
-      
       if (selectedBatch === 'all') {
-        addDebugInfo('chartData_result', 'No batch selected');
         return [];
       }
       
@@ -290,13 +331,10 @@ const AdminReportPage = () => {
         
         if (customStart <= customEnd) {
           interval = { start: customStart, end: customEnd };
-          addDebugInfo('interval_custom', interval);
         }
       } else if (selectedSemester !== 'all') {
         const semester = parseInt(selectedSemester);
         const range = semesterDateRanges[semester];
-        
-        addDebugInfo(`range_for_semester_${semester}`, range);
         
         if (range?.start && range.start instanceof Date) {
           const today = new Date();
@@ -304,33 +342,25 @@ const AdminReportPage = () => {
           
           const endDate = (range.end && range.end instanceof Date && today > range.end) ? range.end : today;
           interval = { start: new Date(range.start), end: endDate };
-          addDebugInfo('interval_semester', interval);
-        } else {
-          addDebugInfo('no_valid_range_found', {
-            semester,
-            range,
-            hasStart: range?.start,
-            isDate: range?.start instanceof Date
-          });
         }
       }
       
       if (!interval || interval.start > interval.end) {
-        addDebugInfo('no_valid_interval', { interval });
         return [];
       }
 
       const studentsInBatch = students.filter(s => s.batch === selectedBatch);
-      const batchStudentIds = new Set(studentsInBatch.map(s => s.id));
+      let filteredStudents = studentsInBatch;
       
-      addDebugInfo('students_in_batch', {
-        batch: selectedBatch,
-        count: studentsInBatch.length,
-        students: studentsInBatch
-      });
-
+      // Apply register number filter if provided
+      if (registerNumberFilter.trim()) {
+        filteredStudents = studentsInBatch.filter(student => 
+          student.register_number.toLowerCase().includes(registerNumberFilter.toLowerCase().trim())
+        );
+      }
+      
+      const batchStudentIds = new Set(filteredStudents.map(s => s.id));
       const days = eachDayOfInterval(interval);
-      addDebugInfo('days_in_interval', { count: days.length, first: days[0], last: days[days.length - 1] });
 
       const chartData = days.map(day => {
         const studentsOnLeave = new Set<string>();
@@ -383,14 +413,12 @@ const AdminReportPage = () => {
         };
       });
       
-      addDebugInfo('final_chart_data', { count: chartData.length, sample: chartData.slice(0, 5) });
       return chartData;
     } catch (error) {
-      addError(`Error calculating daily chart data: ${error}`);
-      console.error("Error calculating daily chart data:", error);
+      console.error("[AdminReport Error] Error calculating daily chart data:", error);
       return [];
     }
-  }, [selectedBatch, selectedSemester, startDate, endDate, semesterDateRanges, leaveRequests, odRequests, students]);
+  }, [selectedBatch, selectedSemester, startDate, endDate, semesterDateRanges, leaveRequests, odRequests, students, registerNumberFilter]);
 
   return (
     <AdminLayout>
@@ -421,31 +449,49 @@ const AdminReportPage = () => {
           </div>
         </div>
         
-        <div className="flex justify-end gap-3">
-          <DateRangePicker 
-            date={startDate ? new Date(startDate) : undefined} 
-            setDate={(date) => setStartDate(date ? date.toISOString().split('T')[0] : '')}
-            placeholder="From Date"
-            disabled={selectedBatch === 'all' || selectedSemester === 'all'}
-            minDate={minDate ? new Date(minDate) : undefined}
-            maxDate={endDate ? new Date(endDate) : (maxDate ? new Date(maxDate) : undefined)}
-            prevSemesterEndDate={prevSemesterEndDate}
-            className="w-40"
-          />
-          <DateRangePicker 
-            date={endDate ? new Date(endDate) : undefined} 
-            setDate={(date) => setEndDate(date ? date.toISOString().split('T')[0] : '')}
-            placeholder="To Date"
-            disabled={selectedBatch === 'all' || selectedSemester === 'all'}
-            minDate={startDate ? new Date(startDate) : (minDate ? new Date(minDate) : undefined)}
-            maxDate={maxDate ? new Date(maxDate) : undefined}
-            className="w-40"
-          />
-          {(startDate || endDate) && (
-            <Button variant="outline" size="sm" onClick={() => { setStartDate(''); setEndDate(''); }}>
-              Clear
-            </Button>
-          )}
+        {/* Filter Controls */}
+        <div className="flex flex-col gap-4">
+          {/* Register Number Search */}
+          <div className="flex justify-end">
+            <div className="relative w-full sm:w-64">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+              <Input
+                type="text"
+                placeholder="Search by register number..."
+                value={registerNumberFilter}
+                onChange={(e) => setRegisterNumberFilter(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+          </div>
+          
+          {/* Date Range Filters */}
+          <div className="flex justify-end gap-3">
+            <DateRangePicker 
+              date={startDate ? new Date(startDate) : undefined} 
+              setDate={(date) => setStartDate(date ? formatDateToLocalISO(date) : '')}
+              placeholder="From Date"
+              disabled={selectedBatch === 'all' || selectedSemester === 'all'}
+              minDate={minDate ? new Date(minDate) : undefined}
+              maxDate={endDate ? new Date(endDate) : (maxDate ? new Date(maxDate) : undefined)}
+              prevSemesterEndDate={prevSemesterEndDate}
+              className="w-40"
+            />
+            <DateRangePicker 
+              date={endDate ? new Date(endDate) : undefined} 
+              setDate={(date) => setEndDate(date ? formatDateToLocalISO(date) : '')}
+              placeholder="To Date"
+              disabled={selectedBatch === 'all' || selectedSemester === 'all'}
+              minDate={startDate ? new Date(startDate) : (minDate ? new Date(minDate) : undefined)}
+              maxDate={maxDate ? new Date(maxDate) : undefined}
+              className="w-40"
+            />
+            {(startDate || endDate) && (
+              <Button variant="outline" size="sm" onClick={() => { setStartDate(''); setEndDate(''); }}>
+                Clear
+              </Button>
+            )}
+          </div>
         </div>
         
         {/* Download buttons - always available */}

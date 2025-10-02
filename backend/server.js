@@ -1,5 +1,5 @@
-import express from 'express';
 import mysql from 'mysql2/promise';
+import express from 'express';
 import cors from 'cors';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
@@ -11,6 +11,8 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
+import XLSX from 'xlsx';
+import csv from 'csv-parser';
 import { dbConfig, jwtSecret } from './config/database.js';
 import { sendLoginNotification } from './utils/loginEmailService.js';
 import { testEmailConnection, sendTestEmail } from './utils/emailService.js';
@@ -103,6 +105,45 @@ const certificateUpload = multer({
   fileFilter: fileFilter,
   limits: {
     fileSize: 10 * 1024 * 1024 // 10MB limit for certificates
+  }
+});
+
+// Configure multer for bulk file uploads (CSV/XLSX)
+const bulkUploadStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const tempDir = path.join(__dirname, 'temp');
+    if (!fs.existsSync(tempDir)) {
+      fs.mkdirSync(tempDir, { recursive: true });
+    }
+    cb(null, tempDir);
+  },
+  filename: (req, file, cb) => {
+    const timestamp = Date.now();
+    cb(null, `bulk-upload-${timestamp}-${file.originalname}`);
+  }
+});
+
+const bulkFileFilter = (req, file, cb) => {
+  // Accept CSV and Excel files
+  const allowedMimes = [
+    'text/csv',
+    'application/csv',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  ];
+  
+  if (allowedMimes.includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(new Error('Only CSV and Excel files are allowed!'), false);
+  }
+};
+
+const bulkUpload = multer({
+  storage: bulkUploadStorage,
+  fileFilter: bulkFileFilter,
+  limits: {
+    fileSize: 5 * 1024 * 1024 // 5MB limit for bulk upload files
   }
 });
 
@@ -1535,6 +1576,31 @@ app.post('/leave-requests', authenticateToken, async (req, res) => {
       subject: subject?.substring(0, 20) + '...'
     });
 
+    // Validate exception days - Check if any date in the range is an exception day
+    console.log('🚫 Checking exception days for date range:', { startDate, endDate });
+    
+    const exceptionDaysInRange = await query(
+      `SELECT date, reason FROM exception_days 
+       WHERE date BETWEEN ? AND ? 
+       ORDER BY date`,
+      [startDate, endDate]
+    );
+    
+    if (exceptionDaysInRange.length > 0) {
+      const conflictingDates = exceptionDaysInRange.map(day => {
+        const dateStr = new Date(day.date).toISOString().split('T')[0];
+        return `${dateStr} (${day.reason})`;
+      });
+      console.log('🚫 Exception days found in range:', conflictingDates);
+      
+      return res.status(400).json({ 
+        error: `Cannot apply for leave on the following exception days: ${conflictingDates.join(', ')}. Please select different dates.`,
+        conflictingDates: exceptionDaysInRange.map(day => new Date(day.date).toISOString().split('T')[0])
+      });
+    }
+    
+    console.log('✅ No exception days found in range, proceeding with leave request');
+
     // Check for overlapping leave or OD requests
     const overlapCheck = await query(
       `SELECT COUNT(*) as overlapCount
@@ -1742,6 +1808,31 @@ app.post('/od-requests', authenticateToken, async (req, res) => {
       duration_type,
       purpose: purpose?.substring(0, 20) + '...'
     });
+
+    // Validate exception days - Check if any date in the range is an exception day
+    console.log('🚫 Checking exception days for OD request date range:', { startDate, endDate });
+    
+    const exceptionDaysInRange = await query(
+      `SELECT date, reason FROM exception_days 
+       WHERE date BETWEEN ? AND ? 
+       ORDER BY date`,
+      [startDate, endDate]
+    );
+    
+    if (exceptionDaysInRange.length > 0) {
+      const conflictingDates = exceptionDaysInRange.map(day => {
+        const dateStr = new Date(day.date).toISOString().split('T')[0];
+        return `${dateStr} (${day.reason})`;
+      });
+      console.log('🚫 Exception days found in OD request range:', conflictingDates);
+      
+      return res.status(400).json({ 
+        error: `Cannot apply for OD on the following exception days: ${conflictingDates.join(', ')}. Please select different dates.`,
+        conflictingDates: exceptionDaysInRange.map(day => new Date(day.date).toISOString().split('T')[0])
+      });
+    }
+    
+    console.log('✅ No exception days found in OD request range, proceeding');
 
     // Check for overlapping leave or OD requests
     const leaveOverlapCheck = await query(
@@ -3303,6 +3394,421 @@ app.post('/create-test-tutor', async (req, res) => {
       error: 'Failed to create test tutor',
       details: error.message 
     });
+  }
+});
+
+// =====================================================================================
+// EXCEPTION DAYS API ENDPOINTS
+// =====================================================================================
+
+// Get all exception days (Admin only)
+app.get('/api/exception-days', authenticateToken, express.json(), async (req, res) => {
+  try {
+    // Only admins can manage exception days
+    const [user] = await query('SELECT is_admin FROM users WHERE id = ?', [req.user.id]);
+    if (!user || !user.is_admin) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    const exceptionDays = await query(
+      'SELECT * FROM exception_days ORDER BY date DESC'
+    );
+    
+    res.json(exceptionDays);
+  } catch (error) {
+    console.error('Error fetching exception days:', error);
+    res.status(500).json({ error: 'Failed to fetch exception days' });
+  }
+});
+
+// Get exception days for students/tutors (public read access)
+app.get('/api/exception-days/public', authenticateToken, async (req, res) => {
+  try {
+    // All authenticated users can view exception days to avoid applying leave on blocked dates
+    const exceptionDays = await query(
+      'SELECT date, reason FROM exception_days WHERE date >= CURDATE() ORDER BY date ASC'
+    );
+    
+    res.json(exceptionDays);
+  } catch (error) {
+    console.error('Error fetching public exception days:', error);
+    res.status(500).json({ error: 'Failed to fetch exception days' });
+  }
+});
+
+// Create new exception day
+app.post('/api/exception-days', authenticateToken, express.json(), async (req, res) => {
+  try {
+    // Only admins can manage exception days
+    const [user] = await query('SELECT is_admin FROM users WHERE id = ?', [req.user.id]);
+    if (!user || !user.is_admin) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    const { date, reason, description } = req.body;
+    
+    if (!date || !reason) {
+      return res.status(400).json({ error: 'Date and reason are required' });
+    }
+
+    // Check if date already exists
+    const [existingDay] = await query(
+      'SELECT id FROM exception_days WHERE date = ?',
+      [date]
+    );
+    
+    if (existingDay) {
+      return res.status(400).json({ error: 'Exception day already exists for this date' });
+    }
+
+    const id = uuidv4();
+    await query(
+      'INSERT INTO exception_days (id, date, reason, description) VALUES (?, ?, ?, ?)',
+      [id, date, reason, description || null]
+    );
+    
+    // Return the created exception day
+    const [newExceptionDay] = await query(
+      'SELECT * FROM exception_days WHERE id = ?',
+      [id]
+    );
+    
+    res.status(201).json(newExceptionDay);
+  } catch (error) {
+    console.error('Error creating exception day:', error);
+    res.status(500).json({ error: 'Failed to create exception day' });
+  }
+});
+
+// Update exception day
+app.put('/api/exception-days/:id', authenticateToken, express.json(), async (req, res) => {
+  try {
+    // Only admins can manage exception days
+    const [user] = await query('SELECT is_admin FROM users WHERE id = ?', [req.user.id]);
+    if (!user || !user.is_admin) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    const { id } = req.params;
+    const { date, reason, description } = req.body;
+    
+    if (!date || !reason) {
+      return res.status(400).json({ error: 'Date and reason are required' });
+    }
+
+    // Check if exception day exists
+    const [existingDay] = await query(
+      'SELECT id FROM exception_days WHERE id = ?',
+      [id]
+    );
+    
+    if (!existingDay) {
+      return res.status(404).json({ error: 'Exception day not found' });
+    }
+
+    // Check if new date conflicts with other exception days (excluding current one)
+    const [conflictingDay] = await query(
+      'SELECT id FROM exception_days WHERE date = ? AND id != ?',
+      [date, id]
+    );
+    
+    if (conflictingDay) {
+      return res.status(400).json({ error: 'Another exception day already exists for this date' });
+    }
+
+    await query(
+      'UPDATE exception_days SET date = ?, reason = ?, description = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      [date, reason, description || null, id]
+    );
+    
+    // Return the updated exception day
+    const [updatedExceptionDay] = await query(
+      'SELECT * FROM exception_days WHERE id = ?',
+      [id]
+    );
+    
+    res.json(updatedExceptionDay);
+  } catch (error) {
+    console.error('Error updating exception day:', error);
+    res.status(500).json({ error: 'Failed to update exception day' });
+  }
+});
+
+// Delete exception day
+app.delete('/api/exception-days/:id', authenticateToken, express.json(), async (req, res) => {
+  try {
+    // Only admins can manage exception days
+    const [user] = await query('SELECT is_admin FROM users WHERE id = ?', [req.user.id]);
+    if (!user || !user.is_admin) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    const { id } = req.params;
+    
+    // Check if exception day exists
+    const [existingDay] = await query(
+      'SELECT id FROM exception_days WHERE id = ?',
+      [id]
+    );
+    
+    if (!existingDay) {
+      return res.status(404).json({ error: 'Exception day not found' });
+    }
+
+    await query('DELETE FROM exception_days WHERE id = ?', [id]);
+    
+    res.json({ message: 'Exception day deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting exception day:', error);
+    res.status(500).json({ error: 'Failed to delete exception day' });
+  }
+});
+
+// Check if a specific date is an exception day (for use in leave/OD validation)
+app.get('/api/exception-days/check/:date', authenticateToken, express.json(), async (req, res) => {
+  try {
+    const { date } = req.params;
+    
+    const [exceptionDay] = await query(
+      'SELECT id, reason, description FROM exception_days WHERE date = ?',
+      [date]
+    );
+    
+    res.json({
+      isExceptionDay: !!exceptionDay,
+      exceptionDay: exceptionDay || null
+    });
+  } catch (error) {
+    console.error('Error checking exception day:', error);
+    res.status(500).json({ error: 'Failed to check exception day' });
+  }
+});
+
+// Template download endpoints
+// Download CSV template
+app.get('/api/exception-days/template/csv', authenticateToken, async (req, res) => {
+  try {
+    // Only admins can download templates
+    const [user] = await query('SELECT is_admin FROM users WHERE id = ?', [req.user.id]);
+    if (!user || !user.is_admin) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    // Create CSV content with proper format for bulk uploading
+    const csvLines = [
+      'Date,Reason,Description',
+      '2024-12-25,Christmas Day,National holiday - no applications allowed',
+      '2024-01-01,New Year Day,National holiday - no applications allowed', 
+      '2024-04-14,Good Friday,Religious holiday',
+      '2024-08-15,Independence Day,National holiday',
+      '2024-10-02,Gandhi Jayanti,National holiday'
+    ];
+    
+    const csvContent = csvLines.join('\n');
+    
+    // Set proper headers for CSV download
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="Exception_Days_Template.csv"');
+    res.setHeader('Content-Length', Buffer.byteLength(csvContent, 'utf8').toString());
+    res.setHeader('Cache-Control', 'no-cache');
+    
+    // Send the CSV content
+    res.end(csvContent, 'utf8');
+    
+  } catch (error) {
+    console.error('Error generating CSV template:', error);
+    res.status(500).json({ error: 'Failed to generate CSV template: ' + error.message });
+  }
+});
+
+// Download XLSX template
+app.get('/api/exception-days/template/xlsx', authenticateToken, async (req, res) => {
+  try {
+    // Only admins can download templates
+    const [user] = await query('SELECT is_admin FROM users WHERE id = ?', [req.user.id]);
+    if (!user || !user.is_admin) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    // Create a new workbook
+    const workbook = XLSX.utils.book_new();
+    
+    // Define the data with proper formatting
+    const templateData = [
+      ['Date', 'Reason', 'Description'],
+      ['2024-12-25', 'Christmas Day', 'National holiday - no applications allowed'],
+      ['2024-01-01', 'New Year Day', 'National holiday - no applications allowed'],
+      ['2024-04-14', 'Good Friday', 'Religious holiday'],
+      ['2024-08-15', 'Independence Day', 'National holiday']
+    ];
+    
+    // Create worksheet from data
+    const worksheet = XLSX.utils.aoa_to_sheet(templateData);
+    
+    // Set column widths for better readability
+    worksheet['!cols'] = [
+      { wch: 12 },  // Date column
+      { wch: 25 },  // Reason column  
+      { wch: 50 }   // Description column
+    ];
+    
+    // Style the header row (optional, but makes it look professional)
+    const headerRange = XLSX.utils.decode_range(worksheet['!ref']);
+    for (let col = headerRange.s.c; col <= headerRange.e.c; col++) {
+      const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col });
+      if (!worksheet[cellAddress]) continue;
+      
+      // Make header bold (if supported by the XLSX library version)
+      worksheet[cellAddress].s = {
+        font: { bold: true },
+        fill: { fgColor: { rgb: 'E6E6FA' } }
+      };
+    }
+    
+    // Add the worksheet to workbook
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Exception Days Template');
+    
+    // Write the workbook to buffer with proper options
+    const xlsxBuffer = XLSX.write(workbook, {
+      type: 'buffer',
+      bookType: 'xlsx',
+      compression: false  // Disable compression to avoid corruption
+    });
+    
+    // Set proper headers for Excel download
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="Exception_Days_Template.xlsx"');
+    res.setHeader('Content-Length', xlsxBuffer.length.toString());
+    res.setHeader('Cache-Control', 'no-cache');
+    
+    // Send the buffer
+    res.end(xlsxBuffer);
+    
+  } catch (error) {
+    console.error('Error generating XLSX template:', error);
+    res.status(500).json({ error: 'Failed to generate XLSX template: ' + error.message });
+  }
+});
+
+// Bulk upload exception days
+app.post('/api/exception-days/bulk-upload', authenticateToken, bulkUpload.single('file'), async (req, res) => {
+  try {
+    // Only admins can bulk upload
+    const [user] = await query('SELECT is_admin FROM users WHERE id = ?', [req.user.id]);
+    if (!user || !user.is_admin) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    const filePath = req.file.path;
+    const fileExtension = path.extname(req.file.originalname).toLowerCase();
+    
+    let exceptionDaysData = [];
+    
+    try {
+      if (fileExtension === '.csv') {
+        // Parse CSV file
+        const csvData = [];
+        await new Promise((resolve, reject) => {
+          fs.createReadStream(filePath)
+            .pipe(csv())
+            .on('data', (data) => csvData.push(data))
+            .on('end', resolve)
+            .on('error', reject);
+        });
+        
+        exceptionDaysData = csvData.map(row => ({
+          date: row.Date || row.date,
+          reason: row.Reason || row.reason,
+          description: row.Description || row.description || ''
+        }));
+        
+      } else if (fileExtension === '.xlsx' || fileExtension === '.xls') {
+        // Parse Excel file
+        const workbook = XLSX.readFile(filePath);
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet);
+        
+        exceptionDaysData = jsonData.map(row => ({
+          date: row.Date || row.date,
+          reason: row.Reason || row.reason,
+          description: row.Description || row.description || ''
+        }));
+      } else {
+        throw new Error('Unsupported file format');
+      }
+      
+      // Validate and process data
+      const results = {
+        total: exceptionDaysData.length,
+        created: 0,
+        skipped: 0,
+        errors: []
+      };
+      
+      for (let i = 0; i < exceptionDaysData.length; i++) {
+        const rowNum = i + 2; // Account for header row
+        const { date, reason, description } = exceptionDaysData[i];
+        
+        // Validate required fields
+        if (!date || !reason) {
+          results.errors.push(`Row ${rowNum}: Date and Reason are required`);
+          continue;
+        }
+        
+        // Validate date format
+        const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+        if (!dateRegex.test(date)) {
+          results.errors.push(`Row ${rowNum}: Invalid date format. Use YYYY-MM-DD`);
+          continue;
+        }
+        
+        // Check if date already exists
+        const [existingDay] = await query(
+          'SELECT id FROM exception_days WHERE date = ?',
+          [date]
+        );
+        
+        if (existingDay) {
+          results.skipped++;
+          continue;
+        }
+        
+        try {
+          // Insert new exception day
+          const id = uuidv4();
+          await query(
+            'INSERT INTO exception_days (id, date, reason, description) VALUES (?, ?, ?, ?)',
+            [id, date, reason.trim(), description?.trim() || null]
+          );
+          results.created++;
+        } catch (insertError) {
+          results.errors.push(`Row ${rowNum}: ${insertError.message}`);
+        }
+      }
+      
+      res.json({
+        message: 'Bulk upload completed',
+        results
+      });
+      
+    } catch (parseError) {
+      console.error('Error parsing file:', parseError);
+      res.status(400).json({ error: 'Failed to parse file: ' + parseError.message });
+    } finally {
+      // Clean up uploaded file
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+    }
+    
+  } catch (error) {
+    console.error('Error in bulk upload:', error);
+    res.status(500).json({ error: 'Failed to process bulk upload' });
   }
 });
 

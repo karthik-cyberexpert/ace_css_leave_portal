@@ -15,7 +15,7 @@ import { format, parseISO, differenceInDays } from 'date-fns';
 import { Eye } from 'lucide-react';
 
 const TutorODApprovePage = () => {
-  const { odRequests, updateODRequestStatus, currentTutor, verifyODCertificate, approveRejectODCancellation, students } = useAppContext();
+  const { odRequests, updateODRequestStatus, currentTutor, verifyODCertificate, approveRejectODCancellation, students, refreshData } = useAppContext();
   const [selectedRequest, setSelectedRequest] = useState<ODRequest | null>(null);
   const [verifyRequest, setVerifyRequest] = useState<ODRequest | null>(null);
   const [viewCertificate, setViewCertificate] = useState<string | null>(null);
@@ -35,20 +35,35 @@ const TutorODApprovePage = () => {
     try {
       await updateODRequestStatus(id, newStatus);
       showSuccess(`Request has been ${newStatus.toLowerCase()}!`);
-      setSelectedRequest(null);
+      
+      // For forward action, refresh the entire page to prevent blank screen
+      if (newStatus === 'Forwarded') {
+        setTimeout(() => {
+          window.location.reload();
+        }, 1000); // Give time for success message to show
+        return;
+      }
+      
+      // Force refresh data to ensure consistency
+      await refreshData();
+      
+      // Don't close dialog immediately - let useEffect handle it based on data change
+      // This prevents race conditions and blank screens
     } catch (error: any) {
       console.error('Error updating request status:', error);
-      // Don't close dialog on error so user can see what happened
+      showError('Failed to update request status. Please try again.');
     }
   };
 
   const handleCancellationAction = async (id: string, approve: boolean) => {
     try {
       await approveRejectODCancellation(id, approve);
-      setSelectedRequest(null);
+      
+      // Don't close dialog immediately - let useEffect handle it based on data change
+      // This prevents race conditions and blank screens
     } catch (error: any) {
       console.error('Error processing cancellation:', error);
-      // Don't close dialog on error so user can see what happened
+      showError('Failed to process cancellation. Please try again.');
     }
   };
 
@@ -57,11 +72,20 @@ const TutorODApprovePage = () => {
     try {
       await verifyODCertificate(verifyRequest.id, isApproved);
       showSuccess(`Certificate has been ${isApproved ? 'approved' : 'rejected'}.`);
-      setVerifyRequest(null);
+      
+      // Clear form state immediately
       setCertRejectionReason('');
       setShowCertRejectionInput(false);
+      
+      // Use a longer delay and ensure UI state is properly managed
+      setTimeout(() => {
+        if (document.visibilityState === 'visible') {
+          setVerifyRequest(null);
+        }
+      }, 300); // Increased from 100ms to 300ms
     } catch (error: any) {
       console.error('Error verifying certificate:', error);
+      showError('Failed to verify certificate. Please try again.');
       // Don't close dialog on error so user can see what happened
     }
   };
@@ -80,14 +104,20 @@ const TutorODApprovePage = () => {
 
   // Auto-clear selectedRequest if its status becomes non-actionable
   useEffect(() => {
-    if (selectedRequest && 
-        selectedRequest.status !== 'Pending' && 
-        selectedRequest.status !== 'Retried' && 
-        selectedRequest.status !== 'Cancellation Pending') {
-      console.log('Auto-clearing selectedRequest due to status change:', selectedRequest.status);
-      setSelectedRequest(null);
+    if (selectedRequest) {
+      // Find the current version of the selected request from the latest data
+      const currentRequest = tutorODRequests.find(req => req.id === selectedRequest.id);
+      
+      if (currentRequest && 
+          currentRequest.status !== 'Pending' && 
+          currentRequest.status !== 'Retried' && 
+          currentRequest.status !== 'Cancellation Pending') {
+        console.log('Auto-clearing selectedRequest due to status change:', currentRequest.status);
+        // Use immediate state update to prevent rendering issues
+        setSelectedRequest(null);
+      }
     }
-  }, [selectedRequest]);
+  }, [tutorODRequests, selectedRequest?.id]); // Depend on the full request list and ID
 
   const getStatusBadge = (status: RequestStatus, certStatus?: CertificateStatus) => {
     const statusText = certStatus ? `${status} (${certStatus})` : status;
