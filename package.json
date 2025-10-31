@@ -36,7 +36,10 @@
     "windows:prepare": "powershell -ExecutionPolicy Bypass -File Prepare-Production.ps1",
     "windows:start": "powershell -ExecutionPolicy Bypass -File Start-Production.ps1",
     "windows:stop": "powershell -ExecutionPolicy Bypass -File Stop-Production.ps1",
-    "windows:status": "powershell -ExecutionPolicy Bypass -File Status-Production.ps1"
+    "windows:status": "powershell -ExecutionPolicy Bypass -File Status-Production.ps1",
+    "security:rebuild": "node scripts/security-rebuild.js",
+    "security:verify": "node -e \"const {verifyProductionSecurity} = require('./backend/config/webSecurity'); process.exit(verifyProductionSecurity() ? 0 : 1);\"",
+    "security:check": "npm run security:verify && echo All security checks passed!"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

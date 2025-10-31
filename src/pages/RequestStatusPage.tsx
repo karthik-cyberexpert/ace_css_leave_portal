@@ -142,15 +142,8 @@ const RequestStatusPage = () => {
 
   const canUploadCertificate = !isUserInactive && selectedRequestForReview?.type === 'OD' && 
     selectedRequestForReview.status === 'Approved' && 
-    selectedRequestForReview.certificate_status === 'Pending Upload' &&
-    (() => {
-      // Only allow upload after OD has ended
-      const odEndDate = new Date(selectedRequestForReview.end_date);
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      odEndDate.setHours(0, 0, 0, 0);
-      return today > odEndDate;
-    })();
+    selectedRequestForReview.certificate_status === 'Pending Upload';
+    // No deadline restriction - users can upload certificates anytime
 
   const canRetryRequest = !isUserInactive && selectedRequestForReview?.status === 'Rejected' &&
     (() => {

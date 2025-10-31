@@ -1,11 +1,11 @@
 // Centralized URL Configuration
 // This ensures all frontend components use the same server URL
 
-// Get the API base URL from environment or use default
-export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3008';
+// Get the API base URL from environment - NO HARDCODED FALLBACKS FOR SECURITY
+export const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
-// Production fallback (when VITE_API_URL is not set)
-// export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://210.212.246.131:3009';
+// SECURITY NOTE: Never hardcode production IPs or domains in source code
+// Always use environment variables and proxy configuration
 
 /**
  * Get the full URL for server-hosted files (uploads, images, etc.)

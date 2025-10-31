@@ -11,6 +11,15 @@ import { useAppContext } from '@/context/AppContext';
 import { Download, Search } from 'lucide-react';
 import { DateRangePicker } from '@/components/ui/date-range-picker';
 import { Input } from '@/components/ui/input';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
 import * as XLSX from 'xlsx';
 import Papa from 'papaparse';
 
@@ -318,7 +327,10 @@ const AdminReportPage = () => {
 
   const dailyChartData = useMemo(() => {
     try {
-      if (selectedBatch === 'all') {
+      // Allow chart display if register number is provided, even if batch is 'all'
+      const canShowChart = selectedBatch !== 'all' || registerNumberFilter.trim();
+      
+      if (!canShowChart) {
         return [];
       }
       
@@ -343,13 +355,21 @@ const AdminReportPage = () => {
           const endDate = (range.end && range.end instanceof Date && today > range.end) ? range.end : today;
           interval = { start: new Date(range.start), end: endDate };
         }
+      } else if (registerNumberFilter.trim()) {
+        // For register number search without specific semester, show data for current year
+        const today = new Date();
+        const startOfYear = new Date(today.getFullYear(), 0, 1); // January 1st
+        today.setHours(23, 59, 59, 999);
+        interval = { start: startOfYear, end: today };
       }
       
       if (!interval || interval.start > interval.end) {
         return [];
       }
 
-      const studentsInBatch = students.filter(s => s.batch === selectedBatch);
+      let studentsInBatch = selectedBatch !== 'all' 
+        ? students.filter(s => s.batch === selectedBatch)
+        : students;
       let filteredStudents = studentsInBatch;
       
       // Apply register number filter if provided
@@ -419,6 +439,43 @@ const AdminReportPage = () => {
       return [];
     }
   }, [selectedBatch, selectedSemester, startDate, endDate, semesterDateRanges, leaveRequests, odRequests, students, registerNumberFilter]);
+
+  // Get detailed leave/OD data for searched student
+  const getStudentLeaveODDetails = useMemo(() => {
+    if (!registerNumberFilter.trim()) return [];
+    
+    const foundStudent = students.find(s => 
+      s.register_number.toLowerCase().includes(registerNumberFilter.toLowerCase().trim())
+    );
+    
+    if (!foundStudent) return [];
+    
+    // Get all leave requests for this student
+    const studentLeaveRequests = leaveRequests
+      .filter(req => req.student_id === foundStudent.id && req.status === 'Approved')
+      .map(req => ({
+        ...req,
+        type: 'Leave' as const,
+        start_date_formatted: format(parseISO(req.start_date), 'MMM d, yyyy'),
+        end_date_formatted: format(parseISO(req.end_date), 'MMM d, yyyy'),
+      }));
+    
+    // Get all OD requests for this student
+    const studentODRequests = odRequests
+      .filter(req => req.student_id === foundStudent.id && req.status === 'Approved')
+      .map(req => ({
+        ...req,
+        type: 'OD' as const,
+        start_date_formatted: format(parseISO(req.start_date), 'MMM d, yyyy'),
+        end_date_formatted: format(parseISO(req.end_date), 'MMM d, yyyy'),
+      }));
+    
+    // Combine and sort by start date
+    const allRequests = [...studentLeaveRequests, ...studentODRequests]
+      .sort((a, b) => new Date(b.start_date).getTime() - new Date(a.start_date).getTime());
+    
+    return allRequests;
+  }, [registerNumberFilter, students, leaveRequests, odRequests]);
 
   return (
     <AdminLayout>
@@ -506,24 +563,114 @@ const AdminReportPage = () => {
           </Button>
         </div>
         
-        {selectedBatch !== 'all' && selectedSemester !== 'all' ? (
+        {(selectedBatch !== 'all' && selectedSemester !== 'all') || registerNumberFilter.trim() ? (
           <DailyLeaveChart 
             data={dailyChartData} 
-            title={startDate && endDate 
-              ? `Daily Leave & OD Report for Batch ${selectedBatch}-${parseInt(selectedBatch) + 4} (${format(new Date(startDate), 'MMM d, yyyy')} - ${format(new Date(endDate), 'MMM d, yyyy')})`
-              : `Daily Leave & OD Report for Batch ${selectedBatch}-${parseInt(selectedBatch) + 4}, Semester ${selectedSemester}`
+            title={registerNumberFilter.trim() && dailyChartData.length > 0 
+              ? (() => {
+                  // Find the student by register number for title
+                  const foundStudent = students.find(s => 
+                    s.register_number.toLowerCase().includes(registerNumberFilter.toLowerCase().trim())
+                  );
+                  if (foundStudent) {
+                    return startDate && endDate 
+                      ? `Daily Leave & OD Report for ${foundStudent.name}(${foundStudent.register_number}) (${format(new Date(startDate), 'MMM d, yyyy')} - ${format(new Date(endDate), 'MMM d, yyyy')})`
+                      : `Daily Leave & OD Report for ${foundStudent.name}(${foundStudent.register_number})`;
+                  }
+                  return 'Daily Leave & OD Report';
+                })()
+              : startDate && endDate 
+                ? `Daily Leave & OD Report for Batch ${selectedBatch}-${parseInt(selectedBatch) + 4} (${format(new Date(startDate), 'MMM d, yyyy')} - ${format(new Date(endDate), 'MMM d, yyyy')})`
+                : `Daily Leave & OD Report for Batch ${selectedBatch}-${parseInt(selectedBatch) + 4}, Semester ${selectedSemester}`
             }
           />
         ) : (
           <Card>
             <CardHeader>
               <CardTitle>
-                {selectedBatch === 'all' ? 'Select a Batch and Semester' : 'Select a Semester'}
+                {selectedBatch === 'all' && !registerNumberFilter.trim() ? 'Select a Batch and Semester or Search by Register Number' : 'Select a Semester'}
               </CardTitle>
               <CardDescription>
-                {selectedBatch === 'all' 
-                  ? 'Please select a batch and semester to view the daily leave report.'
+                {selectedBatch === 'all' && !registerNumberFilter.trim()
+                  ? 'Please select a batch and semester to view the daily leave report, or search by register number to view individual student data.'
                   : 'Please select a semester to view the daily leave report. You can also use custom date ranges above.'}
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        )}
+        
+        {/* Detailed Leave/OD Table for Individual Student */}
+        {registerNumberFilter.trim() && getStudentLeaveODDetails.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>
+                Leave & OD History for {(() => {
+                  const foundStudent = students.find(s => 
+                    s.register_number.toLowerCase().includes(registerNumberFilter.toLowerCase().trim())
+                  );
+                  return foundStudent ? `${foundStudent.name} (${foundStudent.register_number})` : 'Student';
+                })()}
+              </CardTitle>
+              <CardDescription>
+                Complete history of approved leave and OD requests
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Start Date</TableHead>
+                      <TableHead>End Date</TableHead>
+                      <TableHead className="text-center">Days</TableHead>
+                      <TableHead>Reason</TableHead>
+                      <TableHead className="text-center">Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {getStudentLeaveODDetails.map((request) => (
+                      <TableRow key={`${request.type}-${request.id}`} className="transition-colors hover:bg-muted/50">
+                        <TableCell>
+                          <Badge 
+                            variant={request.type === 'Leave' ? 'destructive' : 'secondary'}
+                          >
+                            {request.type}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="font-medium">{request.start_date_formatted}</TableCell>
+                        <TableCell className="font-medium">{request.end_date_formatted}</TableCell>
+                        <TableCell className="text-center">{request.total_days}</TableCell>
+                        <TableCell>{request.reason || 'N/A'}</TableCell>
+                        <TableCell className="text-center">
+                          <Badge variant="default">
+                            {request.status}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+        
+        {/* Show message when register number is searched but no data found */}
+        {registerNumberFilter.trim() && getStudentLeaveODDetails.length === 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>No Leave/OD History Found</CardTitle>
+              <CardDescription>
+                {(() => {
+                  const foundStudent = students.find(s => 
+                    s.register_number.toLowerCase().includes(registerNumberFilter.toLowerCase().trim())
+                  );
+                  if (!foundStudent) {
+                    return `No student found with register number containing "${registerNumberFilter.trim()}"`;
+                  }
+                  return `${foundStudent.name} (${foundStudent.register_number}) has no approved leave or OD requests.`;
+                })()}
               </CardDescription>
             </CardHeader>
           </Card>

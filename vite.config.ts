@@ -11,20 +11,30 @@ export default defineConfig(({ mode }) => {
   const publicIp = env.PUBLIC_IP || env.DOMAIN || env.SERVER_IP || "localhost";
   const frontendPort = env.FRONTEND_PORT || "8085";
   
-  // Build allowed hosts list dynamically
-  const allowedHosts = [
-    "localhost",
-    "127.0.0.1",
-    "0.0.0.0",
-    publicIp,
-    // Development specific hosts
-    "192.168.46.89",
-    "ace.cs.leaveportal.local",
-    "*.local", // Allow all .local domains
-    "*.localhost",
-  ];
+  // Build allowed hosts list dynamically (no wildcards). Configure via ALLOWED_HOSTS CSV.
+  const rawHosts = env.ALLOWED_HOSTS || "";
+  const allowedHosts = rawHosts
+    ? rawHosts.split(",").map((h) => h.trim()).filter(Boolean)
+    : [
+        "localhost",
+        "127.0.0.1",
+        publicIp,
+      ];
   
   return {
+    build: {
+      sourcemap: false, // SECURITY: Never expose source maps
+      minify: 'terser',
+      terserOptions: {
+        compress: {
+          drop_console: true,
+          drop_debugger: true,
+        },
+        format: {
+          comments: false,
+        },
+      },
+    },
     server: {
       host: "0.0.0.0", // Bind to all network interfaces for LAN access
       port: parseInt(frontendPort), // Development port from env

@@ -36,11 +36,15 @@ if (process.env.DB_PASSWORD) {
 // Create uploads directories if they don't exist
 const uploadsDir = path.join(__dirname, 'uploads', 'profile-photos');
 const certificatesDir = path.join(__dirname, 'uploads', 'certificates');
+const odPhotosDir = path.join(__dirname, 'uploads', 'od-photos');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 if (!fs.existsSync(certificatesDir)) {
   fs.mkdirSync(certificatesDir, { recursive: true });
+}
+if (!fs.existsSync(odPhotosDir)) {
+  fs.mkdirSync(odPhotosDir, { recursive: true });
 }
 
 // Import Sharp for image processing (ES module)
@@ -144,6 +148,36 @@ const bulkUpload = multer({
   fileFilter: bulkFileFilter,
   limits: {
     fileSize: 5 * 1024 * 1024 // 5MB limit for bulk upload files
+  }
+});
+
+// Configure multer for OD photo uploads
+const odPhotoStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, odPhotosDir);
+  },
+  filename: (req, file, cb) => {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const fileExtension = path.extname(file.originalname);
+    const originalName = path.basename(file.originalname, fileExtension);
+    cb(null, `od-photo-${timestamp}-${originalName}${fileExtension}`);
+  }
+});
+
+const odPhotoFilter = (req, file, cb) => {
+  // Accept only image files for OD photos
+  if (file.mimetype.startsWith('image/')) {
+    cb(null, true);
+  } else {
+    cb(new Error('Only image files are allowed for OD photos!'), false);
+  }
+};
+
+const odPhotoUpload = multer({
+  storage: odPhotoStorage,
+  fileFilter: odPhotoFilter,
+  limits: {
+    fileSize: 5 * 1024 * 1024 // 5MB limit for OD photos
   }
 });
 
@@ -1794,8 +1828,8 @@ app.get('/od-requests', authenticateToken, async (req, res) => {
   }
 });
 
-// Create OD request with date validation
-app.post('/od-requests', authenticateToken, async (req, res) => {
+// Create OD request with date validation and photo upload
+app.post('/od-requests', authenticateToken, odPhotoUpload.single('photo'), async (req, res) => {
   try {
     const { startDate, endDate, totalDays, purpose, destination, description, duration_type } = req.body;
     const id = uuidv4();
@@ -1868,9 +1902,33 @@ app.post('/od-requests', authenticateToken, async (req, res) => {
       return res.status(500).json({ error: 'Tutor not found' });
     }
 
+    // Handle photo upload if present
+    let photoPath = null;
+    if (req.file) {
+      // Create directory structure: uploads/od-photos/{batch}/{register_number}/{date}/
+      const uploadDate = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+      const studentPhotoDir = path.join(__dirname, 'uploads', 'od-photos', student.batch, student.register_number.toString(), uploadDate);
+      
+      if (!fs.existsSync(studentPhotoDir)) {
+        fs.mkdirSync(studentPhotoDir, { recursive: true });
+      }
+      
+      const fileExtension = path.extname(req.file.originalname);
+      const photoFilename = `od-${id}${fileExtension}`;
+      const finalPhotoPath = path.join(studentPhotoDir, photoFilename);
+      
+      // Move the uploaded file to the final location
+      fs.renameSync(req.file.path, finalPhotoPath);
+      
+      // Store the relative path for database
+      photoPath = `/uploads/od-photos/${student.batch}/${student.register_number.toString()}/${uploadDate}/${photoFilename}`;
+      
+      console.log(`OD photo uploaded: ${photoPath}`);
+    }
+
     await query(
-      'INSERT INTO od_requests (id, student_id, student_name, student_register_number, tutor_id, tutor_name, start_date, end_date, total_days, duration_type, purpose, destination, description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [id, req.user.id, student.name, student.register_number, student.tutor_id, tutor.name, startDate, endDate, totalDays, duration_type || 'full_day', purpose, destination, description]
+      'INSERT INTO od_requests (id, student_id, student_name, student_register_number, tutor_id, tutor_name, start_date, end_date, total_days, duration_type, purpose, destination, description, photo_path) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [id, req.user.id, student.name, student.register_number, student.tutor_id, tutor.name, startDate, endDate, totalDays, duration_type || 'full_day', purpose, destination, description, photoPath]
     );
 
     // Create notifications for tutor and admin
@@ -1974,19 +2032,10 @@ app.put('/od-requests/:id/status', authenticateToken, async (req, res) => {
     let params = [status, cancelReason || null];
     
     if (status === 'Approved') {
-      // Get the OD request details
-      const [odRequest] = await query('SELECT end_date FROM od_requests WHERE id = ?', [id]);
-      if (!odRequest) {
-        return res.status(404).json({ error: 'OD request not found' });
-      }
-      const today = new Date().toISOString().split('T')[0];
-      // Set certificate_status only if current date is after end_date
-      if (new Date(today) > new Date(odRequest.end_date)) {
-        const uploadDeadline = new Date(odRequest.end_date);
-        uploadDeadline.setDate(uploadDeadline.getDate() + 3);
-        updateQuery += ', certificate_status = ?, upload_deadline = ?';
-        params.push('Pending Upload', uploadDeadline);
-      }
+      // Set certificate status to Pending Upload immediately for approved OD requests
+      // No deadline restriction - users can upload certificates anytime
+      updateQuery += ', certificate_status = ?';
+      params.push('Pending Upload');
     }
     
     // Reset details for Retried requests
@@ -2272,44 +2321,21 @@ async function processODCertificateReminders() {
     const currentDate = new Date();
     const currentDateString = currentDate.toISOString().split('T')[0];
     
-    // 0. First, update approved OD requests that have ended to 'Pending Upload' status
+    // 0. Update approved OD requests that have ended to 'Pending Upload' status
+    // No deadline restriction - users can upload certificates anytime
     const endedODRequests = await query(
       `UPDATE od_requests 
-       SET certificate_status = 'Pending Upload', upload_deadline = DATE_ADD(end_date, INTERVAL 3 DAY)
+       SET certificate_status = 'Pending Upload'
        WHERE status = 'Approved' 
        AND certificate_status IS NULL
        AND end_date < CURDATE()`
     );
     
-    // 1. Find OD requests that need automatic rejection (end_date + 3 days has passed)
-    const autoRejectCandidates = await query(
-      `SELECT * FROM od_requests 
-       WHERE status = 'Approved' 
-       AND certificate_status = 'Pending Upload' 
-       AND DATE_ADD(end_date, INTERVAL 3 DAY) < CURDATE()`
-    );
+    // Skip automatic rejection - users can upload certificates without time limit
+    const autoRejectCandidates = [];
     
-      // Auto-reject overdue requests and reset leave taken if it was added for OD
-      for (const request of autoRejectCandidates) {
-        await query(
-          `UPDATE od_requests 
-           SET status = 'Rejected', 
-               certificate_status = 'Rejected', 
-               cancel_reason = 'Certificate not submitted within 3 days after OD completion' 
-           WHERE id = ?`,
-          [request.id]
-        );
-      }
-    
-    // 2. Find OD requests that need daily reminders (within the 3-day window)
-    const reminderCandidates = await query(
-      `SELECT * FROM od_requests 
-       WHERE status = 'Approved' 
-       AND certificate_status = 'Pending Upload' 
-       AND end_date < CURDATE() 
-       AND DATE_ADD(end_date, INTERVAL 3 DAY) >= CURDATE() 
-       AND (last_notification_date IS NULL OR last_notification_date < CURDATE())`
-    );
+    // Skip daily reminders within 3-day window - no deadline restrictions
+    const reminderCandidates = [];
     
     // Send reminders and update notification date
     for (const request of reminderCandidates) {
@@ -2381,32 +2407,28 @@ async function calculateLeaveTaken(studentId) {
 // Get OD certificate reminders for logged-in user
 app.get('/notifications/od-certificate-reminders', authenticateToken, async (req, res) => {
   try {
+    // Get all approved OD requests that need certificate upload (no deadline restriction)
     const reminders = await query(
       `SELECT * FROM od_requests 
        WHERE student_id = ? 
        AND status = 'Approved' 
-       AND certificate_status = 'Pending Upload' 
-       AND end_date < CURDATE() 
-       AND DATE_ADD(end_date, INTERVAL 3 DAY) >= CURDATE()`,
+       AND certificate_status = 'Pending Upload'
+       AND end_date < CURDATE()`,
       [req.user.id]
     );
     
     const reminderData = reminders.map(request => {
       const endDate = new Date(request.end_date);
-      const deadline = new Date(endDate);
-      deadline.setDate(deadline.getDate() + 3);
-      
       const currentDate = new Date();
-      const daysLeft = Math.ceil((deadline - currentDate) / (1000 * 60 * 60 * 24));
+      const daysSinceEnd = Math.ceil((currentDate - endDate) / (1000 * 60 * 60 * 24));
       
       return {
         id: request.id,
         purpose: request.purpose,
         destination: request.destination,
         endDate: request.end_date,
-        deadline: deadline.toISOString().split('T')[0],
-        daysLeft: Math.max(0, daysLeft),
-        isUrgent: daysLeft <= 1
+        daysSinceEnd: daysSinceEnd,
+        message: 'Certificate upload pending - no deadline restrictions'
       };
     });
     

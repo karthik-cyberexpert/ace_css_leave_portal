@@ -32,14 +32,32 @@ export default defineConfig(({ mode }) => {
     build: {
       outDir: "dist",
       emptyOutDir: true,
-      sourcemap: false, // Disable source maps for production
-      minify: 'esbuild', // Use esbuild instead of terser for faster builds
+      sourcemap: false, // SECURITY: Never expose source maps in production
+      minify: 'terser', // Use terser for better obfuscation
+      terserOptions: {
+        compress: {
+          drop_console: true, // Remove console logs
+          drop_debugger: true, // Remove debugger statements
+          pure_funcs: ['console.log', 'console.info', 'console.debug'], // Remove specific console methods
+        },
+        mangle: {
+          toplevel: true, // Mangle top-level names
+          properties: false, // Don't mangle properties (can break code)
+        },
+        format: {
+          comments: false, // Remove all comments
+        },
+      },
       rollupOptions: {
         output: {
           manualChunks: {
             vendor: ['react', 'react-dom'],
             router: ['react-router-dom'],
           },
+          // Generate random chunk names to obscure structure
+          entryFileNames: 'assets/[name]-[hash].js',
+          chunkFileNames: 'assets/[name]-[hash].js',
+          assetFileNames: 'assets/[name]-[hash].[ext]',
         },
       },
       chunkSizeWarningLimit: 1000,

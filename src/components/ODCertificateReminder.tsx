@@ -11,16 +11,10 @@ const ODCertificateReminder = () => {
   const { odRequests, currentUser } = useAppContext();
 
   const pendingUploads = odRequests.filter(req => {
-    // Only show reminders if OD has ended and certificate upload is pending
-    const odEndDate = new Date(req.end_date);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0); // Reset time to compare dates only
-    odEndDate.setHours(0, 0, 0, 0); // Reset time to compare dates only
-    
+    // Show all pending certificate uploads regardless of deadline
     return req.student_id === currentUser.id &&
            req.status === 'Approved' &&
-           req.certificate_status === 'Pending Upload' &&
-           today > odEndDate; // Only show reminder after OD has ended
+           req.certificate_status === 'Pending Upload';
   });
 
   if (pendingUploads.length === 0) {
@@ -37,16 +31,16 @@ const ODCertificateReminder = () => {
       </CardHeader>
       <CardContent className="space-y-4">
         {pendingUploads.map(req => {
-          const deadline = parseISO(req.upload_deadline!);
-          const daysRemaining = differenceInDays(deadline, new Date());
+          const odEndDate = new Date(req.end_date);
+          const daysSinceEnd = Math.ceil((new Date().getTime() - odEndDate.getTime()) / (1000 * 60 * 60 * 24));
           return (
             <Alert key={req.id} variant="default" className="bg-white dark:bg-gray-800">
               <FileUp className="h-4 w-4" />
               <AlertTitle>OD for: {req.purpose}</AlertTitle>
               <AlertDescription className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mt-2">
                 <span>
-                  Please upload your certificate by <strong>{format(deadline, 'PPP')}</strong>.
-                  ({daysRemaining >= 0 ? `${daysRemaining} days remaining` : 'Overdue'})
+                  Please upload your certificate for this OD request.
+                  {daysSinceEnd > 0 ? ` (OD ended ${daysSinceEnd} day${daysSinceEnd > 1 ? 's' : ''} ago)` : ' (No deadline restrictions)'}
                 </span>
                 <Button asChild size="sm">
                   <Link to={`/request-status?highlight=${req.id}`}>Upload Now</Link>
